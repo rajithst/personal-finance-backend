@@ -21,10 +21,8 @@ CONTAINS_CATEGORIES = {
     'Seria': ['セリア'],
     'Gyomu Super': ['ギヨウムス－パ－', '業務ス－パ－', 'ｷﾞﾖｳﾑｽ-ﾊﾟ-'],
     'HAC Drug Store': ['ハツクドラツグ', 'ハックドラッグ'],
-    'Uber Eats': ['UBER *EATS HELP.UBER利用国NLD', 'ＵＢＥＲ　ＥＡＴＳ', 'UBER   *EATS', 'UBER *EATS (HELP.UBER.COM)',
-                  'UBER   *EATS利用国NLD', 'UBER   *EATS利用国USA', 'UBER *EATS HELP.UBER利用国NLD', 'UBER   *EATS利用国NLD',
-                  'UBER * EATS PENDING (HELP.UBER.COM)', 'UBER *EATS HELP.UBER.COM (HELP.UBER.COM)'],
-    'Uber Pass': ['UBER *PASS HELP.UBER.COM (HELP.UBER.COM)', 'UBER *ONE HELP.UBER.COM (HELP.UBER.COM)'],
+    'Uber Eats': ['UBER *EATS', 'ＵＢＥＲ　ＥＡＴＳ', 'UBER   *EATS', 'UBER * EATS'],
+    'Uber Pass': ['UBER *PASS', 'UBER *ONE'],
     'ATM Withdrawal': ['ＡＴＭ'],
     'Cash Payments': ['ＪＣＢデビット'],
     'Second Street': ['セカンドストリート'],
@@ -41,7 +39,8 @@ CONTAINS_CATEGORIES = {
 NA_TRANSACTION_CATEGORY_ID = 1000
 NA_TRANSACTION_SUB_CATEGORY_ID = 1000
 OTHER_INCOME_CATEGORY_ID = 10
-
+SAVINGS_CATEGORY_ID = 6
+PAYMENT_CATEGORY_ID = 14
 
 class PaymentMethod(Enum):
     RAKUTEN_CARD = 1
@@ -81,10 +80,8 @@ def inverse_dict(d):
 def remap_contains_destinations(df):
     CONTAINS_CATEGORIES_REV = inverse_dict(CONTAINS_CATEGORIES)
     for field in CONTAINS_CATEGORIES_REV:
-        df.loc[df['destination'].str.contains(field), 'alias'] = CONTAINS_CATEGORIES_REV[field]
-        df.loc[df['destination'].str.contains(field), 'destination'] = CONTAINS_CATEGORIES_REV[field]
-        df.loc[df['destination'] == field, 'alias'] = CONTAINS_CATEGORIES_REV[field]
-        df.loc[df['destination'] == field, 'destination'] = CONTAINS_CATEGORIES_REV[field]
+        df.loc[df['destination'].str.contains(field, regex=False), 'alias'] = CONTAINS_CATEGORIES_REV[field]
+        df.loc[df['destination'].str.contains(field, regex=False), 'destination'] = CONTAINS_CATEGORIES_REV[field]
     return df
 
 
@@ -127,7 +124,7 @@ class RakutenCardLoader:
 class EposCardLoader:
     def __init__(self):
         self.data_path = os.path.join(settings.MEDIA_ROOT, 'epos')
-        self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ']
+        self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
 
     def import_data(self):
         files = os.listdir(self.data_path)
@@ -251,6 +248,8 @@ class CardLoader:
             int)
         all_expenses['subcategory'] = all_expenses['subcategory'].replace(
             {np.nan: NA_TRANSACTION_SUB_CATEGORY_ID}).astype(int)
+        all_expenses['is_saving'] = all_expenses['category'] == SAVINGS_CATEGORY_ID
+        all_expenses['is_payment'] = all_expenses['category'] == PAYMENT_CATEGORY_ID
         return all_expenses, all_incomes
 
 

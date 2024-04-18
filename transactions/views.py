@@ -28,6 +28,7 @@ class TransactionsView(APIView):
             end_date = five_years_ago.replace(day=1)
             end_date = end_date.strftime("%Y-%m-%d")
         incomes = Income.objects.select_related('category').filter(date__range=[end_date, start_date]).order_by('date')
+        destinations = DestinationMap.objects.values_list('destination_eng', flat=True).exclude(destination_eng=None)
         transactions = Transaction.objects.select_related('category', 'subcategory', 'payment_method').filter(
             date__range=[end_date, start_date]).order_by('date')
         expenses = transactions.filter(is_expense=True, is_deleted=False)
@@ -37,7 +38,7 @@ class TransactionsView(APIView):
         expense_serializer = TransactionSerializer(expenses, many=True)
         saving_serializer = TransactionSerializer(savings, many=True)
         payment_serializer = TransactionSerializer(payments, many=True)
-        return Response({"income": self._group_by(income_serializer.data), "expense": self._group_by(expense_serializer.data), "saving": self._group_by(saving_serializer.data), "payment": self._group_by(payment_serializer.data)}, status=status.HTTP_200_OK)
+        return Response({"income": self._group_by(income_serializer.data), "expense": self._group_by(expense_serializer.data), "saving": self._group_by(saving_serializer.data), "payment": self._group_by(payment_serializer.data), "destinations": destinations}, status=status.HTTP_200_OK)
 
     def _group_by(self, data):
         if not len(data):
