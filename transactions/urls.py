@@ -13,4 +13,3 @@ urlpatterns = [
     path('transactions/import/', views.TransactionImportView.as_view())
 ]
 urlpatterns += router.urls
-print(urlpatterns)

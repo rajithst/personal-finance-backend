@@ -26,6 +26,7 @@ admin.site.index_title = 'Welcome to Personal Finance'
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('finance/', include('transactions.urls')),
+    path('investments/', include('investments.urls')),
     path("__debug__/", include("debug_toolbar.urls")),
 ]
 

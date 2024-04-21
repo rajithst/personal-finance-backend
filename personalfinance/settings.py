@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'rest_framework',
     "transactions",
-    "investments.apps.InvestmentsConfig"
+    "investments"
 ]
 
 MIDDLEWARE = [
