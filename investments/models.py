@@ -36,7 +36,7 @@ class Holding(models.Model):
     total_investment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     current_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     profit_loss = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    price_updated_at = models.DateTimeField(null=True, blank=True)
+    price_updated_at = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -69,7 +69,7 @@ class IndexFundDailyPrice(models.Model):
 
 class StockPurchaseHistory(models.Model):
     id = models.AutoField(primary_key=True)
-    purchase_date = models.DateTimeField(null=True, blank=True)
+    purchase_date = models.DateField(null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.SET_NULL, null=True)
     quantity = models.IntegerField()
     purchase_price = models.DecimalField(max_digits=12, decimal_places=2)
@@ -82,7 +82,7 @@ class StockPurchaseHistory(models.Model):
 
 class IndexFundPurchaseHistory(models.Model):
     id = models.AutoField(primary_key=True)
-    purchase_date = models.DateTimeField(null=True, blank=True)
+    purchase_date = models.DateField(null=True, blank=True)
     fund_code = models.ForeignKey(IndexFund, on_delete=models.SET_NULL, null=True, blank=True)
     purchase_amount = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     settlement_currency = models.CharField(max_length=12, null=True, blank=True)

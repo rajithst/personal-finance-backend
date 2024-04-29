@@ -23,14 +23,14 @@ class HoldingHandler(object):
         exist_holding = Holding.objects.filter(company=symbol).first()
         if exist_holding:
             current_market_price = exist_holding.current_price
-            if exist_holding.price_updated_at.date() < date.today():
+            if exist_holding.price_updated_at < date.today():
                 market_prices = self.update_daily_price(symbols=[symbol])
                 current_market_price = market_prices[symbol]
 
             new_quantity = quantity + exist_holding.quantity
             all_purchase_sum = exist_holding.total_investment + Decimal(quantity * purchase_price)
             average_price = all_purchase_sum / new_quantity
-            current_value = round(current_market_price * new_quantity,2)
+            current_value = round(current_market_price * new_quantity, 2)
             profit_loss = Decimal(current_value) - all_purchase_sum
             Holding.objects.filter(company=symbol).update(quantity=new_quantity,
                                                           average_price=average_price,
@@ -40,7 +40,7 @@ class HoldingHandler(object):
 
         else:
             update_params['average_price'] = purchase_price
-            update_params['total_investment'] = purchase_price * quantity
+            update_params['total_investment'] = round(purchase_price * quantity, 2)
             serializer = HoldingSerializer(data=update_params)
             if serializer.is_valid(raise_exception=True):
                 serializer.save()

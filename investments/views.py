@@ -69,6 +69,14 @@ class StockDailyUpdaterView(APIView):
         return Response({'data': new_market_data}, status=status.HTTP_200_OK)
 
 
+class ForexDailyUpdaterView(APIView):
+
+    def get(self, request):
+        handler = ForexHandler()
+        forex_data = handler.update_forex_data()
+        return Response({'data': forex_data}, status=status.HTTP_200_OK)
+
+
 class TradeImportView(APIView):
     def get(self, request):
         loader = BrokerDataLoader()
@@ -83,11 +91,3 @@ class TradeImportView(APIView):
             symbol = trade['company']
             holdings_handler.merge_holding(symbol, trade)
         return Response(purchase_history_serializer.data, status=status.HTTP_200_OK)
-
-
-class ForexImportView(APIView):
-
-    def get(self, request):
-        handler = ForexHandler()
-        forex_data = handler.update_forex_data()
-        return Response({'data': forex_data}, status=status.HTTP_200_OK)
