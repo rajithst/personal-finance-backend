@@ -8,8 +8,7 @@ router = SimpleRouter()
 router.register('income', views.IncomeViewSet)
 
 urlpatterns = [
-    path('transactions', views.TransactionsView.as_view()),
-    path('transactions/<int:pk>/', views.TransactionsView.as_view()),
+    path('transactions/', views.TransactionsView.as_view()),
     path('transactions/import/', views.TransactionImportView.as_view())
 ]
 urlpatterns += router.urls

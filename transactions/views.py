@@ -50,8 +50,9 @@ class TransactionsView(APIView):
                                'total': vals.amount.sum(), 'transactions': vals.to_dict('records')})
         return reversed(group_data)
 
-    def put(self, request, pk):
+    def post(self, request):
         data = request.data
+        pk = data.get('id')
         destination = data.get('destination')
         category = data.get('category')
         subcategory = data.get('subcategory')
@@ -61,8 +62,11 @@ class TransactionsView(APIView):
         alias = data.get('alias')
         is_regular_destination = data.get('is_regular_destination')
 
-        instance = get_object_or_404(Transaction, pk=pk)
-        serializer = TransactionSerializer(instance, data=data)
+        if pk:
+            instance = get_object_or_404(Transaction, pk=pk)
+            serializer = TransactionSerializer(instance, data=data)
+        else:
+            serializer = TransactionSerializer(data=data)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
 

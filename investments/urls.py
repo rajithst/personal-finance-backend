@@ -3,11 +3,9 @@ from rest_framework.routers import SimpleRouter
 
 from investments import views
 
-router = SimpleRouter()
-router.register('stock-purchase-history', views.StockPurchaseHistoryViewSet)
-router.register('company', views.CompanyViewSet)
-
 urlpatterns = [
-    path('list', views.InvestmentsView.as_view())
+    path('list', views.InvestmentsView.as_view()),
+    path('stock-purchase/', views.StockPurchaseHistoryView.as_view()),
+    path('stock-data-update/', views.StockDailyUpdaterView.as_view()),
+    path('import-broker-data/', views.TradeImportView.as_view()),
 ]
-urlpatterns += router.urls
