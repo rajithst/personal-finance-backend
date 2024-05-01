@@ -66,3 +66,19 @@ class MarketApi:
                 continue
             forex_data.append({'name': snapshot['name'], 'symbol': snapshot['symbol'], 'price': snapshot['price']})
         return forex_data
+
+    def get_dividend_calendar(self, tickers, from_date, to_date=None):
+        if not tickers or len(tickers) == 0:
+            raise Exception('Tickers is required')
+        dividend_data = []
+        dividend_info = fmpsdk.calendar.dividend_calendar(apikey=self.api_key, from_date=from_date, to_date=to_date)
+        for dv in dividend_info:
+            if dv['symbol'] in tickers:
+                obj = {
+                    'symbol': dv['symbol'],
+                    'amount': round(dv['dividend'], 2),
+                    'ex_dividend_date': dv['recordDate'],
+                    'payment_date': dv['paymentDate'],
+                }
+                dividend_data.append(obj)
+        return dividend_data

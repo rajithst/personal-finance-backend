@@ -5,7 +5,7 @@ from rest_framework import status
 
 from investments.connector.market_api import MarketApi
 from investments.connector.rakuten_sec import BrokerDataLoader
-from investments.handlers.forex import ForexHandler
+from investments.handlers.forex import ForexHandler, DividendHandler
 from investments.handlers.holding import HoldingHandler
 from investments.models import StockPurchaseHistory, Company, IndexFundPurchaseHistory, Dividend, Holding
 from investments.serializers import StockPurchaseHistorySerializer, CompanySerializer, \
@@ -76,6 +76,12 @@ class ForexDailyUpdaterView(APIView):
         forex_data = handler.update_forex_data()
         return Response({'data': forex_data}, status=status.HTTP_200_OK)
 
+class DividendDailyUpdaterView(APIView):
+
+    def get(self, request):
+        handler = DividendHandler()
+        dividend_data = handler.update_dividend_data()
+        return Response({'data': dividend_data}, status=status.HTTP_200_OK)
 
 class TradeImportView(APIView):
     def get(self, request):

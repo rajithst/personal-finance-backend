@@ -8,5 +8,6 @@ urlpatterns = [
     path('stock-purchase/', views.StockPurchaseHistoryView.as_view()),
     path('stock-data-update/', views.StockDailyUpdaterView.as_view()),
     path('forex-data-update/', views.ForexDailyUpdaterView.as_view()),
+    path('dividend-data-update/', views.DividendDailyUpdaterView.as_view()),
     path('import-broker-data/', views.TradeImportView.as_view()),
 ]

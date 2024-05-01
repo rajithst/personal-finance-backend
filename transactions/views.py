@@ -12,7 +12,7 @@ from .serializers import IncomeSerializer, TransactionSerializer
 import calendar
 import datetime
 import pandas as pd
-
+import logging
 
 class TransactionsView(APIView):
     def get(self, request):
