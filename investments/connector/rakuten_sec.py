@@ -1,19 +1,26 @@
-import os
+
+from io import BytesIO
 
 import pandas as pd
 from django.conf import settings
+
+from utils.gcs import GCSHandler
 
 
 class RakutenSecLoader:
 
     def __init__(self):
-        self.data_path = os.path.join(settings.MEDIA_ROOT, 'investments')
+        self.data_path = 'investments'
+        self.gcs_handler = GCSHandler()
+        self.project_name = settings.PROJECT_ID
+        self.bucket_name = settings.PROJECT_ID + '.appspot.com'
 
     def import_trades(self):
-        files = os.listdir(self.data_path)
+        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
         results = []
         for file in files:
-            df = pd.read_csv(os.path.join(self.data_path, file))
+            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data)
             df.columns = ['Trade date', 'Delivery date', 'Ticker', 'Stock name', 'Account', 'Trade class',
                           'Buy/sell class', 'Credit class', 'Payment deadline',
                           'Settlement currency', 'Quantity [shares]', 'Unit price [US dollars]',

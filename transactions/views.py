@@ -6,13 +6,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from .loader.card_loader import CardLoader
+from .connector.card_loader import CardLoader
 from .models import Income, Transaction, DestinationMap
 from .serializers import IncomeSerializer, TransactionSerializer
 import calendar
 import datetime
 import pandas as pd
 import logging
+
 
 class TransactionsView(APIView):
     def get(self, request):
@@ -38,7 +39,10 @@ class TransactionsView(APIView):
         expense_serializer = TransactionSerializer(expenses, many=True)
         saving_serializer = TransactionSerializer(savings, many=True)
         payment_serializer = TransactionSerializer(payments, many=True)
-        return Response({"income": self._group_by(income_serializer.data), "expense": self._group_by(expense_serializer.data), "saving": self._group_by(saving_serializer.data), "payment": self._group_by(payment_serializer.data), "destinations": destinations}, status=status.HTTP_200_OK)
+        return Response(
+            {"income": self._group_by(income_serializer.data), "expense": self._group_by(expense_serializer.data),
+             "saving": self._group_by(saving_serializer.data), "payment": self._group_by(payment_serializer.data),
+             "destinations": destinations}, status=status.HTTP_200_OK)
 
     def _group_by(self, data):
         if not len(data):
@@ -72,7 +76,9 @@ class TransactionsView(APIView):
 
         update_similar = data.get('update_similar')
         if update_similar:
-            Transaction.objects.filter(destination=destination).update(category=category, alias=alias, subcategory=subcategory, is_saving=is_saving, is_payment=is_payment, is_expense=is_expense)
+            Transaction.objects.filter(destination=destination).update(category=category, alias=alias,
+                                                                       subcategory=subcategory, is_saving=is_saving,
+                                                                       is_payment=is_payment, is_expense=is_expense)
 
         if is_regular_destination:
             existing_payee = DestinationMap.objects.filter(destination=destination)
@@ -82,6 +88,7 @@ class TransactionsView(APIView):
                 DestinationMap.objects.create(destination=destination, destination_eng=alias, category_id=category,
                                               subcategory_id=subcategory)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class IncomeViewSet(ModelViewSet):
     queryset = Income.objects.all()

@@ -1,12 +1,13 @@
 import os
-from pprint import pprint
+from io import BytesIO
 
 import numpy as np
 from django.conf import settings
 from enum import Enum
 import pandas as pd
 
-from transactions.models import Transaction, DestinationMap
+from transactions.models import DestinationMap
+from utils.gcs import GCSHandler
 
 CONTAINS_CATEGORIES = {
     'Softbank': ['ソフトバンク'],
@@ -42,164 +43,178 @@ OTHER_INCOME_CATEGORY_ID = 10
 SAVINGS_CATEGORY_ID = 6
 PAYMENT_CATEGORY_ID = 14
 
+
 class PaymentMethod(Enum):
     RAKUTEN_CARD = 1
     EPOS_CARD = 2
     DOCOMO_CARD = 3
     CASH = 4
 
+
 class CardTypes(Enum):
     RAKUTEN = 'Rakuten'
     EPOS = 'Epos'
     DOCOMO = 'Docomo'
     CASH = 'Cash'
+
+
 class DataSource(Enum):
     IMPORT = 1
     MANUAL_ENTRY = 2
 
 
-def clean_electronic_signatures(value, signatures):
-    if value:
-        new_value = value.strip()
-        for i in signatures:
-            if value.endswith(i) or value.startswith(i):
-                new_value = value.replace(i, '')
-                new_value = new_value.strip()
-        return new_value
-    return value
-
-
-def inverse_dict(d):
-    inverted = {}
-    for key, values in d.items():
-        for value in values:
-            inverted.setdefault(value, key)
-    return inverted
-
-
-def remap_contains_destinations(df):
-    CONTAINS_CATEGORIES_REV = inverse_dict(CONTAINS_CATEGORIES)
-    for field in CONTAINS_CATEGORIES_REV:
-        df.loc[df['destination'].str.contains(field, regex=False), 'alias'] = CONTAINS_CATEGORIES_REV[field]
-        df.loc[df['destination'].str.contains(field, regex=False), 'destination'] = CONTAINS_CATEGORIES_REV[field]
-    return df
-
-
-def set_default_props(df):
-    df[['notes', 'alias']] = len(df.index) * np.nan
-    df[['is_payment', 'is_deleted', 'is_saving', 'is_income']] = len(df.index) * False
-    df['source'] = DataSource.IMPORT.value
-    df['is_expense'] = 1
-    df = df[df.date.isnull() == False]
-    df = df[df.amount.isnull() == False]
-    return df
-
-
-class RakutenCardLoader:
+class BaseLoader:
     def __init__(self):
-        self.data_path = os.path.join(settings.MEDIA_ROOT, 'rakuten')
+        self.gcs_handler = GCSHandler()
+        self.project_name = settings.PROJECT_ID
+        self.bucket_name = settings.PROJECT_ID + '.appspot.com'
+
+    def _inverse_dict(self, d):
+        inverted = {}
+        for key, values in d.items():
+            for value in values:
+                inverted.setdefault(value, key)
+        return inverted
+
+    def set_default_props(self, df):
+        df[['notes', 'alias']] = len(df.index) * np.nan
+        df[['is_payment', 'is_deleted', 'is_saving', 'is_income']] = len(df.index) * False
+        df['source'] = DataSource.IMPORT.value
+        df['is_expense'] = 1
+        df = df[df.date.isnull() == False]
+        df = df[df.amount.isnull() == False]
+        return df
+
+    def remap_contains_destinations(self, df):
+        CONTAINS_CATEGORIES_REV = self._inverse_dict(CONTAINS_CATEGORIES)
+        for field in CONTAINS_CATEGORIES_REV:
+            df.loc[df['destination'].str.contains(field, regex=False), 'alias'] = CONTAINS_CATEGORIES_REV[field]
+            df.loc[df['destination'].str.contains(field, regex=False), 'destination'] = CONTAINS_CATEGORIES_REV[field]
+        return df
+
+    def clean_electronic_signatures(self, value, signatures):
+        if value:
+            new_value = value.strip()
+            for i in signatures:
+                if value.endswith(i) or value.startswith(i):
+                    new_value = value.replace(i, '')
+                    new_value = new_value.strip()
+            return new_value
+        return value
+
+class RakutenCardLoader(BaseLoader):
+    def __init__(self):
+        super().__init__()
+        self.data_path = 'finance/rakuten/'
         self.cleanable_signatures = ['楽天ＳＰ', '/N']
+        self.payment_method = PaymentMethod.RAKUTEN_CARD.value
 
     def import_data(self):
-        files = os.listdir(self.data_path)
-        # TODO change only load the latest file, for now load all files
+        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
         results = []
         for file in files:
-            file_path = os.path.join(self.data_path, file)
-            df = pd.read_csv(file_path)
+            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data)
             df = df[['利用日', '利用店名・商品名', '利用金額']]
             df.columns = ['date', 'destination', 'amount']
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
-            df['payment_method'] = PaymentMethod.RAKUTEN_CARD.value
-            df = set_default_props(df)
+            df['payment_method'] = self.payment_method
+            df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
-                lambda x: clean_electronic_signatures(x, self.cleanable_signatures))
-            df = remap_contains_destinations(df)
+                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
 
 
-class EposCardLoader:
+class EposCardLoader(BaseLoader):
     def __init__(self):
-        self.data_path = os.path.join(settings.MEDIA_ROOT, 'epos')
+        super().__init__()
+        self.data_path = 'finance/epos/'
         self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
+        self.payment_method = PaymentMethod.EPOS_CARD.value
 
     def import_data(self):
-        files = os.listdir(self.data_path)
+        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
         results = []
         for file in files:
-            file_path = os.path.join(self.data_path, file)
-            df = pd.read_csv(file_path, encoding="cp932", skiprows=1, skipfooter=5, engine='python')
+            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=5, engine='python')
             df = df.iloc[:, 1:]
             df = df[['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']]
             df.columns = ['date', 'destination', 'amount']
             df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日').dt.date
-            df['payment_method'] = PaymentMethod.EPOS_CARD.value
-            df = set_default_props(df)
+            df['payment_method'] = self.payment_method
+            df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
-                lambda x: clean_electronic_signatures(x, self.cleanable_signatures))
-            df = remap_contains_destinations(df)
+                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
 
 
-class DocomoCardLoader:
+class DocomoCardLoader(BaseLoader):
     def __init__(self):
-        self.data_path = os.path.join(settings.MEDIA_ROOT, 'dcard')
+        super().__init__()
+        self.data_path = 'finance/docomo/'
         self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／']
+        self.payment_method = PaymentMethod.DOCOMO_CARD.value
 
     def import_data(self):
-        files = os.listdir(self.data_path)
+        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
         results = []
         for file in files:
-            file_path = os.path.join(self.data_path, file)
-            df = pd.read_csv(file_path, encoding="cp932", skiprows=1, skipfooter=3, engine='python')
+            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=3, engine='python')
             df = df.iloc[:, :3]
             df.columns = ['date', 'destination', 'amount']
             df = df.loc[df['date'] != 'ＲＡ　ＪＩＴＨ　様']
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
-            df['payment_method'] = PaymentMethod.DOCOMO_CARD.value
-            df = set_default_props(df)
+            df['payment_method'] = self.payment_method
+            df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
-                lambda x: clean_electronic_signatures(x, self.cleanable_signatures))
-            df = remap_contains_destinations(df)
+                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
 
 
-class CashCardLoader:
+class CashCardLoader(BaseLoader):
     def __init__(self):
-        self.data_path = os.path.join(settings.MEDIA_ROOT, 'mizuho')
+        super().__init__()
+        self.data_path = 'finance/mizuho/'
         self.cleanable_signatures = []
+        self.payment_method = PaymentMethod.CASH.value
 
     def import_data(self):
-        files = os.listdir(self.data_path)
+        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
         results = []
         for file in files:
-            file_path = os.path.join(self.data_path, file)
-            df = pd.read_csv(file_path, encoding='shift-jis', skiprows=9, engine='python')
+            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data, encoding='shift-jis', skiprows=9, engine='python')
             df_income = df[['日付', 'お預入金額', 'お取引内容']]
             df_expense = df[['日付', 'お引出金額', 'お取引内容']]
             df_income.columns = ['date', 'amount', 'destination']
             df_expense.columns = ['date', 'amount', 'destination']
-            df_expense = set_default_props(df_expense)
-            df_income = set_default_props(df_income)
+            df_expense = self.set_default_props(df_expense)
+            df_income = self.set_default_props(df_income)
             df_income['is_expense'] = 0
             df_income['is_income'] = 1
             df = pd.concat([df_income, df_expense])
-            df['payment_method'] = PaymentMethod.CASH.value
+            df['payment_method'] = self.payment_method
             df['date'] = pd.to_datetime(df['date'], format='%Y.%m.%d').dt.date
-            df = remap_contains_destinations(df)
+            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
+
 
 
 class CardLoader:
@@ -239,7 +254,8 @@ class CardLoader:
         payee_maps = self.get_payee_map()
         all_expenses = all_transactions[all_transactions['is_expense'] == 1]
         all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
-        all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = all_expenses['alias']
+        all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
+            all_expenses['alias']
         all_expenses = all_expenses.drop(columns=['alias', 'is_income'])
         all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
         all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})

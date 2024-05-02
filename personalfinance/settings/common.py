@@ -22,9 +22,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
 ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
-
+env = environ.Env(DEBUG=(bool, False))
 if ENV == 'prod':
-    env = environ.Env(DEBUG=(bool, False))
     env_file = os.path.join(BASE_DIR, '.env')
     if os.path.isfile(env_file):
         env.read_env(env_file)
@@ -183,3 +182,6 @@ LOGGING = {
         }
     }
 }
+
+
+PROJECT_ID = 'personal-finance-413910'
