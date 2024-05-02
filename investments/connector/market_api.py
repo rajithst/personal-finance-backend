@@ -1,4 +1,5 @@
 import os
+import logging
 
 import fmpsdk
 from datetime import datetime
@@ -22,6 +23,7 @@ class MarketApi:
         return result
 
     def get_company_data(self, tickers):
+        logging.info('Getting company information.')
         if not tickers or len(tickers) == 0:
             raise Exception('Ticker is required')
         if not isinstance(tickers, list):
