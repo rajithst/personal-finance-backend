@@ -19,32 +19,36 @@ from urllib.parse import urlparse
 from google.cloud import secretmanager
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-env = environ.Env(DEBUG=(bool, False))
-env_file = os.path.join(BASE_DIR, '.env')
 
-if os.path.isfile(env_file):
-    env.read_env(env_file)
-elif os.environ.get('GOOGLE_CLOUD_PROJECT', None):
-    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
-    client = secretmanager.SecretManagerServiceClient()
-    settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
-    name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
-    payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
-    env.read_env(io.StringIO(payload))
-else:
-    raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
+RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
+ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 
-APPENGINE_URL = env("APPENGINE_URL", default=None)
-if APPENGINE_URL:
-    # Ensure a scheme is present in the URL before it's processed.
-    if not urlparse(APPENGINE_URL).scheme:
-        APPENGINE_URL = f"https://{APPENGINE_URL}"
+if ENV == 'prod':
+    env = environ.Env(DEBUG=(bool, False))
+    env_file = os.path.join(BASE_DIR, '.env')
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
+    elif os.environ.get('GOOGLE_CLOUD_PROJECT', None):
+        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
+        client = secretmanager.SecretManagerServiceClient()
+        settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
+        name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
+        payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
+        env.read_env(io.StringIO(payload))
+    else:
+        raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
 
-    ALLOWED_HOSTS = [urlparse(APPENGINE_URL).netloc]
-    CSRF_TRUSTED_ORIGINS = [APPENGINE_URL]
-    SECURE_SSL_REDIRECT = True
-else:
-    ALLOWED_HOSTS = ["*"]
+    APPENGINE_URL = env("APPENGINE_URL", default=None)
+    if APPENGINE_URL:
+        # Ensure a scheme is present in the URL before it's processed.
+        if not urlparse(APPENGINE_URL).scheme:
+            APPENGINE_URL = f"https://{APPENGINE_URL}"
+
+        ALLOWED_HOSTS = [urlparse(APPENGINE_URL).netloc]
+        CSRF_TRUSTED_ORIGINS = [APPENGINE_URL]
+        SECURE_SSL_REDIRECT = True
+    else:
+        ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -151,7 +155,7 @@ INTERNAL_IPS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:4200',
+    'http://localhost:8000' if ENV == 'prod' else 'http://localhost:4200',
 ]
 
 LOGGING = {
