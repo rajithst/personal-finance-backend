@@ -65,6 +65,8 @@ class Transaction(models.Model):
     is_payment = models.BooleanField(default=False)
     is_expense = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
+    is_merge = models.BooleanField(default=False)
+    merge_id = models.IntegerField(default=None, blank=True, null=True)
     delete_reason = models.TextField(default=None, blank=True, null=True)
     source = models.IntegerField(default=0, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

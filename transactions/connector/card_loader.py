@@ -1,3 +1,4 @@
+import logging
 import os
 from io import BytesIO
 
@@ -65,9 +66,11 @@ class DataSource(Enum):
 
 class BaseLoader:
     def __init__(self):
-        self.gcs_handler = GCSHandler()
+        self.gcs_handler = GCSHandler(settings.PROJECT_ID)
         self.project_name = settings.PROJECT_ID
         self.bucket_name = settings.PROJECT_ID + '.appspot.com'
+        logging.info(f'Project name: {self.project_name}')
+        logging.info(f'Bucket name: {self.bucket_name}')
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -111,6 +114,7 @@ class RakutenCardLoader(BaseLoader):
 
     def import_data(self):
         files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
+
         results = []
         for file in files:
             blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)

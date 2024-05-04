@@ -1,3 +1,4 @@
+import logging
 from io import BytesIO
 
 from google.cloud import storage
@@ -25,7 +26,11 @@ class GCSHandler:
         """Lists files in the specified bucket."""
         bucket = self.client.bucket(bucket_name)
         blobs = bucket.list_blobs(prefix=prefix)
-        file_list = [blob.name for blob in blobs]
+        file_list = []
+        for blob in blobs:
+            if blob.name != prefix.rstrip('/') and not blob.name.endswith('/'):
+                file_list.append(blob.name)
+        logging.info('loading data from bucket {}: {}'.format(bucket_name, file_list))
         return file_list
 
     def delete_file(self, bucket_name, file_name):

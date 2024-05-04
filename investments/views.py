@@ -77,12 +77,14 @@ class ForexDailyUpdaterView(APIView):
         forex_data = handler.update_forex_data()
         return Response({'data': forex_data}, status=status.HTTP_200_OK)
 
+
 class DividendDailyUpdaterView(APIView):
 
     def get(self, request):
         handler = DividendHandler()
         dividend_data = handler.update_dividend_data()
         return Response({'data': dividend_data}, status=status.HTTP_200_OK)
+
 
 class TradeImportView(APIView):
     def get(self, request):

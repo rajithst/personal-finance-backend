@@ -1,3 +1,4 @@
+import copy
 from itertools import chain
 
 from django.shortcuts import get_object_or_404
@@ -50,8 +51,10 @@ class TransactionsView(APIView):
         df = pd.DataFrame(data)
         group_data = []
         for group_k, vals in df.groupby(['year', 'month']):
+            vals['checked'] = False
+            transactions = vals.to_dict('records')
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
-                               'total': vals.amount.sum(), 'transactions': vals.to_dict('records')})
+                               'total': vals.amount.sum(), 'transactions': transactions})
         return reversed(group_data)
 
     def post(self, request):
@@ -63,16 +66,28 @@ class TransactionsView(APIView):
         is_saving = data.get('is_saving')
         is_payment = data.get('is_payment')
         is_expense = data.get('is_expense')
+        is_merge = data.get('is_merge')
         alias = data.get('alias')
+        merged_ids = data.get('merged_ids')
         is_regular_destination = data.get('is_regular_destination')
 
-        if pk:
-            instance = get_object_or_404(Transaction, pk=pk)
-            serializer = TransactionSerializer(instance, data=data)
+        if is_merge and merged_ids:
+            merge_data = copy.deepcopy(data)
+            merge_data['id'] = None
+            merge_data['is_merge'] = True
+            serializer = TransactionSerializer(data=merge_data)
         else:
-            serializer = TransactionSerializer(data=data)
+            if pk:
+                instance = get_object_or_404(Transaction, pk=pk)
+                serializer = TransactionSerializer(instance, data=data)
+            else:
+                serializer = TransactionSerializer(data=data)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
+
+        if is_merge and merged_ids:
+            merged_record_id = serializer.data['id']
+            Transaction.objects.filter(id__in=merged_ids).update(is_merge=True, merge_id=merged_record_id, is_deleted=True)
 
         update_similar = data.get('update_similar')
         if update_similar:

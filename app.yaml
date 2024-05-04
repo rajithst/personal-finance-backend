@@ -6,6 +6,9 @@ handlers:
 - url: /.*
   script: auto
 
+vpc_access_connector:
+  name: projects/personal-finance-413910/locations/asia-northeast1/connectors/sql-connector
+
 env_variables:
   DJANGO_SETTINGS_MODULE: "personalfinance.settings.prod"
   APPENGINE_URL: https://personal-finance-413910.an.r.appspot.com

@@ -11,7 +11,7 @@ class RakutenSecLoader:
 
     def __init__(self):
         self.data_path = 'investments'
-        self.gcs_handler = GCSHandler()
+        self.gcs_handler = GCSHandler(settings.PROJECT_ID)
         self.project_name = settings.PROJECT_ID
         self.bucket_name = settings.PROJECT_ID + '.appspot.com'
 

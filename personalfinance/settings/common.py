@@ -154,7 +154,7 @@ INTERNAL_IPS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:8000' if ENV == 'prod' else 'http://localhost:4200',
+    'https://personal-finance-413910.an.r.appspot.com' if ENV == 'prod' else 'http://localhost:4200',
 ]
 
 LOGGING = {
