@@ -31,7 +31,7 @@ class IndexFundPurchaseHistorySerializer(serializers.ModelSerializer):
 class HoldingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Holding
-        fields = ['id', 'quantity', 'average_price', 'current_price', 'total_investment', 'current_value',
+        fields = ['id', 'quantity', 'average_price', 'current_price', 'total_investment', 'current_value', 'stock_currency',
                   'profit_loss', 'price_updated_at', 'profit_change_percentage', 'company', 'company_name', 'image']
 
     profit_change_percentage = serializers.SerializerMethodField(method_name='get_profit_change_percentage')
