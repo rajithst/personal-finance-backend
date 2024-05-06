@@ -9,10 +9,6 @@ handlers:
 env_variables:
   DJANGO_SETTINGS_MODULE: "personalfinance.settings.prod"
   APPENGINE_URL: https://personal-finance-413910.an.r.appspot.com
-  GAE_USE_SOCKETS_HTTPLIB: ''
-
-vpc_access_connector:
-  name: projects/personal-finance-413910/locations/asia-northeast1/connectors/sql-connector
 
 runtime_config:
   python_version: 3
