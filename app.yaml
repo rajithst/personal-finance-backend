@@ -1,3 +1,4 @@
+service: personal-finance-server
 runtime: python312
 env: standard
 entrypoint: gunicorn -b :$PORT personalfinance.wsgi:application
@@ -8,7 +9,7 @@ handlers:
 
 env_variables:
   DJANGO_SETTINGS_MODULE: "personalfinance.settings.prod"
-  APPENGINE_URL: https://personal-finance-413910.an.r.appspot.com
+  APPENGINE_URL: https://personal-finance-server-dot-personal-finance-413910.an.r.appspot.com
 
 runtime_config:
   python_version: 3

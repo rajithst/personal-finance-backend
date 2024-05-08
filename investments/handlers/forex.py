@@ -19,6 +19,7 @@ class ForexHandler(object):
             Forex.objects.filter(symbol=data['symbol']).update(price=data['price'])
         return forex_data
 
+
 class DividendHandler(object):
     def __init__(self):
         self.market_api = MarketApi()
@@ -36,7 +37,8 @@ class DividendHandler(object):
             ex_divided_date = data['ex_dividend_date']
             payment_date = data['payment_date']
             amount = round(data['amount'], 2)
-            existing_dividend = Dividend.objects.filter(company=company, ex_dividend_date=ex_divided_date, payment_date=payment_date)
+            existing_dividend = Dividend.objects.filter(company=company, ex_dividend_date=ex_divided_date,
+                                                        payment_date=payment_date)
             if existing_dividend.exists():
                 existing_dividend.update(amount=amount)
             else:
