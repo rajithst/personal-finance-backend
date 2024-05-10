@@ -24,7 +24,8 @@ RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings
 ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 env = environ.Env(DEBUG=(bool, False))
 if ENV == 'prod':
-    ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME']]
+    ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME'], 'pfbackend.azurewebsites.net']
+    logging.info(ALLOWED_HOSTS)
     CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
     SECURE_SSL_REDIRECT = True
 else:
