@@ -24,30 +24,11 @@ RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings
 ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 env = environ.Env(DEBUG=(bool, False))
 if ENV == 'prod':
-    env_file = os.path.join(BASE_DIR, '.env')
-    if os.path.isfile(env_file):
-        env.read_env(env_file)
-    elif os.environ.get('GOOGLE_CLOUD_PROJECT', None):
-        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
-        client = secretmanager.SecretManagerServiceClient()
-        settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
-        name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
-        payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
-        env.read_env(io.StringIO(payload))
-    else:
-        raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
-
-    APPENGINE_URL = env("APPENGINE_URL", default=None)
-    if APPENGINE_URL:
-        # Ensure a scheme is present in the URL before it's processed.
-        if not urlparse(APPENGINE_URL).scheme:
-            APPENGINE_URL = f"https://{APPENGINE_URL}"
-
-        ALLOWED_HOSTS = [urlparse(APPENGINE_URL).netloc]
-        CSRF_TRUSTED_ORIGINS = [APPENGINE_URL]
-        SECURE_SSL_REDIRECT = True
-    else:
-        ALLOWED_HOSTS = ["*"]
+    ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME']]
+    CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
+    SECURE_SSL_REDIRECT = True
+else:
+    ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -153,9 +134,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    'https://personal-finance-413910.an.r.appspot.com' if ENV == 'prod' else 'http://localhost:4200',
-]
+CORS_ALLOWED_ORIGINS = ['http://localhost:4200']
 
 LOGGING = {
     'version': 1,

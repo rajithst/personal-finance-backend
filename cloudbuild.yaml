@@ -1,6 +1,0 @@
-steps:
-- name: "gcr.io/cloud-builders/gcloud"
-  args: ["gcloud" , "app", "deploy", "--version=prod", "--quiet"]
-options:
-  logging: "CLOUD_LOGGING_ONLY"
-timeout: "1600s"
