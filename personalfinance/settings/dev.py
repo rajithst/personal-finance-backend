@@ -12,4 +12,4 @@ DATABASES = {
         'PASSWORD': 'Rst@6507@JP'
     }
 }
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]

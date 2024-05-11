@@ -12,24 +12,10 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 import logging
 from pathlib import Path
 import os
-import io
-import environ
-from urllib.parse import urlparse
-
-from google.cloud import secretmanager
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
-ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
-env = environ.Env(DEBUG=(bool, False))
-if ENV == 'prod':
-    ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME'], 'pfbackend.azurewebsites.net']
-    logging.info(ALLOWED_HOSTS)
-    CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
-    SECURE_SSL_REDIRECT = True
-else:
-    ALLOWED_HOSTS = ["*"]
+
 
 # Application definition
 
