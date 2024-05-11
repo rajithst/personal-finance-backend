@@ -2,8 +2,8 @@ from .common import *
 
 DEBUG = False
 SECRET_KEY = os.environ.get('SECRET_KEY')
-ALLOWED_HOSTS = ['pfbackend.azurewebsites.net', '127.0.0.1',]
-CSRF_TRUSTED_ORIGINS = ['pfbackend.azurewebsites.net']
+ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME']]
+CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -14,5 +14,3 @@ DATABASES = {
     }
 }
 
-
-print('ALLOWED Hosts: ', ALLOWED_HOSTS)
