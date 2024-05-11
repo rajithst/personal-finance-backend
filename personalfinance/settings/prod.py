@@ -13,7 +13,7 @@ DATABASES = {
     }
 }
 
-ALLOWED_HOSTS = ['pfbackend.azurewebsites.net', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['pfbackend.azurewebsites.net', '127.0.0.1', '169.254.130.6']
 CSRF_TRUSTED_ORIGINS = ['pfbackend.azurewebsites.net']
 SECURE_SSL_REDIRECT = True
-
+print('ALLOWED Hosts: ', ALLOWED_HOSTS)

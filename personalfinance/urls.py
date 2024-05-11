@@ -18,14 +18,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import TemplateView
 import debug_toolbar
 
 admin.site.site_header = 'Personal Finance Administration'
 admin.site.index_title = 'Welcome to Personal Finance'
 
 urlpatterns = [
-    path('', TemplateView.as_view(template_name='index.html')),
     path('admin/', admin.site.urls),
     path('finance/', include('transactions.urls')),
     path('investments/', include('investments.urls')),
