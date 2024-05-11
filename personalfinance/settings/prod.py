@@ -13,8 +13,9 @@ DATABASES = {
     }
 }
 
-ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME']]
-logging.info(ALLOWED_HOSTS)
+ALLOWED_HOSTS = ['pfbackend.azurewebsites.net', os.environ['WEBSITE_HOSTNAME']]
+logging.info('allowd hosts: ', ALLOWED_HOSTS)
+logging.info('os.environ WEBSITE_HOSTNAME', os.environ['WEBSITE_HOSTNAME'])
 CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
 SECURE_SSL_REDIRECT = True
 
