@@ -6,11 +6,15 @@ ALLOWED_HOSTS = [os.environ['WEBSITE_HOSTNAME']]
 CSRF_TRUSTED_ORIGINS = ['https://' + os.environ['WEBSITE_HOSTNAME']]
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        'ENGINE': 'mssql',
         'NAME': os.environ.get('DBNAME'),
         'HOST': os.environ.get('DBHOST'),
         'USER': os.environ.get('DBUSER'),
+        "PORT": os.environ.get('DBPORT'),
         'PASSWORD': os.environ.get('DBPASS'),
+        'OPTIONS': {
+                    'driver': 'ODBC Driver 17 for SQL Server',
+        },
     }
 }
 

@@ -23,6 +23,7 @@ grpcio==1.62.2
 grpcio-status==1.62.2
 gunicorn==22.0.0
 idna==3.7
+mssql-django==1.5
 numpy==1.26.4
 packaging==24.0
 pandas==2.2.1
@@ -32,6 +33,7 @@ pyasn1==0.6.0
 pyasn1_modules==0.4.0
 pycparser==2.22
 PyMySQL==1.1.0
+pyodbc==5.1.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 pytz==2024.1
