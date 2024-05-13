@@ -13,4 +13,4 @@ DATABASES = {
     }
 }
 ALLOWED_HOSTS = ["*"]
-print('ALLOWED Hosts: ', ALLOWED_HOSTS)
+print('ALLOWED Hosts DEV: ', ALLOWED_HOSTS)

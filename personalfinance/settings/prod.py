@@ -18,3 +18,4 @@ DATABASES = {
     }
 }
 
+print('ALLOWED Hosts PROD: ', ALLOWED_HOSTS)
