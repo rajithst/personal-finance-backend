@@ -10,18 +10,18 @@ db_settings = {
         'USER': 'root',
         'PASSWORD': 'Rst@6507@JP'
         }
-# if c1 and c2:
-#     db_settings = {
-#         'ENGINE': 'mssql',
-#         'NAME': os.environ.get('DBNAME'),
-#         'HOST': os.environ.get('DBHOST'),
-#         'USER': os.environ.get('DBUSER'),
-#         "PORT": os.environ.get('DBPORT'),
-#         'PASSWORD': os.environ.get('DBPASS'),
-#         'OPTIONS': {
-#             'driver': 'ODBC Driver 17 for SQL Server',
-#         },
-#     }
+if c1:
+    db_settings = {
+        'ENGINE': 'mssql',
+        'NAME': os.environ.get('DBNAME'),
+        'HOST': os.environ.get('DBHOST'),
+        'USER': os.environ.get('DBUSER'),
+        "PORT": os.environ.get('DBPORT'),
+        'PASSWORD': os.environ.get('DBPASS'),
+        'OPTIONS': {
+            'driver': 'ODBC Driver 17 for SQL Server',
+        },
+    }
 DATABASES = {
     'default': db_settings
 }
