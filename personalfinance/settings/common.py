@@ -121,7 +121,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200']
+CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://coincraft.azurewebsites.net']
 
 LOGGING = {
     'version': 1,
