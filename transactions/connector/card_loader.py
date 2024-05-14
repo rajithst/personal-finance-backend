@@ -9,6 +9,7 @@ import pandas as pd
 
 from transactions.models import DestinationMap
 from utils.gcs import GCSHandler
+from utils.azure import AzureBlobHandler
 
 CONTAINS_CATEGORIES = {
     'Softbank': ['ソフトバンク'],
@@ -66,11 +67,7 @@ class DataSource(Enum):
 
 class BaseLoader:
     def __init__(self):
-        self.gcs_handler = GCSHandler(settings.PROJECT_ID)
-        self.project_name = settings.PROJECT_ID
-        self.bucket_name = settings.PROJECT_ID + '.appspot.com'
-        logging.info(f'Project name: {self.project_name}')
-        logging.info(f'Bucket name: {self.bucket_name}')
+        self.blob_handler = AzureBlobHandler()
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -111,13 +108,14 @@ class RakutenCardLoader(BaseLoader):
         self.data_path = 'finance/rakuten/'
         self.cleanable_signatures = ['楽天ＳＰ', '/N']
         self.payment_method = PaymentMethod.RAKUTEN_CARD.value
+        self.bucket_name = 'rakuten'
 
     def import_data(self):
-        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
+        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
 
         results = []
         for file in files:
-            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data)
             df = df[['利用日', '利用店名・商品名', '利用金額']]
             df.columns = ['date', 'destination', 'amount']
@@ -139,12 +137,13 @@ class EposCardLoader(BaseLoader):
         self.data_path = 'finance/epos/'
         self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
         self.payment_method = PaymentMethod.EPOS_CARD.value
+        self.bucket_name = 'epos'
 
     def import_data(self):
-        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
+        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
         results = []
         for file in files:
-            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=5, engine='python')
             df = df.iloc[:, 1:]
             df = df[['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']]
@@ -167,12 +166,13 @@ class DocomoCardLoader(BaseLoader):
         self.data_path = 'finance/docomo/'
         self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／']
         self.payment_method = PaymentMethod.DOCOMO_CARD.value
+        self.bucket_name = 'docomo'
 
     def import_data(self):
-        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
+        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
         results = []
         for file in files:
-            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=3, engine='python')
             df = df.iloc[:, :3]
             df.columns = ['date', 'destination', 'amount']
@@ -195,12 +195,13 @@ class CashCardLoader(BaseLoader):
         self.data_path = 'finance/mizuho/'
         self.cleanable_signatures = []
         self.payment_method = PaymentMethod.CASH.value
+        self.bucket_name = 'mizuho'
 
     def import_data(self):
-        files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=self.data_path)
+        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
         results = []
         for file in files:
-            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding='shift-jis', skiprows=9, engine='python')
             df_income = df[['日付', 'お預入金額', 'お取引内容']]
             df_expense = df[['日付', 'お引出金額', 'お取引内容']]
