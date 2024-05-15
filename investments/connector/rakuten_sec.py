@@ -4,17 +4,15 @@ from io import BytesIO
 import pandas as pd
 from django.conf import settings
 
-from utils.gcs import GCSHandler
+from utils.azure import AzureBlobHandler
 
 
 class RakutenSecLoader:
 
     def __init__(self):
-        self.foreign_stock_data_path = 'investments/foreign'
-        self.domestic_stock_data_path = 'investments/domestic'
-        self.gcs_handler = GCSHandler(settings.PROJECT_ID)
-        self.project_name = settings.PROJECT_ID
-        self.bucket_name = settings.PROJECT_ID + '.appspot.com'
+        self.foreign_stock_data_path = 'foreign-investments'
+        self.domestic_stock_data_path = 'domestic-investments'
+        self.blob_handler = AzureBlobHandler()
         self.is_dev_env = settings.ENV == 'dev'
 
     def get_files(self, target_path: str):
@@ -22,7 +20,7 @@ class RakutenSecLoader:
             data_path = os.path.join(settings.MEDIA_ROOT, target_path)
             files = os.listdir(data_path)
         else:
-            files = self.gcs_handler.list_files(bucket_name=self.bucket_name, prefix=target_path)
+            files = self.blob_handler.list_files(bucket_name=target_path)
         return files
 
     def read_csv(self, file, target_path: str):
@@ -30,7 +28,7 @@ class RakutenSecLoader:
             data_path = os.path.join(settings.MEDIA_ROOT, target_path)
             df = pd.read_csv(os.path.join(data_path, file), encoding='shift_jis')
         else:
-            blob_data = self.gcs_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=target_path, file_name=file)
             df = pd.read_csv(blob_data, encoding='shift_jis')
         return df
 

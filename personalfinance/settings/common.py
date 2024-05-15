@@ -14,7 +14,8 @@ from pathlib import Path
 import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-
+is_prod = 'PRODUCTION' in os.environ and os.environ.get('PRODUCTION')
+ENV = 'prod' if is_prod else 'dev'
 
 
 # Application definition

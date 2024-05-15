@@ -3,6 +3,7 @@ import logging
 
 import fmpsdk
 from datetime import datetime
+from django.conf import settings
 
 from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_DATA_REMAP_FIELDS, DAILY_SNAPSHOT_FIELDS, \
     DAILY_SNAPSHOT_REMAP_FIELDS
@@ -10,7 +11,7 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 
 class MarketApi:
     def __init__(self):
-        self.api_key = '0Hs8qYwmaIcR2YITC5RIwPdwnLarAt0f'
+        self.api_key = os.environ['MARKET_API_KEY'] if settings.ENV == 'prod' else ''
 
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}

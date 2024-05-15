@@ -8,7 +8,6 @@ from enum import Enum
 import pandas as pd
 
 from transactions.models import DestinationMap
-from utils.gcs import GCSHandler
 from utils.azure import AzureBlobHandler
 
 CONTAINS_CATEGORIES = {
