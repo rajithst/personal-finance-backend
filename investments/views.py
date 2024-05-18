@@ -1,4 +1,6 @@
 import logging
+
+import pandas as pd
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,7 +20,7 @@ class InvestmentsView(APIView):
     def get(self, request):
         stock_purchase_history = StockPurchaseHistory.objects.select_related('company').all()
         index_fund_purchase_history = IndexFundPurchaseHistory.objects.select_related('fund_code').all()
-        dividend = Dividend.objects.all()
+        dividend = Dividend.objects.select_related('company').all()
         holding = Holding.objects.select_related('company').all()
         company = Company.objects.all()
 
@@ -27,10 +29,28 @@ class InvestmentsView(APIView):
         dividend_serializer = DividendSerializer(dividend, many=True)
         holdings_serializer = HoldingSerializer(holding, many=True)
         company_serializer = CompanySerializer(company, many=True)
+        dividend_data = pd.DataFrame(dividend_serializer.data)
+        us_dividends = dividend_data[dividend_data['stock_currency'] == '$']
+        domestic_dividends = dividend_data[dividend_data['stock_currency'] == '¥']
+        dividends_us = self._group_by(us_dividends)
+        dividends_domestic = self._group_by(domestic_dividends)
         return Response({'companies': company_serializer.data, 'holdings': holdings_serializer.data,
-                         'dividends': dividend_serializer.data,
+                         'dividends': {
+                             'us': dividends_us, 'domestic': dividends_domestic
+                         },
                          'transactions': stock_purchase_history_serializer.data}, status=status.HTTP_200_OK)
 
+
+    def _group_by(self, data: pd.DataFrame):
+        if data.empty:
+            return []
+        # df = pd.DataFrame(data)
+        group_data = []
+        for group_k, vals in data.groupby(['year', 'month']):
+            transactions = vals.to_dict('records')
+            group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
+                               'total': vals.amount.sum(), 'transactions': transactions})
+        return reversed(group_data)
 
 class StockPurchaseHistoryView(APIView):
     def post(self, request):
@@ -81,8 +101,10 @@ class ForexDailyUpdaterView(APIView):
 class DividendDailyUpdaterView(APIView):
 
     def get(self, request):
+        from_date = request.GET.get('from_date')
+        to_date = request.GET.get('to_date')
         handler = DividendHandler()
-        dividend_data = handler.update_dividend_data()
+        dividend_data = handler.update_dividend_data(from_date, to_date)
         return Response({'data': dividend_data}, status=status.HTTP_200_OK)
 
 

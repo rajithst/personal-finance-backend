@@ -1,5 +1,6 @@
 import copy
 from itertools import chain
+import time
 
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -32,25 +33,31 @@ class TransactionsView(APIView):
         incomes = Income.objects.select_related('category').filter(date__range=[end_date, start_date]).order_by('date')
         destinations = DestinationMap.objects.values_list('destination_eng', flat=True).exclude(destination_eng=None)
         transactions = Transaction.objects.select_related('category', 'subcategory', 'payment_method').filter(
-            date__range=[end_date, start_date]).order_by('date')
-        expenses = transactions.filter(is_expense=True, is_deleted=False)
-        savings = transactions.filter(is_saving=True, is_deleted=False)
-        payments = transactions.filter(is_payment=True, is_deleted=False)
-        income_serializer = IncomeSerializer(incomes, many=True)
-        expense_serializer = TransactionSerializer(expenses, many=True)
-        saving_serializer = TransactionSerializer(savings, many=True)
-        payment_serializer = TransactionSerializer(payments, many=True)
-        return Response(
-            {"income": self._group_by(income_serializer.data), "expense": self._group_by(expense_serializer.data),
-             "saving": self._group_by(saving_serializer.data), "payment": self._group_by(payment_serializer.data),
-             "destinations": destinations}, status=status.HTTP_200_OK)
+            date__range=[end_date, start_date], is_deleted=False).order_by('date')
+        transactions_serializer = TransactionSerializer(transactions, many=True)
+        expenses, payments, savings = self.split_transactions(transactions_serializer.data)
 
-    def _group_by(self, data):
-        if not len(data):
+        income_serializer = IncomeSerializer(incomes, many=True)
+        incomes = self._group_by(pd.DataFrame(income_serializer.data))
+
+        return Response({"income": incomes, "expense": expenses, "saving": savings, "payment": payments, "destinations": destinations}, status=status.HTTP_200_OK)
+
+    def split_transactions(self, transactions):
+        df = pd.DataFrame(transactions)
+        expenses = df[df['is_expense'] == 1]
+        payments = df[df['is_payment'] == 1]
+        savings = df[df['is_saving'] == 1]
+        expense_group = self._group_by(expenses)
+        payment_group = self._group_by(payments)
+        saving_group = self._group_by(savings)
+        return expense_group, payment_group, saving_group
+
+    def _group_by(self, data: pd.DataFrame):
+        if data.empty:
             return []
-        df = pd.DataFrame(data)
+        # df = pd.DataFrame(data)
         group_data = []
-        for group_k, vals in df.groupby(['year', 'month']):
+        for group_k, vals in data.groupby(['year', 'month']):
             vals['checked'] = False
             transactions = vals.to_dict('records')
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
@@ -87,7 +94,8 @@ class TransactionsView(APIView):
 
         if is_merge and merged_ids:
             merged_record_id = serializer.data['id']
-            Transaction.objects.filter(id__in=merged_ids).update(is_merge=True, merge_id=merged_record_id, is_deleted=True)
+            Transaction.objects.filter(id__in=merged_ids).update(is_merge=True, merge_id=merged_record_id,
+                                                                 is_deleted=True)
 
         update_similar = data.get('update_similar')
         if update_similar:
