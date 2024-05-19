@@ -26,5 +26,3 @@ DATABASES = {
     'default': db_settings
 }
 ALLOWED_HOSTS = ["*"]
-print('ALLOWED Hosts DEV: ', ALLOWED_HOSTS)
-print('DATABASES: ', DATABASES)
