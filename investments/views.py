@@ -1,6 +1,7 @@
 import logging
 
 import pandas as pd
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,19 +13,19 @@ from investments.handlers.forex import ForexHandler, DividendHandler
 from investments.handlers.holding import HoldingHandler
 from investments.models import StockPurchaseHistory, Company, IndexFundPurchaseHistory, Dividend, Holding
 from investments.serializers import StockPurchaseHistorySerializer, CompanySerializer, \
-    IndexFundPurchaseHistorySerializer, DividendSerializer, HoldingSerializer
+    IndexFundPurchaseHistorySerializer, DividendSerializer, HoldingSerializer, ResponseStockPurchaseHistorySerializer
 
 
 class InvestmentsView(APIView):
 
     def get(self, request):
-        stock_purchase_history = StockPurchaseHistory.objects.select_related('company').all()
+        stock_purchase_history = StockPurchaseHistory.objects.select_related('company')
         index_fund_purchase_history = IndexFundPurchaseHistory.objects.select_related('fund_code').all()
         dividend = Dividend.objects.select_related('company').all()
         holding = Holding.objects.select_related('company').all()
         company = Company.objects.all()
 
-        stock_purchase_history_serializer = StockPurchaseHistorySerializer(stock_purchase_history, many=True)
+        stock_purchase_history_serializer = ResponseStockPurchaseHistorySerializer(stock_purchase_history, many=True)
         index_fund_purchase_serializer = IndexFundPurchaseHistorySerializer(index_fund_purchase_history, many=True)
         dividend_serializer = DividendSerializer(dividend, many=True)
         holdings_serializer = HoldingSerializer(holding, many=True)

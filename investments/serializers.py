@@ -74,3 +74,23 @@ class DividendSerializer(serializers.ModelSerializer):
             return '¥'
         else:
             return ''
+
+
+class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockPurchaseHistory
+        fields = ['id', 'purchase_date', 'quantity', 'purchase_price', 'stock_currency', 'exchange_rate', 'company',
+                  'company_name',
+                  'image']
+
+    company_name = serializers.ReadOnlyField(source='company.company_name')
+    image = serializers.ReadOnlyField(source='company.image')
+    stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
+
+    def get_stock_currency(self, data):
+        if data.company.currency == 'USD':
+            return '$'
+        elif data.company.currency == 'JPY':
+            return '¥'
+        else:
+            return ''
