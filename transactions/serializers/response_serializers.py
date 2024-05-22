@@ -1,7 +1,8 @@
 import calendar
 
 from rest_framework import serializers
-from .models import IncomeCategory, TransactionCategory, PaymentMethod, Income, TransactionSubCategory, Transaction
+
+from transactions.models import Income, Transaction
 
 
 class DateSerializeHelper(object):
@@ -16,31 +17,7 @@ class DateSerializeHelper(object):
         return calendar.month_name[data.date.month]
 
 
-class IncomeCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = IncomeCategory
-        fields = ['id', 'category']
-
-
-class TransactionCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TransactionCategory
-        fields = ['id', 'category']
-
-
-class TransactionSubCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TransactionSubCategory
-        fields = ['id', 'category', 'name']
-
-
-class PaymentMethodSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PaymentMethod
-        fields = ['id', 'name']
-
-
-class IncomeSerializer(serializers.ModelSerializer, DateSerializeHelper):
+class ResponseIncomeSerializer(serializers.ModelSerializer, DateSerializeHelper):
     class Meta:
         model = Income
         fields = ['id', 'category', 'category_text', 'amount', 'date', 'destination', 'year', 'month', 'month_text',
@@ -52,7 +29,7 @@ class IncomeSerializer(serializers.ModelSerializer, DateSerializeHelper):
     category_text = serializers.ReadOnlyField(source='category.category')
 
 
-class TransactionSerializer(serializers.ModelSerializer, DateSerializeHelper):
+class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHelper):
     class Meta:
         model = Transaction
         fields = ['id', 'category', 'category_text', 'subcategory', 'subcategory_text', 'is_payment', 'is_deleted',
