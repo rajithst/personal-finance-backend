@@ -1,36 +1,10 @@
 import calendar
 
+from investments.models import Holding, Dividend, StockPurchaseHistory
 from rest_framework import serializers
 
-from investments.models import StockPurchaseHistory, Company, IndexFundPurchaseHistory, Dividend, Holding, \
-    StockDailyPrice
 
-
-class StockPurchaseHistorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StockPurchaseHistory
-        fields = '__all__'
-
-
-class StockDailyPriceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StockDailyPrice
-        fields = '__all__'
-
-
-class CompanySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Company
-        fields = '__all__'
-
-
-class IndexFundPurchaseHistorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = IndexFundPurchaseHistory
-        fields = '__all__'
-
-
-class HoldingSerializer(serializers.ModelSerializer):
+class ResponseHoldingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Holding
         fields = ['id', 'quantity', 'average_price', 'current_price', 'total_investment', 'current_value',
@@ -45,7 +19,7 @@ class HoldingSerializer(serializers.ModelSerializer):
         return (obj.profit_loss / obj.total_investment) * 100
 
 
-class DividendSerializer(serializers.ModelSerializer):
+class ResponseDividendSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dividend
         fields = ['id', 'company', 'amount', 'ex_dividend_date', 'payment_date', 'payment_received', 'company_name',
