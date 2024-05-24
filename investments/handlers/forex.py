@@ -4,7 +4,7 @@ from django.db.models import F
 
 from investments.connector.market_api import MarketApi
 from investments.models import Forex, Company, Dividend
-from investments.serializers import DividendSerializer
+from investments.serializers.serializers import DividendSerializer
 
 
 class ForexHandler(object):

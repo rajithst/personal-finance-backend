@@ -1,14 +1,16 @@
 
-from django.urls import path, include
+from django.urls import path
 from rest_framework.routers import SimpleRouter
 
-from transactions import views
+from transactions.apis import views
+from transactions.apis.importers import TransactionImportView
 
 router = SimpleRouter()
-router.register('income', views.IncomeViewSet)
+router.register('income/', views.IncomeViewSet)
+router.register('transaction', views.TransactionViewSet)
 
 urlpatterns = [
-    path('transactions/', views.TransactionsView.as_view()),
-    path('transactions/import/', views.TransactionImportView.as_view())
+    path('list', views.FinanceView.as_view()),
+    path('import/transactions', TransactionImportView.as_view())
 ]
 urlpatterns += router.urls

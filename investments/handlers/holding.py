@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from investments.connector.market_api import MarketApi
 from investments.models import Holding
-from investments.serializers import HoldingSerializer
+from investments.serializers.serializers import HoldingSerializer
 
 
 class HoldingHandler(object):

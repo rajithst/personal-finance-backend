@@ -35,7 +35,9 @@ CONTAINS_CATEGORIES = {
     'CONAN': ['ホームセンターコーナン　アプリ', 'コ－ナン商事', 'コ－ナン　コウホクセンタ－ミナミテン'],
     'Netflix': ['ＮＥＴＦＬＩＸ．ＣＯＭ', 'ネツトフリツクス'],
     'ETC': ['ＥＴＣ'],
-    'McDonald\'s': ['マクドナルド']
+    'McDonald\'s': ['マクドナルド'],
+    'HardOff': ['オフハウス'],
+    'Yokohama Waterworks Bureau': ['ヨコハマスイドウ']
 }
 
 NA_TRANSACTION_CATEGORY_ID = 1000
