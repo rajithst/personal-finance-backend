@@ -1,12 +1,9 @@
-import logging
-import os
 from io import BytesIO
-from azure.storage.blob import BlobServiceClient
 
 
 class AzureBlobHandler:
     def __init__(self):
-        self.client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONNECTION_STRING'])
+        self.client = None
 
     def list_files(self, bucket_name, prefix=None):
         """Lists files in the specified bucket."""

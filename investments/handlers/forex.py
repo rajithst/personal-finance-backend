@@ -1,6 +1,5 @@
 from datetime import date
 from dateutil.relativedelta import relativedelta
-from django.db.models import F
 
 from investments.connector.market_api import MarketApi
 from investments.models import Forex, Company, Dividend

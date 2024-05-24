@@ -1,12 +1,10 @@
 import logging
 from io import BytesIO
 
-from google.cloud import storage
-
         
 class GCSHandler:
     def __init__(self, project_id):
-        self.client = storage.Client(project=project_id)
+        self.client = None
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):
         """Uploads a file to the specified bucket."""

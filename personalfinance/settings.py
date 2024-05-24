@@ -13,7 +13,6 @@ import logging
 import sys
 from pathlib import Path
 import os
-import dj_database_url
 
 from django.core.management.utils import get_random_secret_key
 
