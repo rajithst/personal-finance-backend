@@ -10,14 +10,20 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import logging
+import sys
 from pathlib import Path
 import os
+import dj_database_url
+
+from django.core.management.utils import get_random_secret_key
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-is_prod = 'PRODUCTION' in os.environ and os.environ.get('PRODUCTION')
-ENV = 'prod' if is_prod else 'dev'
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEVELOPMENT_MODE = os.getenv("DEVELOPMENT_MODE", True)
+DEBUG = os.getenv("DEBUG", True)
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", get_random_secret_key())
 
-
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 # Application definition
 
 INSTALLED_APPS = [
@@ -68,7 +74,26 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'personalfinance.wsgi.application'
+print(DEVELOPMENT_MODE)
+if DEVELOPMENT_MODE is True:
+    db_settings = {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'personal_finance',
+        'HOST': 'localhost',
+        'USER': 'root',
+        'PASSWORD': 'Rst@6507@JP'
+    }
+else:
+    db_settings = {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('DB_NAME'),
+        'HOST': os.getenv('DB_HOST'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD')
+    }
 
+DATABASES = {"default": db_settings}
+print(DATABASES)
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
@@ -87,7 +112,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
@@ -98,7 +122,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
@@ -122,7 +145,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://coincraft.azurewebsites.net']
+CORS_ALLOWED_ORIGINS = ['http://localhost:4200']
 
 LOGGING = {
     'version': 1,
@@ -150,5 +173,3 @@ LOGGING = {
     }
 }
 
-
-PROJECT_ID = 'personal-finance-413910'
