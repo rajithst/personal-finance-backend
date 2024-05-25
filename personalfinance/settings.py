@@ -86,7 +86,7 @@ if DEVELOPMENT_MODE is True:
     DATABASES = {"default": db_settings}
 else:
     DATABASES = {
-        "default": dj_database_url.parse(os.environ.get("DATABASE_URL")),
+        "default": dj_database_url.parse(os.getenv("DATABASE_URL")),
     }
 
 # Password validation
