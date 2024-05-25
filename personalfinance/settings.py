@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 import os
+import dj_database_url
 
 from django.core.management.utils import get_random_secret_key
 
@@ -82,17 +83,12 @@ if DEVELOPMENT_MODE is True:
         'USER': 'root',
         'PASSWORD': 'Rst@6507@JP'
     }
+    DATABASES = {"default": db_settings}
 else:
-    db_settings = {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME'),
-        'HOST': os.getenv('DB_HOST'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD')
+    DATABASES = {
+        "default": dj_database_url.parse(os.environ.get("DATABASE_URL")),
     }
 
-DATABASES = {"default": db_settings}
-print(DATABASES)
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
