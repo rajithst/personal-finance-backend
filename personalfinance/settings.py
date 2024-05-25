@@ -74,7 +74,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'personalfinance.wsgi.application'
-print(DEVELOPMENT_MODE)
+print('is development mode:', DEVELOPMENT_MODE)
 if DEVELOPMENT_MODE is True:
     db_settings = {
         'ENGINE': 'django.db.backends.mysql',
@@ -86,7 +86,15 @@ if DEVELOPMENT_MODE is True:
     DATABASES = {"default": db_settings}
 else:
     DATABASES = {
-        "default": dj_database_url.parse(os.getenv("DATABASE_URL")),
+        "default": {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': os.getenv('DB_NAME', None),
+            'USER': os.getenv('DB_USER', None),
+            'PASSWORD': os.getenv('DB_PASSWORD', None),
+            'HOST': os.getenv('DB_HOST', None),
+            'PORT': os.getenv('DB_PORT', None),
+            'OPTIONS': {'sslmode': 'require'},
+        }
     }
 
 # Password validation
@@ -140,7 +148,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200']
+CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://coincraft-mycqb.ondigitalocean.app']
 
 LOGGING = {
     'version': 1,
