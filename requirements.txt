@@ -6,8 +6,10 @@ django-cors-headers==4.3.1
 django-debug-toolbar==4.3.0
 djangorestframework==3.15.1
 fmpsdk==20240330.0
+gunicorn==22.0.0
 idna==3.7
 numpy==1.26.4
+packaging==24.0
 pandas==2.2.2
 PyMySQL==1.1.1
 python-dateutil==2.9.0.post0
