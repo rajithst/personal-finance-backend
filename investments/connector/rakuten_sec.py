@@ -3,15 +3,16 @@ import os
 import pandas as pd
 from django.conf import settings
 
-from utils.azure import AzureBlobHandler
+from utils.gcs import GCSHandler
 
 
 class RakutenSecLoader:
 
     def __init__(self):
-        self.foreign_stock_data_path = 'foreign-investments'
-        self.domestic_stock_data_path = 'domestic-investments'
-        self.blob_handler = AzureBlobHandler()
+        self.foreign_stock_data_path = 'foreign'
+        self.domestic_stock_data_path = 'domestic'
+        self.bucket_name = 'personal-finance-datastore'
+        self.blob_handler = GCSHandler()
         self.is_dev_env = settings.ENV == 'dev'
 
     def get_files(self, target_path: str):
@@ -19,7 +20,7 @@ class RakutenSecLoader:
             data_path = os.path.join(settings.MEDIA_ROOT, target_path)
             files = os.listdir(data_path)
         else:
-            files = self.blob_handler.list_files(bucket_name=target_path)
+            files = self.blob_handler.list_files(bucket_name=self.bucket_name, prefix=target_path)
         return files
 
     def read_csv(self, file, target_path: str):

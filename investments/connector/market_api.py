@@ -11,7 +11,7 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 
 class MarketApi:
     def __init__(self):
-        self.api_key = os.environ['MARKET_API_KEY'] if settings.ENV == 'prod' else '0Hs8qYwmaIcR2YITC5RIwPdwnLarAt0f'
+        self.api_key = '' if settings.DEVELOPMENT_MODE else os.getenv('MARKET_API_KEY')
 
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}

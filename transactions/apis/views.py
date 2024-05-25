@@ -42,6 +42,8 @@ class FinanceView(APIView):
                          "destinations": destinations}, status=status.HTTP_200_OK)
 
     def split_transactions(self, transactions):
+        if not len(transactions):
+            return [], [], []
         df = pd.DataFrame(transactions)
         expenses = df[df['is_expense'] == 1]
         payments = df[df['is_payment'] == 1]

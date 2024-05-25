@@ -1,10 +1,15 @@
 import logging
+import os
 from io import BytesIO
+
+from django.conf import settings
+from googleapiclient.discovery import build
 
         
 class GCSHandler:
-    def __init__(self, project_id):
-        self.client = None
+    def __init__(self):
+        self.API_KEY = '' if settings.DEVELOPMENT_MODE else os.getenv("GCS_API_KEY", None)
+        self.client = build('storage', 'v1', developerKey=self.API_KEY)
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):
         """Uploads a file to the specified bucket."""
@@ -43,3 +48,4 @@ class GCSHandler:
         blob = bucket.blob(file_name)
         data = blob.download_as_string()
         return BytesIO(data)
+

@@ -3,7 +3,7 @@ from enum import Enum
 import pandas as pd
 
 from transactions.models import DestinationMap
-from utils.azure import AzureBlobHandler
+from utils.gcs import GCSHandler
 
 CONTAINS_CATEGORIES = {
     'Softbank': ['ソフトバンク'],
@@ -63,7 +63,8 @@ class DataSource(Enum):
 
 class BaseLoader:
     def __init__(self):
-        self.blob_handler = AzureBlobHandler()
+        self.blob_handler = GCSHandler()
+        self.bucket_name = 'personal-finance-datastore'
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -104,7 +105,6 @@ class RakutenCardLoader(BaseLoader):
         self.data_path = 'finance/rakuten/'
         self.cleanable_signatures = ['楽天ＳＰ', '/N']
         self.payment_method = PaymentMethod.RAKUTEN_CARD.value
-        self.bucket_name = 'rakuten'
 
     def import_data(self):
         files = self.blob_handler.list_files(bucket_name=self.bucket_name)
@@ -133,7 +133,6 @@ class EposCardLoader(BaseLoader):
         self.data_path = 'finance/epos/'
         self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
         self.payment_method = PaymentMethod.EPOS_CARD.value
-        self.bucket_name = 'epos'
 
     def import_data(self):
         files = self.blob_handler.list_files(bucket_name=self.bucket_name)
@@ -162,7 +161,6 @@ class DocomoCardLoader(BaseLoader):
         self.data_path = 'finance/docomo/'
         self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／']
         self.payment_method = PaymentMethod.DOCOMO_CARD.value
-        self.bucket_name = 'docomo'
 
     def import_data(self):
         files = self.blob_handler.list_files(bucket_name=self.bucket_name)
@@ -191,7 +189,6 @@ class CashCardLoader(BaseLoader):
         self.data_path = 'finance/mizuho/'
         self.cleanable_signatures = []
         self.payment_method = PaymentMethod.CASH.value
-        self.bucket_name = 'mizuho'
 
     def import_data(self):
         files = self.blob_handler.list_files(bucket_name=self.bucket_name)

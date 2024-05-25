@@ -26,11 +26,16 @@ class InvestmentsView(APIView):
         dividend_serializer = ResponseDividendSerializer(dividend, many=True)
         holdings_serializer = ResponseHoldingSerializer(holding, many=True)
         company_serializer = CompanySerializer(company, many=True)
-        dividend_data = pd.DataFrame(dividend_serializer.data)
-        us_dividends = dividend_data[dividend_data['stock_currency'] == '$']
-        domestic_dividends = dividend_data[dividend_data['stock_currency'] == '¥']
-        dividends_us = self._group_by(us_dividends)
-        dividends_domestic = self._group_by(domestic_dividends)
+
+        dividend_data = dividend_serializer.data
+        if dividend_data:
+            dividend_data = pd.DataFrame(dividend_serializer.data)
+            us_dividends = dividend_data[dividend_data['stock_currency'] == '$']
+            domestic_dividends = dividend_data[dividend_data['stock_currency'] == '¥']
+            dividends_us = self._group_by(us_dividends)
+            dividends_domestic = self._group_by(domestic_dividends)
+        else:
+            dividends_us = dividends_domestic = []
         return Response({'companies': company_serializer.data, 'holdings': holdings_serializer.data,
                          'dividends': {
                              'us': dividends_us, 'domestic': dividends_domestic
