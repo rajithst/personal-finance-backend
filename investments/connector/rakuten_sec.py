@@ -13,7 +13,8 @@ class RakutenSecLoader:
         self.domestic_stock_data_path = 'investments/domestic'
         self.bucket_name = 'personal-finance-datastore'
         self.blob_handler = GCSHandler()
-        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", True)
+        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", "False") == "True"
+
 
     def get_files(self, target_path: str):
         if self.is_dev_env:
