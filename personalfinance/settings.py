@@ -75,7 +75,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'personalfinance.wsgi.application'
-print('is development mode:', DEVELOPMENT_MODE)
 if DEVELOPMENT_MODE is True:
     db_settings = {
         'ENGINE': 'django.db.backends.mysql',

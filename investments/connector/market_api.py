@@ -12,10 +12,9 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 class MarketApi:
     def __init__(self):
 
-        self.API_KEY = '' if settings.DEVELOPMENT_MODE else os.getenv('MARKET_API_KEY')
-        logging.info('MARKET_API_KEY', os.getenv('MARKET_API_KEY'))
+        self.API_KEY = os.getenv('MARKET_API_KEY', None)
         if not self.API_KEY:
-            raise EnvironmentError("GCS_API_KEY not set")
+            raise EnvironmentError(f"MARKET_API_KEY not set: {self.API_KEY}")
 
 
     def map_to_model(self, data, fields, remap_fields=None):
