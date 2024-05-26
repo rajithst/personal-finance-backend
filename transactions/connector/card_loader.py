@@ -1,39 +1,13 @@
+import os
+from collections import defaultdict
+
 import numpy as np
 from enum import Enum
 import pandas as pd
+from django.conf import settings
 
-from transactions.models import DestinationMap
+from transactions.models import DestinationMap, ImportRules, RewriteRules
 from utils.gcs import GCSHandler
-
-CONTAINS_CATEGORIES = {
-    'Softbank': ['ソフトバンク'],
-    'Spotify': ['SPOTIFY'],
-    'SevenEleven': ['セブン－イレブン', 'セブンイレブン'],
-    'Lawson': ['ロ―ソン', 'ローソン', 'ロ－ソン'],
-    'Family Mart': ['フアミリ―マ―ト', 'ファミリーマート'],
-    'Toyota Rent a Car': ['トヨタレンタリース', 'ﾄﾖﾀﾚﾝﾀﾘｰｽ'],
-    'MEGA Donqui': ['ＭＥＧＡドン・キ', 'メガドンキ'],
-    'Starbucks': ['ｽﾀ-ﾊﾞﾂｸｽ', 'スタ－バツクス', 'スターバックス'],
-    'Daiso': ['ダイソー', 'ＤＡＩＳＯ', 'ダイソ－'],
-    'Seria': ['セリア'],
-    'Gyomu Super': ['ギヨウムス－パ－', '業務ス－パ－', 'ｷﾞﾖｳﾑｽ-ﾊﾟ-'],
-    'HAC Drug Store': ['ハツクドラツグ', 'ハックドラッグ'],
-    'Uber Eats': ['UBER *EATS', 'ＵＢＥＲ　ＥＡＴＳ', 'UBER   *EATS', 'UBER * EATS'],
-    'Uber Pass': ['UBER *PASS', 'UBER *ONE'],
-    'ATM Withdrawal': ['ＡＴＭ'],
-    'Cash Payments': ['ＪＣＢデビット'],
-    'Second Street': ['セカンドストリート'],
-    'TOKYU SC': ['クトウキユウ　エスシ－'],
-    'CREATE': ['クリエイト　エス・ディーアプリ', 'クリエイトエスデイ－', 'クリエイト', 'ｸﾘｴｲﾄ'],
-    'Appolo Station': ['イデミツ（アポロステーション', 'アポロステ－シヨン', 'イデミツ（アポロ／シェル'],
-    'PASMO': ['モバイルＰＡＳＭＯチャージ', 'モバイルパスモチヤ－ジ'],
-    'CONAN': ['ホームセンターコーナン　アプリ', 'コ－ナン商事', 'コ－ナン　コウホクセンタ－ミナミテン'],
-    'Netflix': ['ＮＥＴＦＬＩＸ．ＣＯＭ', 'ネツトフリツクス'],
-    'ETC': ['ＥＴＣ'],
-    'McDonald\'s': ['マクドナルド'],
-    'HardOff': ['オフハウス'],
-    'Yokohama Waterworks Bureau': ['ヨコハマスイドウ']
-}
 
 NA_TRANSACTION_CATEGORY_ID = 1000
 NA_TRANSACTION_SUB_CATEGORY_ID = 1000
@@ -65,13 +39,8 @@ class BaseLoader:
     def __init__(self):
         self.blob_handler = GCSHandler()
         self.bucket_name = 'personal-finance-datastore'
+        self.is_dev_env = settings.DEVELOPMENT_MODE
 
-    def _inverse_dict(self, d):
-        inverted = {}
-        for key, values in d.items():
-            for value in values:
-                inverted.setdefault(value, key)
-        return inverted
 
     def set_default_props(self, df):
         df[['notes', 'alias']] = len(df.index) * np.nan
@@ -80,13 +49,6 @@ class BaseLoader:
         df['is_expense'] = 1
         df = df[df.date.isnull() == False]
         df = df[df.amount.isnull() == False]
-        return df
-
-    def remap_contains_destinations(self, df):
-        CONTAINS_CATEGORIES_REV = self._inverse_dict(CONTAINS_CATEGORIES)
-        for field in CONTAINS_CATEGORIES_REV:
-            df.loc[df['destination'].str.contains(field, regex=False), 'alias'] = CONTAINS_CATEGORIES_REV[field]
-            df.loc[df['destination'].str.contains(field, regex=False), 'destination'] = CONTAINS_CATEGORIES_REV[field]
         return df
 
     def clean_electronic_signatures(self, value, signatures):
@@ -99,6 +61,22 @@ class BaseLoader:
             return new_value
         return value
 
+    def get_last_import_date(self, payment_method):
+        last_import_date = None
+        import_rule = ImportRules.objects.filter(source=payment_method).first()
+        if import_rule:
+            last_import_date = import_rule.last_import_date
+        return last_import_date
+
+    def get_files(self, target_path: str):
+        if self.is_dev_env:
+            data_path = os.path.join(settings.MEDIA_ROOT, target_path)
+            files = os.listdir(data_path)
+        else:
+            files = self.blob_handler.list_files(bucket_name=self.bucket_name, prefix=target_path)
+        return files
+
+
 class RakutenCardLoader(BaseLoader):
     def __init__(self):
         super().__init__()
@@ -107,21 +85,26 @@ class RakutenCardLoader(BaseLoader):
         self.payment_method = PaymentMethod.RAKUTEN_CARD.value
 
     def import_data(self):
-        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
-
+        last_import_date = self.get_last_import_date(self.payment_method)
+        files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
-            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            if self.is_dev_env:
+                blob_data = os.path.join(settings.MEDIA_ROOT, self.data_path, file)
+            else:
+                blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data)
             df = df[['利用日', '利用店名・商品名', '利用金額']]
             df.columns = ['date', 'destination', 'amount']
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
-            df['payment_method'] = self.payment_method
+            if last_import_date:
+                df = df[df['date'] > last_import_date]
+            df['payment_method_id'] = self.payment_method
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df = self.remap_contains_destinations(df)
             results.append(df)
+
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
@@ -135,20 +118,25 @@ class EposCardLoader(BaseLoader):
         self.payment_method = PaymentMethod.EPOS_CARD.value
 
     def import_data(self):
-        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
+        last_import_date = self.get_last_import_date(self.payment_method)
+        files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
-            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            if self.is_dev_env:
+                blob_data = os.path.join(settings.MEDIA_ROOT, self.data_path, file)
+            else:
+                blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=5, engine='python')
             df = df.iloc[:, 1:]
             df = df[['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']]
             df.columns = ['date', 'destination', 'amount']
             df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日').dt.date
-            df['payment_method'] = self.payment_method
+            if last_import_date:
+                df = df[df['date'] > last_import_date]
+            df['payment_method_id'] = self.payment_method
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
@@ -163,20 +151,25 @@ class DocomoCardLoader(BaseLoader):
         self.payment_method = PaymentMethod.DOCOMO_CARD.value
 
     def import_data(self):
-        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
+        last_import_date = self.get_last_import_date(self.payment_method)
+        files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
-            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            if self.is_dev_env:
+                blob_data = os.path.join(settings.MEDIA_ROOT, self.data_path, file)
+            else:
+                blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding="cp932", skiprows=1, skipfooter=3, engine='python')
             df = df.iloc[:, :3]
             df.columns = ['date', 'destination', 'amount']
             df = df.loc[df['date'] != 'ＲＡ　ＪＩＴＨ　様']
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
-            df['payment_method'] = self.payment_method
+            if last_import_date:
+                df = df[df['date'] > last_import_date]
+            df['payment_method_id'] = self.payment_method
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df = self.remap_contains_destinations(df)
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
@@ -191,10 +184,14 @@ class CashCardLoader(BaseLoader):
         self.payment_method = PaymentMethod.CASH.value
 
     def import_data(self):
-        files = self.blob_handler.list_files(bucket_name=self.bucket_name)
+        last_import_date = self.get_last_import_date(self.payment_method)
+        files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
-            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            if self.is_dev_env:
+                blob_data = os.path.join(settings.MEDIA_ROOT, self.data_path, file)
+            else:
+                blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding='shift-jis', skiprows=9, engine='python')
             df_income = df[['日付', 'お預入金額', 'お取引内容']]
             df_expense = df[['日付', 'お引出金額', 'お取引内容']]
@@ -205,13 +202,15 @@ class CashCardLoader(BaseLoader):
             df_income['is_expense'] = 0
             df_income['is_income'] = 1
             df = pd.concat([df_income, df_expense])
-            df['payment_method'] = self.payment_method
+            df['payment_method_id'] = self.payment_method
             df['date'] = pd.to_datetime(df['date'], format='%Y.%m.%d').dt.date
-            df = self.remap_contains_destinations(df)
+            if last_import_date:
+                df = df[df['date'] > last_import_date]
             results.append(df)
         transactions = pd.concat(results)
         transactions = transactions.drop_duplicates()
         return transactions
+
 
 
 
@@ -222,9 +221,27 @@ class CardLoader:
         if payee_maps:
             payee_maps = pd.DataFrame(payee_maps)
             payee_maps = payee_maps[['destination', 'destination_eng', 'category_id', 'subcategory_id']]
-            payee_maps.columns = ['destination', 'alias_map', 'category', 'subcategory']
+            payee_maps.columns = ['destination', 'alias_map', 'category_id', 'subcategory_id']
             return payee_maps
-        return pd.DataFrame(columns=['destination', 'alias_map', 'category', 'subcategory'])
+        return pd.DataFrame(columns=['destination', 'alias_map', 'category_id', 'subcategory_id'])
+
+    def _inverse_dict(self, d):
+        inverted = {}
+        for key, values in d.items():
+            for value in values:
+                inverted.setdefault(value, key)
+        return inverted
+
+    def get_rewrite_rules(self):
+        rules = RewriteRules.objects.all()
+        contains_categories = defaultdict(list)
+
+        for rule in rules:
+            destination = rule.destination
+            keywords = [keyword.strip() for keyword in rule.keywords.split(',') if keyword.strip()]
+            contains_categories[destination].extend(keywords)
+        contains_categories = dict(contains_categories)
+        return self._inverse_dict(contains_categories)
 
     def process(self):
         rakuten_importer = CardLoaderFactory.create(CardTypes.RAKUTEN.value)
@@ -239,16 +256,31 @@ class CardLoader:
         cash_importer = CardLoaderFactory.create(CardTypes.CASH.value)
         cash_data = cash_importer.import_data()
 
+        rakuten_new_import_date = rakuten_data['date'].max()
+        epos_new_import_date = epos_data['date'].max()
+        docomo_new_import_date = docomo_data['date'].max()
+        cash_new_import_date = cash_data['date'].max()
+        import_rules = {
+            PaymentMethod.RAKUTEN_CARD.value: rakuten_new_import_date,
+            PaymentMethod.EPOS_CARD.value: epos_new_import_date,
+            PaymentMethod.DOCOMO_CARD.value: docomo_new_import_date,
+            PaymentMethod.CASH.value: cash_new_import_date
+        }
+
         all_transactions = pd.concat([rakuten_data, epos_data, docomo_data, cash_data])
         all_transactions.sort_values(by='date', ascending=True, inplace=True)
         all_transactions.reset_index(drop=True, inplace=True)
         all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
         all_transactions['amount'] = all_transactions['amount'].round(2)
-        all_transactions['payment_method'] = all_transactions['payment_method'].astype(int)
+        all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
+        rewrite_rules = self.get_rewrite_rules()
+        for field in rewrite_rules:
+            all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'alias'] = \
+            rewrite_rules[field]
+            all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'destination'] = rewrite_rules[field]
 
         all_incomes = all_transactions[all_transactions['is_income'] == 1]
-        all_incomes['category'] = OTHER_INCOME_CATEGORY_ID
-
+        all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
         payee_maps = self.get_payee_map()
         all_expenses = all_transactions[all_transactions['is_expense'] == 1]
         all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
@@ -258,19 +290,19 @@ class CardLoader:
         all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
         all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
 
-        all_expenses['category'] = all_expenses['category'].replace({np.nan: NA_TRANSACTION_CATEGORY_ID}).astype(
+        all_expenses['category_id'] = all_expenses['category_id'].replace({np.nan: NA_TRANSACTION_CATEGORY_ID}).astype(
             int)
-        all_expenses['subcategory'] = all_expenses['subcategory'].replace(
+        all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace(
             {np.nan: NA_TRANSACTION_SUB_CATEGORY_ID}).astype(int)
-        all_expenses['is_saving'] = all_expenses['category'] == SAVINGS_CATEGORY_ID
-        all_expenses['is_payment'] = all_expenses['category'] == PAYMENT_CATEGORY_ID
-        return all_expenses, all_incomes
+        all_expenses['is_saving'] = all_expenses['category_id'] == SAVINGS_CATEGORY_ID
+        all_expenses['is_payment'] = all_expenses['category_id'] == PAYMENT_CATEGORY_ID
+        return all_expenses, all_incomes, import_rules
 
 
 class CardLoaderFactory(object):
 
     @staticmethod
-    def create(card_type, **kwargs):
+    def create(card_type):
         if card_type == CardTypes.RAKUTEN.value:
             return RakutenCardLoader()
         elif card_type == CardTypes.EPOS.value:

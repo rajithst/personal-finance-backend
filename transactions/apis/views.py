@@ -94,9 +94,11 @@ class TransactionViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         data = request.data
+        print(f'data {request.data}')
         is_regular_destination = data.get('is_regular_destination')
         update_similar = data.get('update_similar')
         if update_similar:
+            print('update similar transactions')
             self.update_similar_transactions(data)
 
         if is_regular_destination:
@@ -109,7 +111,8 @@ class TransactionViewSet(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def update_regular_destination(self, request_data):
+    @staticmethod
+    def update_regular_destination(request_data):
         destination = request_data.get('destination')
         category = request_data.get('category')
         subcategory = request_data.get('subcategory')
@@ -121,7 +124,8 @@ class TransactionViewSet(ModelViewSet):
             DestinationMap.objects.create(destination=destination, destination_eng=alias, category_id=category,
                                           subcategory_id=subcategory)
 
-    def update_similar_transactions(self, request_data):
+    @staticmethod
+    def update_similar_transactions(request_data):
         destination = request_data.get('destination')
         category = request_data.get('category')
         subcategory = request_data.get('subcategory')
@@ -129,6 +133,12 @@ class TransactionViewSet(ModelViewSet):
         is_payment = request_data.get('is_payment')
         is_expense = request_data.get('is_expense')
         alias = request_data.get('alias')
+        print('destination', destination)
+        print('category', category)
+        print('subcategory', subcategory)
+        print('is_saving', is_saving)
+        print('is_payment', is_payment)
+        print('is_expense', is_expense)
         Transaction.objects.filter(destination=destination).update(category=category, alias=alias,
                                                                    subcategory=subcategory, is_saving=is_saving,
                                                                    is_payment=is_payment, is_expense=is_expense)

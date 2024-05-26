@@ -1,4 +1,3 @@
-
 from django.db import models
 
 
@@ -78,8 +77,19 @@ class Transaction(models.Model):
 
 class DestinationMap(models.Model):
     id = models.AutoField(primary_key=True)
-    destination = models.CharField(max_length=255, blank=False, null=True)
-    destination_eng = models.CharField(max_length=255, blank=False, null=True)
+    destination = models.CharField(max_length=255, blank=True, null=True)
+    destination_eng = models.CharField(max_length=255, blank=True, null=True)
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, null=True, blank=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
 
+
+class RewriteRules(models.Model):
+    id = models.AutoField(primary_key=True)
+    destination = models.CharField(max_length=255)
+    keywords = models.TextField(blank=True, null=True)
+
+
+class ImportRules(models.Model):
+    id = models.AutoField(primary_key=True)
+    source = models.ForeignKey(PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    last_import_date = models.DateField(blank=True, null=True)

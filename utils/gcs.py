@@ -9,6 +9,8 @@ from googleapiclient.discovery import build
 class GCSHandler:
     def __init__(self):
         self.API_KEY = '' if settings.DEVELOPMENT_MODE else os.getenv("GCS_API_KEY", None)
+        if not self.API_KEY:
+            raise EnvironmentError("GCS_API_KEY not set")
         self.client = build('storage', 'v1', developerKey=self.API_KEY)
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):

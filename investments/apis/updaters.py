@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from investments.connector.market_api import MarketApi
 from investments.handlers.forex import ForexHandler, DividendHandler
 from investments.handlers.holding import HoldingHandler
+from investments.models import Company
 from investments.serializers.serializers import CompanySerializer
 
 

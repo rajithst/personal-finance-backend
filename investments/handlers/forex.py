@@ -36,15 +36,16 @@ class DividendHandler(object):
             ex_divided_date = data['ex_dividend_date']
             payment_date = data['payment_date']
             amount = round(data['amount'], 2)
-            existing_dividend = Dividend.objects.filter(company=company, ex_dividend_date=ex_divided_date,
-                                                        payment_date=payment_date)
-            if existing_dividend.exists():
-                existing_dividend.update(amount=amount)
-            else:
-                data['company'] = company
-                data['payment_received'] = False
-                data['notes'] = ''
-                serializer = DividendSerializer(data=data)
-                if serializer.is_valid(raise_exception=True):
-                    serializer.save()
+            if ex_divided_date and payment_date and amount:
+                existing_dividend = Dividend.objects.filter(company=company, ex_dividend_date=ex_divided_date,
+                                                            payment_date=payment_date)
+                if existing_dividend.exists():
+                    existing_dividend.update(amount=amount)
+                else:
+                    data['company'] = company
+                    data['payment_received'] = False
+                    data['notes'] = ''
+                    serializer = DividendSerializer(data=data)
+                    if serializer.is_valid(raise_exception=True):
+                        serializer.save()
         return dividend_data

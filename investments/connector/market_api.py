@@ -11,7 +11,12 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 
 class MarketApi:
     def __init__(self):
-        self.api_key = '' if settings.DEVELOPMENT_MODE else os.getenv('MARKET_API_KEY')
+
+        self.API_KEY = '' if settings.DEVELOPMENT_MODE else os.getenv('MARKET_API_KEY')
+        logging.info('MARKET_API_KEY', os.getenv('MARKET_API_KEY'))
+        if not self.API_KEY:
+            raise EnvironmentError("GCS_API_KEY not set")
+
 
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}
@@ -33,7 +38,8 @@ class MarketApi:
             raise Exception('Tickers must not be more than 15 symbols')
         company_data = []
         for ticker in tickers:
-            data = fmpsdk.company_profile(self.api_key, ticker)
+            data = fmpsdk.company_profile(self.API_KEY, ticker)
+            logging.info('Getting company information', data)
             if data:
                 data = data[0]
             else:
@@ -47,7 +53,7 @@ class MarketApi:
             raise Exception('Ticker is required')
         daily_data = []
         for ticker in tickers:
-            snapshot = fmpsdk.quote(self.api_key, ticker)
+            snapshot = fmpsdk.quote(self.API_KEY, ticker)
             if snapshot:
                 snapshot = snapshot[0]
             else:
@@ -62,7 +68,7 @@ class MarketApi:
             raise Exception('Tickers is required')
         forex_data = []
         for ticker in tickers:
-            snapshot = fmpsdk.quote(self.api_key, ticker)
+            snapshot = fmpsdk.quote(self.API_KEY, ticker)
             if snapshot:
                 snapshot = snapshot[0]
             else:
@@ -74,7 +80,7 @@ class MarketApi:
         if not tickers or len(tickers) == 0:
             raise Exception('Tickers is required')
         dividend_data = []
-        dividend_info = fmpsdk.calendar.dividend_calendar(apikey=self.api_key, from_date=from_date, to_date=to_date)
+        dividend_info = fmpsdk.calendar.dividend_calendar(apikey=self.API_KEY, from_date=from_date, to_date=to_date)
         for dv in dividend_info:
             if dv['symbol'] in tickers:
                 obj = {

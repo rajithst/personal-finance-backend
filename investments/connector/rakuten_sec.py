@@ -9,11 +9,11 @@ from utils.gcs import GCSHandler
 class RakutenSecLoader:
 
     def __init__(self):
-        self.foreign_stock_data_path = 'foreign'
-        self.domestic_stock_data_path = 'domestic'
+        self.foreign_stock_data_path = 'investments/foreign'
+        self.domestic_stock_data_path = 'investments/domestic'
         self.bucket_name = 'personal-finance-datastore'
         self.blob_handler = GCSHandler()
-        self.is_dev_env = settings.ENV == 'dev'
+        self.is_dev_env = settings.DEVELOPMENT_MODE
 
     def get_files(self, target_path: str):
         if self.is_dev_env:
