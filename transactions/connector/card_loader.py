@@ -39,7 +39,7 @@ class BaseLoader:
     def __init__(self):
         self.blob_handler = GCSHandler()
         self.bucket_name = 'personal-finance-datastore'
-        self.is_dev_env = settings.DEVELOPMENT_MODE
+        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", True)
 
 
     def set_default_props(self, df):
