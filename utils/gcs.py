@@ -11,7 +11,9 @@ class GCSHandler:
         if not self.API_KEY:
             raise EnvironmentError(f"GCS_API_KEY not set {self.API_KEY}")
         print('GCS_API_KEY', self.API_KEY)
-        self.client = storage.Client(client_options={'api_key': self.API_KEY})
+        print('GCS_API_KEY type', type(self.API_KEY))
+        print('GCS_API_KEY str', str(self.API_KEY))
+        self.client = storage.Client(client_options={'api_key': 'AIzaSyBq0b_qY9T77-ROdbgJ9yn-RAgG7B2hGpc'})
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):
         """Uploads a file to the specified bucket."""
