@@ -38,7 +38,6 @@ class MarketApi:
         company_data = []
         for ticker in tickers:
             data = fmpsdk.company_profile(self.API_KEY, ticker)
-            logging.info('Getting company information', data)
             if data:
                 data = data[0]
             else:

@@ -10,6 +10,7 @@ class GCSHandler:
         self.API_KEY = os.getenv("GCS_API_KEY", None)
         if not self.API_KEY:
             raise EnvironmentError(f"GCS_API_KEY not set {self.API_KEY}")
+        print('GCS_API_KEY', self.API_KEY)
         self.client = storage.Client(client_options={'api_key': self.API_KEY})
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):
@@ -28,8 +29,8 @@ class GCSHandler:
 
     def list_files(self, bucket_name, prefix=None):
         """Lists files in the specified bucket."""
-        bucket = self.client.bucket(bucket_name)
-        blobs = bucket.list_blobs(prefix=prefix)
+
+        blobs = self.client.list_blobs(bucket_name, prefix=prefix)
         file_list = []
         for blob in blobs:
             if blob.name != prefix.rstrip('/') and not blob.name.endswith('/'):
