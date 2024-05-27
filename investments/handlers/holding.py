@@ -55,8 +55,10 @@ class HoldingHandler(object):
                 raise ValueError('symbols must be a list of strings')
             tickers = symbols
             holdings = Holding.objects.filter(company_id__in=tickers)
-        daily_data = self.market_api.get_day_snapshot(tickers=list(tickers))
         new_market_prices = {}
+        if not tickers:
+            return new_market_prices
+        daily_data = self.market_api.get_day_snapshot(tickers=list(tickers))
         for data in daily_data:
             current_holding = holdings.filter(company=data.get('symbol')).first()
             current_price = data.get('current_price')
