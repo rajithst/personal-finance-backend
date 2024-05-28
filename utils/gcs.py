@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from io import BytesIO
 from google.cloud import storage
 
@@ -7,13 +8,11 @@ from google.cloud import storage
         
 class GCSHandler:
     def __init__(self):
-        self.API_KEY = os.getenv("GCS_API_KEY", None)
-        if not self.API_KEY:
-            raise EnvironmentError(f"GCS_API_KEY not set {self.API_KEY}")
-        print('GCS_API_KEY', self.API_KEY)
-        print('GCS_API_KEY type', type(self.API_KEY))
-        print('GCS_API_KEY str', str(self.API_KEY))
-        self.client = storage.Client(client_options={'api_key': 'AIzaSyBq0b_qY9T77-ROdbgJ9yn-RAgG7B2hGpc'})
+        self.gcs_credentials = os.getenv("GCS_API_KEY", None)
+        if not self.gcs_credentials:
+            raise EnvironmentError(f"GCS_API_KEY not set")
+        json_credentials = json.loads(self.gcs_credentials)
+        self.client = storage.Client.from_service_account_json(json_credentials)
 
     def upload_file(self, bucket_name, source_file_name, destination_blob_name):
         """Uploads a file to the specified bucket."""
