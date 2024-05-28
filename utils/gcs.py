@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import time
 from io import BytesIO
 from google.cloud import storage
 
@@ -50,8 +51,13 @@ class GCSHandler:
         print(f"File {file_name} deleted.")
 
     def get_blob(self, bucket_name, file_name):
-        bucket = self.client.bucket(bucket_name)
-        blob = bucket.blob(file_name)
-        data = blob.download_as_string()
-        return BytesIO(data)
+        logging.info(f"Downloading file from bucket {file_name}")
+        try:
+            time.sleep(10)
+            bucket = self.client.bucket(bucket_name)
+            blob = bucket.blob(file_name)
+            data = blob.download_as_string()
+            return BytesIO(data)
+        except Exception as e:
+            logging.error(e)
 
