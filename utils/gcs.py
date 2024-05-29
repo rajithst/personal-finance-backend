@@ -50,7 +50,6 @@ class GCSHandler:
     def get_blob(self, bucket_name, file_name):
         logging.info(f"Downloading file from bucket {file_name}")
         try:
-            time.sleep(10)
             bucket = self.client.bucket(bucket_name)
             blob = bucket.blob(file_name)
             data = blob.download_as_string()
