@@ -1,3 +1,4 @@
+import logging
 import os
 
 import pandas as pd
@@ -13,7 +14,8 @@ class RakutenSecLoader:
         self.domestic_stock_data_path = 'investments/domestic'
         self.bucket_name = 'personal-finance-datastore'
         self.blob_handler = GCSHandler()
-        self.is_dev_env = os.getenv("DEVELOPMENT_MODE")
+        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", "False") == "True"
+        logging.info('is_dev_env Rakuten sec %s' % self.is_dev_env)
 
 
     def get_files(self, target_path: str):

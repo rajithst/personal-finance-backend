@@ -1,3 +1,4 @@
+import logging
 import os
 from collections import defaultdict
 
@@ -40,6 +41,7 @@ class BaseLoader:
         self.blob_handler = GCSHandler()
         self.bucket_name = 'personal-finance-datastore'
         self.is_dev_env = os.getenv("DEVELOPMENT_MODE", "False") == "True"
+        logging.info('is_dev_env BaseLoader %s' % self.is_dev_env)
 
 
 
