@@ -13,8 +13,10 @@ class RakutenSecLoader:
         self.foreign_stock_data_path = 'investments/foreign'
         self.domestic_stock_data_path = 'investments/domestic'
         self.bucket_name = 'personal-finance-datastore'
-        self.blob_handler = GCSHandler()
-        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", "False") == "True"
+        self.is_dev_env = settings.DEVELOPMENT_MODE
+        self.blob_handler = None
+        if not self.is_dev_env:
+            self.blob_handler = GCSHandler()
         logging.info('is_dev_env Rakuten sec %s' % self.is_dev_env)
 
 

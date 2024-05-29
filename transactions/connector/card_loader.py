@@ -38,12 +38,11 @@ class DataSource(Enum):
 
 class BaseLoader:
     def __init__(self):
-        self.blob_handler = GCSHandler()
         self.bucket_name = 'personal-finance-datastore'
-        self.is_dev_env = os.getenv("DEVELOPMENT_MODE", "False") == "True"
-        logging.info('is_dev_env BaseLoader %s' % self.is_dev_env)
-
-
+        self.is_dev_env = settings.DEVELOPMENT_MODE
+        self.blob_handler = None
+        if not self.is_dev_env:
+            self.blob_handler = GCSHandler()
 
     def set_default_props(self, df):
         df[['notes', 'alias']] = len(df.index) * np.nan
@@ -79,6 +78,16 @@ class BaseLoader:
             files = self.blob_handler.list_files(bucket_name=self.bucket_name, prefix=target_path)
         return files
 
+    def get_concat_dataframe(self, results):
+        if results:
+            transactions = pd.concat(results)
+            transactions = transactions.drop_duplicates()
+            return transactions
+        else:
+            columns = ['date', 'destination', 'amount', 'payment_method_id', 'notes', 'alias', 'is_payment',
+                       'is_deleted', 'is_saving', 'is_income', 'source', 'is_expense']
+            return pd.DataFrame(columns=columns)
+
 
 class RakutenCardLoader(BaseLoader):
     def __init__(self):
@@ -107,10 +116,7 @@ class RakutenCardLoader(BaseLoader):
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
             results.append(df)
-
-        transactions = pd.concat(results)
-        transactions = transactions.drop_duplicates()
-        return transactions
+        return self.get_concat_dataframe(results)
 
 
 class EposCardLoader(BaseLoader):
@@ -141,9 +147,7 @@ class EposCardLoader(BaseLoader):
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
             results.append(df)
-        transactions = pd.concat(results)
-        transactions = transactions.drop_duplicates()
-        return transactions
+        return self.get_concat_dataframe(results)
 
 
 class DocomoCardLoader(BaseLoader):
@@ -174,9 +178,7 @@ class DocomoCardLoader(BaseLoader):
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
             results.append(df)
-        transactions = pd.concat(results)
-        transactions = transactions.drop_duplicates()
-        return transactions
+        return self.get_concat_dataframe(results)
 
 
 class CashCardLoader(BaseLoader):
@@ -210,11 +212,7 @@ class CashCardLoader(BaseLoader):
             if last_import_date:
                 df = df[df['date'] > last_import_date]
             results.append(df)
-        transactions = pd.concat(results)
-        transactions = transactions.drop_duplicates()
-        return transactions
-
-
+        return self.get_concat_dataframe(results)
 
 
 class CardLoader:
@@ -259,10 +257,10 @@ class CardLoader:
         cash_importer = CardLoaderFactory.create(CardTypes.CASH.value)
         cash_data = cash_importer.import_data()
 
-        rakuten_new_import_date = rakuten_data['date'].max()
-        epos_new_import_date = epos_data['date'].max()
-        docomo_new_import_date = docomo_data['date'].max()
-        cash_new_import_date = cash_data['date'].max()
+        rakuten_new_import_date = None if rakuten_data.empty else rakuten_data['date'].max()
+        epos_new_import_date = None if epos_data.empty else epos_data['date'].max()
+        docomo_new_import_date = None if docomo_data.empty else docomo_data['date'].max()
+        cash_new_import_date = None if cash_data.empty else cash_data['date'].max()
         import_rules = {
             PaymentMethod.RAKUTEN_CARD.value: rakuten_new_import_date,
             PaymentMethod.EPOS_CARD.value: epos_new_import_date,
@@ -271,35 +269,41 @@ class CardLoader:
         }
 
         all_transactions = pd.concat([rakuten_data, epos_data, docomo_data, cash_data])
-        all_transactions.sort_values(by='date', ascending=True, inplace=True)
-        all_transactions.reset_index(drop=True, inplace=True)
-        all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
-        all_transactions['amount'] = all_transactions['amount'].round(2)
-        all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
-        rewrite_rules = self.get_rewrite_rules()
-        for field in rewrite_rules:
-            all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'alias'] = \
-            rewrite_rules[field]
-            all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'destination'] = rewrite_rules[field]
+        if not all_transactions.empty:
+            all_transactions.sort_values(by='date', ascending=True, inplace=True)
+            all_transactions.reset_index(drop=True, inplace=True)
+            all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
+            all_transactions['amount'] = all_transactions['amount'].round(2)
+            all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
+            rewrite_rules = self.get_rewrite_rules()
+            for field in rewrite_rules:
+                all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'alias'] = \
+                    rewrite_rules[field]
+                all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'destination'] = \
+                rewrite_rules[field]
 
-        all_incomes = all_transactions[all_transactions['is_income'] == 1]
-        all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
-        payee_maps = self.get_payee_map()
-        all_expenses = all_transactions[all_transactions['is_expense'] == 1]
-        all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
-        all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
-            all_expenses['alias']
-        all_expenses = all_expenses.drop(columns=['alias', 'is_income'])
-        all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
-        all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
+            all_incomes = all_transactions[all_transactions['is_income'] == 1]
+            all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
+            payee_maps = self.get_payee_map()
+            all_expenses = all_transactions[all_transactions['is_expense'] == 1]
+            all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
+            all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
+                all_expenses['alias']
+            all_expenses = all_expenses.drop(columns=['alias', 'is_income'])
+            all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
+            all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
 
-        all_expenses['category_id'] = all_expenses['category_id'].replace({np.nan: NA_TRANSACTION_CATEGORY_ID}).astype(
-            int)
-        all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace(
-            {np.nan: NA_TRANSACTION_SUB_CATEGORY_ID}).astype(int)
-        all_expenses['is_saving'] = all_expenses['category_id'] == SAVINGS_CATEGORY_ID
-        all_expenses['is_payment'] = all_expenses['category_id'] == PAYMENT_CATEGORY_ID
-        return all_expenses, all_incomes, import_rules
+            all_expenses['category_id'] = all_expenses['category_id'].replace(
+                {np.nan: NA_TRANSACTION_CATEGORY_ID}).astype(
+                int)
+            all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace(
+                {np.nan: NA_TRANSACTION_SUB_CATEGORY_ID}).astype(int)
+            all_expenses['is_saving'] = all_expenses['category_id'] == SAVINGS_CATEGORY_ID
+            all_expenses['is_payment'] = all_expenses['category_id'] == PAYMENT_CATEGORY_ID
+            logging.info('All expenses processed')
+            return all_expenses.to_dict('records'), all_incomes.to_dict('records'), import_rules
+        else:
+            return None, None, None
 
 
 class CardLoaderFactory(object):
