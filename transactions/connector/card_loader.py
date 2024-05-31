@@ -38,8 +38,8 @@ class DataSource(Enum):
 
 class BaseLoader:
     def __init__(self):
-        self.bucket_name = 'personal-finance-datastore'
-        self.is_dev_env = settings.DEVELOPMENT_MODE
+        self.bucket_name = settings.BUCKET_NAME
+        self.is_dev_env = settings.ENV == 'dev'
         self.blob_handler = None
         if not self.is_dev_env:
             self.blob_handler = GCSHandler()

@@ -9,24 +9,44 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
-import logging
-import sys
 from pathlib import Path
 import os
+import environ
+import io
+from google.cloud import secretmanager
+from urllib.parse import urlparse
 
-from django.core.management.utils import get_random_secret_key
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-DEVELOPMENT_MODE = os.getenv("DEVELOPMENT_MODE", "False") == "True"
-DEBUG = os.getenv("DEBUG", "False") == "True"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+env = environ.Env(DEBUG=(bool, False))
+RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
+ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 
-# DEVELOPMENT_MODE = True
-# DEBUG = True
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", get_random_secret_key())
+project_id = os.environ.get('GCLOUD_PROJECT')
+BUCKET_NAME = "%s.appspot.com" % project_id
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-# Application definition
+if ENV == 'prod':
+    if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
+        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
+        client = secretmanager.SecretManagerServiceClient()
+        settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
+        name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
+        payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
+        env.read_env(io.StringIO(payload))
+    else:
+        raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
+
+    APPENGINE_URL = os.environ.get("APPENGINE_URL", default=None)
+    if APPENGINE_URL:
+        if not urlparse(APPENGINE_URL).scheme:
+            APPENGINE_URL = f"https://{APPENGINE_URL}"
+
+        ALLOWED_HOSTS = [urlparse(APPENGINE_URL).netloc]
+        CSRF_TRUSTED_ORIGINS = [APPENGINE_URL]
+        SECURE_SSL_REDIRECT = True
+    else:
+        ALLOWED_HOSTS = ["*"]
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -76,27 +96,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'personalfinance.wsgi.application'
-if DEVELOPMENT_MODE is True:
-    db_settings = {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'personal_finance',
-        'HOST': 'localhost',
-        'USER': 'root',
-        'PASSWORD': 'Rst@6507@JP'
-    }
-    DATABASES = {"default": db_settings}
-else:
-    DATABASES = {
-        "default": {
-            'ENGINE': 'django.db.backends.postgresql_psycopg2',
-            'NAME': os.getenv('DB_NAME', None),
-            'USER': os.getenv('DB_USER', None),
-            'PASSWORD': os.getenv('DB_PASSWORD', None),
-            'HOST': os.getenv('DB_HOST', None),
-            'PORT': os.getenv('DB_PORT', None),
-            'OPTIONS': {'sslmode': 'require'},
-        }
-    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -134,7 +133,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, '../../media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
