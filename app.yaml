@@ -1,9 +1,7 @@
 runtime: python312
 service: backend
-version: prod
 env: standard
 entrypoint: gunicorn -b :$PORT personalfinance.wsgi:application
-instance_class : B1
 
 handlers:
 - url: /.*
@@ -11,7 +9,7 @@ handlers:
 
 env_variables:
   DJANGO_SETTINGS_MODULE: "personalfinance.settings.prod"
-  APPENGINE_URL: https://personal-finance-425009.an.r.appspot.com
+  APPENGINE_URL: https://backend-dot-personal-finance-425009.uc.r.appspot.com
   PROJECT_ID: 'personal-finance-425009'
 
 

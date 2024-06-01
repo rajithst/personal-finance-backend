@@ -25,13 +25,19 @@ ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 project_id = os.environ.get('GCLOUD_PROJECT')
 BUCKET_NAME = "%s.appspot.com" % project_id
 
-if ENV == 'prod':
+env = environ.Env(DEBUG=(bool, False))
+env_file = os.path.join(BASE_DIR, '.env')
+env.read_env(env_file)
+if env == 'dev' and os.path.isfile(env_file):
+    env.read_env(env_file)
+elif ENV == 'prod':
     if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
         client = secretmanager.SecretManagerServiceClient()
         settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
         name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
         payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
+        print('Payload: ', payload)
         env.read_env(io.StringIO(payload))
     else:
         raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
@@ -148,7 +154,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://coincraft-mycqb.ondigitalocean.app']
+CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
 
 LOGGING = {
     'version': 1,
