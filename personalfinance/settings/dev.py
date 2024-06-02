@@ -6,13 +6,12 @@ DEBUG = True
 SECRET_KEY = get_random_secret_key()
 
 DATABASES = {
-    'default': env.db()
-    # 'default': {
-    #     'ENGINE': 'django.db.backends.mysql',
-    #     'NAME': 'personal_finance',
-    #     'HOST': 'localhost',
-    #     'USER': 'root',
-    #     'PASSWORD': 'Rst@6507@JP'
-    # }
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'personal_finance',
+        'HOST': 'localhost',
+        'USER': 'root',
+        'PASSWORD': 'Rst@6507@JP'
+    }
 }
 ALLOWED_HOSTS = []

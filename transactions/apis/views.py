@@ -1,5 +1,6 @@
-
+from django.db import IntegrityError
 from rest_framework import status
+from django.core.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
@@ -59,10 +60,11 @@ class FinanceView(APIView):
         # df = pd.DataFrame(data)
         group_data = []
         for group_k, vals in data.groupby(['year', 'month']):
-            vals['checked'] = False
+            vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
+            vals['amount'] = vals['amount'].astype(float)
             transactions = vals.to_dict('records')
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
-                               'total': vals.amount.sum(), 'transactions': transactions})
+                               'total': float(vals.amount.sum()), 'transactions': transactions})
         return reversed(group_data)
 
 
@@ -94,11 +96,9 @@ class TransactionViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         data = request.data
-        print(f'data {request.data}')
         is_regular_destination = data.get('is_regular_destination')
         update_similar = data.get('update_similar')
         if update_similar:
-            print('update similar transactions')
             self.update_similar_transactions(data)
 
         if is_regular_destination:
@@ -118,11 +118,18 @@ class TransactionViewSet(ModelViewSet):
         subcategory = request_data.get('subcategory')
         alias = request_data.get('alias')
         existing_payee = DestinationMap.objects.filter(destination=destination)
-        if existing_payee.exists():
-            existing_payee.update(category_id=category, destination_eng=alias, subcategory_id=subcategory)
-        else:
-            DestinationMap.objects.create(destination=destination, destination_eng=alias, category_id=category,
-                                          subcategory_id=subcategory)
+        try:
+            if existing_payee.exists():
+                existing_payee.update(category_id=category, destination_eng=alias, subcategory_id=subcategory)
+            else:
+                DestinationMap.objects.create(destination=destination, destination_eng=alias, category_id=category,
+                                              subcategory_id=subcategory)
+        except ValidationError as e:
+            logging.exception("Validation error:", e)
+        except IntegrityError as e:
+            logging.exception("Integrity error:", e)
+        except Exception as e:
+            logging.exception("An unexpected error occurred:", e)
 
     @staticmethod
     def update_similar_transactions(request_data):
@@ -133,12 +140,13 @@ class TransactionViewSet(ModelViewSet):
         is_payment = request_data.get('is_payment')
         is_expense = request_data.get('is_expense')
         alias = request_data.get('alias')
-        print('destination', destination)
-        print('category', category)
-        print('subcategory', subcategory)
-        print('is_saving', is_saving)
-        print('is_payment', is_payment)
-        print('is_expense', is_expense)
-        Transaction.objects.filter(destination=destination).update(category=category, alias=alias,
-                                                                   subcategory=subcategory, is_saving=is_saving,
-                                                                   is_payment=is_payment, is_expense=is_expense)
+        try:
+            Transaction.objects.filter(destination=destination).update(category_id=category, alias=alias,
+                                                                       subcategory_id=subcategory, is_saving=is_saving,
+                                                                       is_payment=is_payment, is_expense=is_expense)
+        except ValidationError as e:
+            logging.exception("Validation error:", e)
+        except IntegrityError as e:
+            logging.exception("Integrity error:", e)
+        except Exception as e:
+            logging.exception("An unexpected error occurred:", e)
