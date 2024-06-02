@@ -12,7 +12,7 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 class MarketApi:
     def __init__(self):
 
-        self.API_KEY = os.getenv('MARKET_API_KEY', None)
+        self.API_KEY = '0Hs8qYwmaIcR2YITC5RIwPdwnLarAt0f'
         if not self.API_KEY:
             raise EnvironmentError(f"MARKET_API_KEY not set: {self.API_KEY}")
 

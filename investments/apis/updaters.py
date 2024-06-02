@@ -38,7 +38,7 @@ class CompanyDataUpdaterView(APIView):
 
     def get(self, request):
         market_api = MarketApi()
-        tickers = ['AAPL', 'AMZN', 'GOOGL', 'ABBV', 'JPM', 'KHC', 'MSFT', 'PG', 'TSM', 'TSLA', 'GASS', '7203.T',
+        tickers = ['AAPL', 'AMZN', 'GOOGL', 'ABBV', 'JPM', 'KHC', 'MSFT', 'PG', 'TSM', 'TSLA', 'GASS', 'NVDA', '7203.T',
                    '9107.T', '8306.T', '9104.T', '8411.T', '8316.T']
         company_data = market_api.get_company_data(tickers)
         company_serializer = CompanySerializer(data=company_data, many=True)

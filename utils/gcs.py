@@ -56,7 +56,7 @@ class GCSHandler:
             data = blob.download_as_string()
             if move_to_completed:
                 destination_file = 'processed/' + file_name
-                self.move_blob(file_name, destination_file)
+                self.move_blob(bucket_name, file_name, destination_file)
             logging.info(f"Downloaded file from bucket {file_name}")
             return BytesIO(data)
         except Exception as e:

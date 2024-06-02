@@ -12,9 +12,9 @@ router.register(r'dividend', DividendViewSet)
 router.register(r'company', CompanyViewSet)
 urlpatterns = [
     path('list', InvestmentsView.as_view()),
-    path('refresh/stock-data/', StockDailyUpdaterView.as_view()),
-    path('refresh/forex-data/', ForexDailyUpdaterView.as_view()),
-    path('refresh/company-data/', CompanyDataUpdaterView.as_view()),
-    path('refresh/dividend-data/', DividendDailyUpdaterView.as_view()),
+    path('refresh/stock-data', StockDailyUpdaterView.as_view()),
+    path('refresh/forex-data', ForexDailyUpdaterView.as_view()),
+    path('refresh/company-data', CompanyDataUpdaterView.as_view()),
+    path('refresh/dividend-data', DividendDailyUpdaterView.as_view()),
     path('import/trade/', TradeImportView.as_view()),
 ] + router.urls

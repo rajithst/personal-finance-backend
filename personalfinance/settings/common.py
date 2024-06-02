@@ -22,7 +22,7 @@ env = environ.Env(DEBUG=(bool, False))
 RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
 ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 
-project_id = os.environ.get('GCLOUD_PROJECT')
+project_id = os.environ.get('PROJECT_ID')
 BUCKET_NAME = "%s.appspot.com" % project_id
 
 env = environ.Env(DEBUG=(bool, False))
@@ -31,13 +31,13 @@ env.read_env(env_file)
 if env == 'dev' and os.path.isfile(env_file):
     env.read_env(env_file)
 elif ENV == 'prod':
+    gcloud_project = os.environ.get('GOOGLE_CLOUD_PROJECT', None)
     if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
         client = secretmanager.SecretManagerServiceClient()
         settings_name = os.environ.get('SETTINGS_NAME', 'django_settings')
         name = f'projects/{project_id}/secrets/{settings_name}/versions/latest'
         payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
-        print('Payload: ', payload)
         env.read_env(io.StringIO(payload))
     else:
         raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
