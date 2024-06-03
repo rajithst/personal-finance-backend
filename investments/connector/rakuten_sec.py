@@ -61,7 +61,7 @@ class RakutenSecLoader:
             companies = Company.objects.values_list('symbol', flat=True).distinct()
             df = df[df['company'].apply(lambda x: x in companies)]
             df['exchange_rate'] = df['exchange_rate'].astype(float).round(2)
-            df['purchase_price'] = df['purchase_price'].astype(float).round(2)
+            df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(2)
             df['stock_currency'] = '$'
             results.append(df)
         trade_history = pd.concat(results)
