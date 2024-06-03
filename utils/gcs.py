@@ -20,7 +20,7 @@ class GCSHandler:
         bucket = self.client.bucket(bucket_name)
         source_blob = bucket.blob(source_file_name)
         destination_blob = bucket.blob(destination_file_name)
-        source_blob.copy_to(destination_blob)
+        source_blob.copy_blob(destination_blob)
         source_blob.delete()
         logging.info(f'File {source_file_name} moved to {destination_file_name}.')
 
@@ -54,9 +54,9 @@ class GCSHandler:
             bucket = self.client.bucket(bucket_name)
             blob = bucket.blob(file_name)
             data = blob.download_as_string()
-            if move_to_completed:
-                destination_file = 'processed/' + file_name
-                self.move_blob(bucket_name, file_name, destination_file)
+            # if move_to_completed:
+            #     destination_file = 'processed/' + file_name
+            #     self.move_blob(bucket_name, file_name, destination_file)
             logging.info(f"Downloaded file from bucket {file_name}")
             return BytesIO(data)
         except Exception as e:

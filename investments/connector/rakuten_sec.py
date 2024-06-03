@@ -12,7 +12,6 @@ class RakutenSecLoader:
     def __init__(self):
         self.foreign_stock_data_path = 'investments/foreign'
         self.domestic_stock_data_path = 'investments/domestic'
-        self.bucket_name = 'personal-finance-datastore'
         self.bucket_name = settings.BUCKET_NAME
         self.is_dev_env = settings.ENV == 'dev'
         self.blob_handler = None
