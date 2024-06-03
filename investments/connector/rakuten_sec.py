@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from django.conf import settings
 
+from investments.models import Company
 from utils.gcs import GCSHandler
 
 
@@ -17,7 +18,6 @@ class RakutenSecLoader:
         self.blob_handler = None
         if not self.is_dev_env:
             self.blob_handler = GCSHandler()
-        logging.info('is_dev_env Rakuten sec %s' % self.is_dev_env)
 
 
     def get_files(self, target_path: str):
@@ -33,7 +33,7 @@ class RakutenSecLoader:
             data_path = os.path.join(settings.MEDIA_ROOT, target_path)
             df = pd.read_csv(os.path.join(data_path, file), encoding='shift_jis')
         else:
-            blob_data = self.blob_handler.get_blob(bucket_name=target_path, file_name=file)
+            blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
             df = pd.read_csv(blob_data, encoding='shift_jis')
         return df
 
@@ -41,7 +41,11 @@ class RakutenSecLoader:
         files = self.get_files(self.foreign_stock_data_path)
         results = []
         for file in files:
-            df = self.read_csv(file, self.foreign_stock_data_path)
+            if self.is_dev_env:
+                blob_data = os.path.join(settings.MEDIA_ROOT, self.foreign_stock_data_path, file)
+            else:
+                blob_data = self.blob_handler.get_blob(bucket_name=self.bucket_name, file_name=file)
+            df = pd.read_csv(blob_data, encoding='shift_jis')
             df.columns = ['Trade date', 'Delivery date', 'Ticker', 'Stock name', 'Account', 'Trade class',
                           'Buy/sell class', 'Credit class', 'Payment deadline',
                           'Settlement currency', 'Quantity [shares]', 'Unit price [US dollars]',
@@ -54,7 +58,7 @@ class RakutenSecLoader:
             df.columns = ['purchase_date', 'company', 'settlement_currency', 'quantity', 'purchase_price',
                           'exchange_rate']
             df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
-            companies = ['AAPL', 'AMZN', 'GOOGL', 'ABBV', 'JPM', 'KHC', 'MSFT', 'PG', 'TSM', 'TSLA', 'GASS']
+            companies = Company.objects.values_list('symbol', flat=True).distinct()
             df = df[df['company'].apply(lambda x: x in companies)]
             df['exchange_rate'] = df['exchange_rate'].round(decimals=2)
             df['purchase_price'] = df['purchase_price'].round(decimals=2)
@@ -93,6 +97,9 @@ class RakutenSecLoader:
             df.columns = ['purchase_date', 'company', 'quantity', 'purchase_price']
             df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
             df['company'] = df['company'].apply(lambda x: str(x) + '.T')
+            companies = Company.objects.values_list('symbol', flat=True).distinct()
+            df = df[df['company'].apply(lambda x: x in companies)]
+            #TODO if new company found, add to companies
             df['stock_currency'] = '¥'
             df['settlement_currency'] = '円'
             df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(decimals=2)
