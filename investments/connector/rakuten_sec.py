@@ -11,8 +11,8 @@ from utils.gcs import GCSHandler
 class RakutenSecLoader:
 
     def __init__(self):
-        self.foreign_stock_data_path = 'investments/foreign'
-        self.domestic_stock_data_path = 'investments/domestic'
+        self.foreign_stock_data_path = 'investments/foreign/'
+        self.domestic_stock_data_path = 'investments/domestic/'
         self.bucket_name = settings.BUCKET_NAME
         self.is_dev_env = settings.ENV == 'dev'
         self.blob_handler = None
@@ -60,8 +60,8 @@ class RakutenSecLoader:
             df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
             companies = Company.objects.values_list('symbol', flat=True).distinct()
             df = df[df['company'].apply(lambda x: x in companies)]
-            df['exchange_rate'] = df['exchange_rate'].round(decimals=2)
-            df['purchase_price'] = df['purchase_price'].round(decimals=2)
+            df['exchange_rate'] = df['exchange_rate'].astype(float).round(2)
+            df['purchase_price'] = df['purchase_price'].astype(float).round(2)
             df['stock_currency'] = '$'
             results.append(df)
         trade_history = pd.concat(results)
@@ -102,7 +102,7 @@ class RakutenSecLoader:
             #TODO if new company found, add to companies
             df['stock_currency'] = '¥'
             df['settlement_currency'] = '円'
-            df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(decimals=2)
+            df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(2)
             results.append(df)
         trade_history = pd.concat(results)
         return trade_history
