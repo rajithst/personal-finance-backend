@@ -16,5 +16,6 @@ urlpatterns = [
     path('refresh/forex-data', ForexDailyUpdaterView.as_view()),
     path('refresh/company-data', CompanyDataUpdaterView.as_view()),
     path('refresh/dividend-data', DividendDailyUpdaterView.as_view()),
+    path('prepare/dividend-payment', DividendDailyUpdaterView.as_view()),
     path('import/trade/', TradeImportView.as_view()),
 ] + router.urls

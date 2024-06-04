@@ -1,0 +1,12 @@
+cron:
+- description: "daily stock data update"
+  url: /investments/refresh/stock-data
+  schedule: every 6 hours from 00:30 to 23:59
+  timezone: Asia/Tokyo
+  target: backend
+
+- description: "dividend data update"
+  url: /investments/refresh/dividend-data
+  schedule: everyday 7:00
+  timezone: Asia/Tokyo
+  target: backend

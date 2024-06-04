@@ -1,6 +1,7 @@
 import logging
 
 import pandas as pd
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -34,13 +35,42 @@ class InvestmentsView(APIView):
             domestic_dividends = dividend_data[dividend_data['stock_currency'] == '¥']
             dividends_us = self._group_by(us_dividends)
             dividends_domestic = self._group_by(domestic_dividends)
+            us_dividends_calculated = self.calculate_monthly_dividends(dividends_us, stock_purchase_history)
+            domestic_dividends_calculated = self.calculate_monthly_dividends(dividends_domestic, stock_purchase_history)
         else:
             dividends_us = dividends_domestic = []
         return Response({'companies': company_serializer.data, 'holdings': holdings_serializer.data,
                          'dividends': {
-                             'us': dividends_us, 'domestic': dividends_domestic
+                             'us': us_dividends_calculated, 'domestic': domestic_dividends_calculated
                          },
                          'transactions': stock_purchase_history_serializer.data}, status=status.HTTP_200_OK)
+
+    def calculate_monthly_dividends(self, dividends, stock_purchase_history):
+        dividends_calculated = []
+        for dv in dividends:
+            obj = {'year': dv.get('year'), 'month': dv.get('month'), 'month_text': dv.get('month_text'), 'total': 0}
+            dividend_payers = dv.get('transactions')
+            adjusted_transactions = []
+            total_payment = 0
+            currency = ''
+            for payer in dividend_payers:
+                ticker = payer.get('company')
+                ex_dividend_date = payer.get('ex_dividend_date')
+                currency = payer.get('stock_currency')
+                eligible_quantity = \
+                stock_purchase_history.filter(company_id=ticker, purchase_date__lt=ex_dividend_date).aggregate(
+                    total_quantity=Sum('quantity'))['total_quantity']
+                if eligible_quantity:
+                    payer['quantity'] = eligible_quantity
+                    payer['total_amount'] = eligible_quantity * float(payer.get('amount'))
+                    total_payment += payer['total_amount']
+                    adjusted_transactions.append(payer)
+            if adjusted_transactions:
+                obj['total'] = total_payment
+                obj['currency'] = currency
+                obj['transactions'] = adjusted_transactions
+                dividends_calculated.append(obj)
+        return dividends_calculated
 
     def _group_by(self, data: pd.DataFrame):
         if data.empty:

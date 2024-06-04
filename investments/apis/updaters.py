@@ -3,7 +3,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from investments.connector.market_api import MarketApi
-from investments.handlers.forex import ForexHandler, DividendHandler
+from investments.handlers.dividend import DividendHandler
+from investments.handlers.forex import ForexHandler
 from investments.handlers.holding import HoldingHandler
 from investments.models import Company
 from investments.serializers.serializers import CompanySerializer

@@ -98,6 +98,11 @@ class TransactionViewSet(ModelViewSet):
         data = request.data
         is_regular_destination = data.get('is_regular_destination')
         update_similar = data.get('update_similar')
+        is_deleted = data.get('is_deleted')
+
+        if is_deleted:
+            print('delete')
+
         if update_similar:
             self.update_similar_transactions(data)
 
