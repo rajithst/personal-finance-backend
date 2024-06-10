@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,7 +8,7 @@ from investments.connector.market_api import MarketApi
 from investments.handlers.dividend import DividendHandler
 from investments.handlers.forex import ForexHandler
 from investments.handlers.holding import HoldingHandler
-from investments.models import Company
+from investments.models import Company, StockDailyPrice
 from investments.serializers.serializers import CompanySerializer
 
 
@@ -21,8 +23,9 @@ class ForexDailyUpdaterView(APIView):
 class DividendDailyUpdaterView(APIView):
 
     def get(self, request):
-        from_date = request.GET.get('from_date')
-        to_date = request.GET.get('to_date')
+        logging.info('updating dividend data..')
+        from_date = request.GET.get('from_date', None)
+        to_date = request.GET.get('to_date', None)
         handler = DividendHandler()
         dividend_data = handler.update_dividend_data(from_date, to_date)
         return Response({'data': dividend_data}, status=status.HTTP_200_OK)
@@ -30,17 +33,46 @@ class DividendDailyUpdaterView(APIView):
 
 class StockDailyUpdaterView(APIView):
     def get(self, request):
+        logging.info('updating stock data..')
+        tickers = request.GET.get('tickers', None)
+        if not tickers:
+            tickers = Company.objects.values_list('symbol', flat=True)
+        else:
+            tickers = tickers.split(',')
         holding_handler = HoldingHandler()
-        new_market_data = holding_handler.update_daily_price()
+        new_market_data = holding_handler.update_daily_price(symbols=tickers)
         return Response({'data': new_market_data}, status=status.HTTP_200_OK)
+
+
+class HistoricalStockDataUpdaterView(APIView):
+    def get(self, request):
+        logging.info('updating historical market data..')
+        tickers = request.GET.get('tickers', None)
+        from_date = request.GET.get('from_date', None)
+        to_date = request.GET.get('to_date', None)
+        if not tickers:
+            tickers = Company.objects.values_list('symbol', flat=True)
+        else:
+            tickers = tickers.split(',')
+        market_api = MarketApi()
+        historical_data = market_api.get_historical_data(tickers, from_date=from_date, to_date=to_date)
+        instances = [StockDailyPrice(**params) for params in historical_data]
+        try:
+            StockDailyPrice.objects.bulk_create(instances)
+            return Response({'data': historical_data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logging.exception('Failed to update historical data')
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CompanyDataUpdaterView(APIView):
 
     def get(self, request):
+        tickers = request.GET.get('tickers', None)
+        if not tickers:
+            raise ValueError('Company tickers not provided')
+        tickers = tickers.split(',')
         market_api = MarketApi()
-        tickers = ['AAPL', 'AMZN', 'GOOGL', 'ABBV', 'JPM', 'KHC', 'MSFT', 'PG', 'TSM', 'TSLA', 'GASS', 'NVDA', '7203.T',
-                   '9107.T', '8306.T', '9104.T', '8411.T', '8316.T']
         company_data = market_api.get_company_data(tickers)
         company_serializer = CompanySerializer(data=company_data, many=True)
         if company_serializer.is_valid():

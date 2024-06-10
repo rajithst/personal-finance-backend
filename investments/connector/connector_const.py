@@ -20,3 +20,11 @@ DAILY_SNAPSHOT_REMAP_FIELDS = {
     'yearHigh': 'year_high_price',
     'yearLow': 'year_low_price',
 }
+
+HISTORICAL_DATA_FIELDS = ['date', 'high', 'low', 'close', 'change', 'changePercent']
+HISTORICAL_DATA_REMAP_FIELDS = {
+    'changePercent': 'change_percentage',
+    'close': 'current_price',
+    'high': 'day_high_price',
+    'low': 'day_low_price',
+}

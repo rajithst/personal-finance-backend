@@ -1,3 +1,5 @@
+import time
+
 from django.db import IntegrityError
 from rest_framework import status
 from django.core.exceptions import ValidationError
@@ -38,7 +40,6 @@ class FinanceView(APIView):
 
         income_serializer = ResponseIncomeSerializer(incomes, many=True)
         incomes = self._group_by(pd.DataFrame(income_serializer.data))
-
         return Response({"income": incomes, "expense": expenses, "saving": savings, "payment": payments,
                          "destinations": destinations}, status=status.HTTP_200_OK)
 

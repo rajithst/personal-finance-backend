@@ -7,6 +7,6 @@ cron:
 
 - description: "dividend data update"
   url: /investments/refresh/dividend-data
-  schedule: everyday 7:00
+  schedule: everyday 07:00
   timezone: Asia/Tokyo
   target: backend

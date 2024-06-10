@@ -1,0 +1,6 @@
+queue:
+- name: update-stock-value
+  rate: 20/s
+  bucket_size: 50
+  max_concurrent_requests: 5
+  target: backend

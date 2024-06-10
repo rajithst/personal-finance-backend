@@ -47,9 +47,13 @@ elif ENV == 'prod':
         if not urlparse(APPENGINE_URL).scheme:
             APPENGINE_URL = f"https://{APPENGINE_URL}"
 
-        ALLOWED_HOSTS = [urlparse(APPENGINE_URL).netloc]
+        allowed_host_1 = urlparse(APPENGINE_URL).netloc
+        ALLOWED_HOSTS = [allowed_host_1]
+        if '-dot-' in allowed_host_1:
+            allowed_host_2 = allowed_host_1.replace('-dot-', '.')
+            ALLOWED_HOSTS.append(allowed_host_2)
         CSRF_TRUSTED_ORIGINS = [APPENGINE_URL]
-        SECURE_SSL_REDIRECT = True
+        SECURE_SSL_REDIRECT = False
     else:
         ALLOWED_HOSTS = ["*"]
 

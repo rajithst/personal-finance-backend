@@ -1,14 +1,15 @@
 import logging
 
 import pandas as pd
-from django.db.models import Sum
+from django.db.models import Sum, Avg, Max, OuterRef, Subquery, F, Q
+from django.db.models.functions import ExtractMonth, ExtractYear, TruncMonth, TruncYear
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status, viewsets
 
 from investments.handlers.holding import HoldingHandler
-from investments.models import StockPurchaseHistory, Company, Dividend, Holding
+from investments.models import StockPurchaseHistory, Company, Dividend, Holding, StockDailyPrice
 from investments.serializers.response_serializers import ResponseStockPurchaseHistorySerializer, \
     ResponseDividendSerializer, ResponseHoldingSerializer
 from investments.serializers.serializers import CompanySerializer, StockPurchaseHistorySerializer, DividendSerializer, \
@@ -24,21 +25,23 @@ class InvestmentsView(APIView):
         company = Company.objects.all()
 
         stock_purchase_history_serializer = ResponseStockPurchaseHistorySerializer(stock_purchase_history, many=True)
+        stock_purchase_history_data = stock_purchase_history_serializer.data
+
         dividend_serializer = ResponseDividendSerializer(dividend, many=True)
         holdings_serializer = ResponseHoldingSerializer(holding, many=True)
         company_serializer = CompanySerializer(company, many=True)
 
         dividend_data = dividend_serializer.data
+        us_dividends_calculated = domestic_dividends_calculated = []
         if dividend_data:
             dividend_data = pd.DataFrame(dividend_serializer.data)
             us_dividends = dividend_data[dividend_data['stock_currency'] == '$']
             domestic_dividends = dividend_data[dividend_data['stock_currency'] == '¥']
             dividends_us = self._group_by(us_dividends)
             dividends_domestic = self._group_by(domestic_dividends)
-            us_dividends_calculated = self.calculate_monthly_dividends(dividends_us, stock_purchase_history)
-            domestic_dividends_calculated = self.calculate_monthly_dividends(dividends_domestic, stock_purchase_history)
-        else:
-            dividends_us = dividends_domestic = []
+            us_dividends_calculated = self.calculate_monthly_dividends(dividends_us, stock_purchase_history_data)
+            domestic_dividends_calculated = self.calculate_monthly_dividends(dividends_domestic,
+                                                                             stock_purchase_history_data)
         return Response({'companies': company_serializer.data, 'holdings': holdings_serializer.data,
                          'dividends': {
                              'us': us_dividends_calculated, 'domestic': domestic_dividends_calculated
@@ -47,6 +50,7 @@ class InvestmentsView(APIView):
 
     def calculate_monthly_dividends(self, dividends, stock_purchase_history):
         dividends_calculated = []
+        stock_purchase_history_df = pd.DataFrame(stock_purchase_history)
         for dv in dividends:
             obj = {'year': dv.get('year'), 'month': dv.get('month'), 'month_text': dv.get('month_text'), 'total': 0}
             dividend_payers = dv.get('transactions')
@@ -57,9 +61,9 @@ class InvestmentsView(APIView):
                 ticker = payer.get('company')
                 ex_dividend_date = payer.get('ex_dividend_date')
                 currency = payer.get('stock_currency')
-                eligible_quantity = \
-                stock_purchase_history.filter(company_id=ticker, purchase_date__lt=ex_dividend_date).aggregate(
-                    total_quantity=Sum('quantity'))['total_quantity']
+                filtered_df = stock_purchase_history_df[(stock_purchase_history_df['company'] == ticker) & (
+                            stock_purchase_history_df['purchase_date'] < ex_dividend_date)]
+                eligible_quantity = filtered_df['quantity'].sum()
                 if eligible_quantity:
                     payer['quantity'] = eligible_quantity
                     payer['total_amount'] = eligible_quantity * float(payer.get('amount'))

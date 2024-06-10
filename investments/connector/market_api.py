@@ -6,7 +6,7 @@ from datetime import datetime
 from django.conf import settings
 
 from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_DATA_REMAP_FIELDS, DAILY_SNAPSHOT_FIELDS, \
-    DAILY_SNAPSHOT_REMAP_FIELDS
+    DAILY_SNAPSHOT_REMAP_FIELDS, HISTORICAL_DATA_FIELDS, HISTORICAL_DATA_REMAP_FIELDS
 
 
 class MarketApi:
@@ -58,6 +58,8 @@ class MarketApi:
                 continue
             snapshot['timestamp'] = datetime.fromtimestamp(snapshot['timestamp']).date()
             day_data = self.map_to_model(snapshot, DAILY_SNAPSHOT_FIELDS, DAILY_SNAPSHOT_REMAP_FIELDS)
+            day_data['company_id'] = ticker
+            day_data['company'] = ticker
             daily_data.append(day_data)
         return daily_data
 
@@ -89,3 +91,17 @@ class MarketApi:
                 }
                 dividend_data.append(obj)
         return dividend_data
+
+    def get_historical_data(self, tickers, from_date=None, to_date=None):
+        if not tickers or len(tickers) == 0:
+            raise Exception('Tickers is required')
+        historical_data = []
+        for ticker in tickers:
+            data = fmpsdk.historical_price_full(self.API_KEY, ticker, from_date, to_date)
+            if not data:
+                continue
+            for d in data:
+                daily_prices = self.map_to_model(d, HISTORICAL_DATA_FIELDS, HISTORICAL_DATA_REMAP_FIELDS)
+                daily_prices['company_id'] = ticker
+                historical_data.append(daily_prices)
+        return historical_data

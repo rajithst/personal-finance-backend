@@ -1,10 +1,14 @@
-
+import logging
 from datetime import date
 from decimal import Decimal
+from google.appengine.api import taskqueue
 
 from investments.connector.market_api import MarketApi
-from investments.models import Holding
-from investments.serializers.serializers import HoldingSerializer
+from investments.models import Holding, StockDailyPrice
+from investments.serializers.serializers import HoldingSerializer, StockDailyPriceSerializer
+
+STOCK_DATA_UPDATE_URL = '/investments/refresh/stock-data'
+QUEUE_NAME = 'update-stock-value'
 
 
 class HoldingHandler(object):
@@ -20,23 +24,12 @@ class HoldingHandler(object):
         purchase_price = update_params.get('purchase_price', None)
         if not quantity or not purchase_price:
             raise ValueError('No quantity or  purchase_price provided')
-        exist_holding = Holding.objects.filter(company=symbol).first()
-        if exist_holding:
-            current_market_price = exist_holding.current_price
-            if exist_holding.price_updated_at < date.today():
-                market_prices = self.update_daily_price(symbols=[symbol])
-                current_market_price = market_prices[symbol]
-
-            new_quantity = quantity + exist_holding.quantity
-            all_purchase_sum = exist_holding.total_investment + Decimal(quantity * purchase_price)
-            average_price = all_purchase_sum / new_quantity
-            current_value = round(current_market_price * new_quantity, 2)
-            profit_loss = Decimal(current_value) - all_purchase_sum
-            Holding.objects.filter(company=symbol).update(quantity=new_quantity,
-                                                          average_price=average_price,
-                                                          current_value=current_value,
-                                                          profit_loss=profit_loss,
-                                                          total_investment=all_purchase_sum)
+        exist_holding = Holding.objects.filter(company_id=symbol)
+        if exist_holding.exists():
+            exist_holding = exist_holding.first()
+            exist_holding.new_quantity = quantity + exist_holding.quantity
+            exist_holding.total_investment = exist_holding.total_investment + Decimal(quantity * purchase_price)
+            exist_holding.save()
 
         else:
             update_params['average_price'] = purchase_price
@@ -44,7 +37,11 @@ class HoldingHandler(object):
             serializer = HoldingSerializer(data=update_params)
             if serializer.is_valid(raise_exception=True):
                 serializer.save()
-            self.update_daily_price(symbols=[symbol])
+        taskqueue.add(
+            url=STOCK_DATA_UPDATE_URL,
+            queue_name=QUEUE_NAME,
+            method='GET',
+            params={'tickers': symbol})
 
     def update_daily_price(self, symbols=None):
         if not symbols:
@@ -54,19 +51,31 @@ class HoldingHandler(object):
             if not isinstance(symbols, list):
                 raise ValueError('symbols must be a list of strings')
             tickers = symbols
-            holdings = Holding.objects.filter(company_id__in=tickers)
-        new_market_prices = {}
-        if not tickers:
-            return new_market_prices
+
+        logging.info('fetching market data..')
         daily_data = self.market_api.get_day_snapshot(tickers=list(tickers))
         for data in daily_data:
-            current_holding = holdings.filter(company=data.get('symbol')).first()
-            current_price = data.get('current_price')
-            current_value = current_price * current_holding.quantity
-            profit_loss = Decimal(current_value) - current_holding.total_investment
-            Holding.objects.filter(company_id=data['symbol']).update(current_price=current_price,
-                                                                     current_value=current_value,
-                                                                     profit_loss=profit_loss,
-                                                                     price_updated_at=date.today())
-            new_market_prices[data['symbol']] = current_price
-        return new_market_prices
+            current_holding = Holding.objects.filter(company_id=data.get('symbol'))
+            if current_holding.exists():
+                current_holding = current_holding.first()
+                current_price = data.get('current_price')
+                current_value = current_price * current_holding.quantity
+
+                current_holding.current_price = current_price
+                current_holding.current_value = current_value
+                current_holding.profit_loss = Decimal(current_value) - current_holding.total_investment
+                current_holding.price_updated_at = date.today()
+                current_holding.save()
+
+                queryset = StockDailyPrice.objects.filter(company_id=data['symbol'], date=data.get('date')).first()
+                if queryset:
+                    queryset.current_price = data.get('current_price')
+                    queryset.change_percentage = data.get('change_percentage')
+                    queryset.change = data.get('change')
+                    queryset.day_high_price = data.get('day_high_price')
+                    queryset.day_low_price = data.get('day_low_price')
+                    queryset.save()
+                else:
+                    serializer = StockDailyPriceSerializer(data=data)
+                    if serializer.is_valid(raise_exception=True):
+                        serializer.save()

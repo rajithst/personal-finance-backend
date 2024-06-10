@@ -78,8 +78,6 @@ class StockDailyPrice(models.Model):
     current_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     day_high_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     day_low_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
-    year_low_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
-    year_high_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
