@@ -5,8 +5,14 @@ cron:
   timezone: Asia/Tokyo
   target: backend
 
-- description: "dividend data update"
+- description: "daily dividend data update"
   url: /investments/refresh/dividend-data
   schedule: everyday 07:00
+  timezone: Asia/Tokyo
+  target: backend
+
+- description: "daily forex data update"
+  url: /investments/refresh/forex-data
+  schedule: everyday 06:00
   timezone: Asia/Tokyo
   target: backend

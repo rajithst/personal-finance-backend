@@ -1,8 +1,13 @@
-
 from rest_framework import serializers
 
 from investments.models import StockPurchaseHistory, Company, Holding, \
-    StockDailyPrice, Dividend
+    StockDailyPrice, Dividend, Forex
+
+
+class ForexSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Forex
+        fields = '__all__'
 
 
 class StockPurchaseHistorySerializer(serializers.ModelSerializer):
@@ -28,9 +33,8 @@ class HoldingSerializer(serializers.ModelSerializer):
         model = Holding
         fields = '__all__'
 
+
 class DividendSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dividend
         fields = '__all__'
-
-

@@ -43,17 +43,11 @@ class HoldingHandler(object):
             method='GET',
             params={'tickers': symbol})
 
-    def update_daily_price(self, symbols=None):
-        if not symbols:
-            holdings = Holding.objects.all()
-            tickers = holdings.values_list('company', flat=True).distinct()
-        else:
-            if not isinstance(symbols, list):
-                raise ValueError('symbols must be a list of strings')
-            tickers = symbols
-
+    def update_daily_price(self, symbols):
         logging.info('fetching market data..')
-        daily_data = self.market_api.get_day_snapshot(tickers=list(tickers))
+        if not symbols:
+            raise ValueError('No symbols provided')
+        daily_data = self.market_api.get_day_snapshot(tickers=symbols)
         for data in daily_data:
             current_holding = Holding.objects.filter(company_id=data.get('symbol'))
             if current_holding.exists():
@@ -79,3 +73,4 @@ class HoldingHandler(object):
                     serializer = StockDailyPriceSerializer(data=data)
                     if serializer.is_valid(raise_exception=True):
                         serializer.save()
+        return daily_data

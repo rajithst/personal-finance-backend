@@ -2,7 +2,7 @@ import calendar
 
 from rest_framework import serializers
 
-from transactions.models import Income, Transaction
+from transactions.models import Income, Transaction, DestinationMap
 
 
 class DateSerializeHelper(object):
@@ -42,3 +42,13 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
     category_text = serializers.ReadOnlyField(source='category.category')
     subcategory_text = serializers.ReadOnlyField(source='subcategory.name')
     payment_method_text = serializers.ReadOnlyField(source='payment_method.name')
+
+
+class ResponseDestinationMapSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DestinationMap
+        fields = ['id', 'destination', 'destination_eng', 'category', 'category_text', 'subcategory',
+                  'subcategory_text']
+
+    category_text = serializers.ReadOnlyField(source='category.category')
+    subcategory_text = serializers.ReadOnlyField(source='subcategory.name')

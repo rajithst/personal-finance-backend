@@ -73,7 +73,7 @@ class MarketApi:
                 snapshot = snapshot[0]
             else:
                 continue
-            forex_data.append({'name': snapshot['name'], 'symbol': snapshot['symbol'], 'price': snapshot['price']})
+            forex_data.append({'name': snapshot['name'], 'symbol': snapshot['symbol'], 'price': round(snapshot['price'],4)})
         return forex_data
 
     def get_dividend_calendar(self, tickers, from_date, to_date=None):

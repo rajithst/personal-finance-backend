@@ -8,15 +8,20 @@ from investments.connector.market_api import MarketApi
 from investments.handlers.dividend import DividendHandler
 from investments.handlers.forex import ForexHandler
 from investments.handlers.holding import HoldingHandler
-from investments.models import Company, StockDailyPrice
+from investments.models import Company, StockDailyPrice, Forex
 from investments.serializers.serializers import CompanySerializer
 
 
 class ForexDailyUpdaterView(APIView):
 
     def get(self, request):
+        symbols = request.GET.get('symbols', None)
         handler = ForexHandler()
-        forex_data = handler.update_forex_data()
+        if not symbols:
+            forex_symbols = list(Forex.objects.values_list('symbol', flat=True).distinct())
+        else:
+            forex_symbols = symbols.split(',')
+        forex_data = handler.update_forex_data(forex_symbols)
         return Response({'data': forex_data}, status=status.HTTP_200_OK)
 
 
@@ -36,7 +41,7 @@ class StockDailyUpdaterView(APIView):
         logging.info('updating stock data..')
         tickers = request.GET.get('tickers', None)
         if not tickers:
-            tickers = Company.objects.values_list('symbol', flat=True)
+            tickers = list(Company.objects.values_list('symbol', flat=True))
         else:
             tickers = tickers.split(',')
         holding_handler = HoldingHandler()
@@ -51,7 +56,7 @@ class HistoricalStockDataUpdaterView(APIView):
         from_date = request.GET.get('from_date', None)
         to_date = request.GET.get('to_date', None)
         if not tickers:
-            tickers = Company.objects.values_list('symbol', flat=True)
+            tickers = list(Company.objects.values_list('symbol', flat=True))
         else:
             tickers = tickers.split(',')
         market_api = MarketApi()

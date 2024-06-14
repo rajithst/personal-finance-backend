@@ -7,14 +7,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from transactions.models import Income, Transaction, DestinationMap
-from transactions.serializers.response_serializers import ResponseIncomeSerializer, ResponseTransactionSerializer
+from transactions.models import Income, Transaction, DestinationMap, RewriteRules
+from transactions.serializers.response_serializers import ResponseIncomeSerializer, ResponseTransactionSerializer, ResponseDestinationMapSerializer
 import calendar
 import datetime
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import IncomeSerializer, TransactionSerializer
+from transactions.serializers.serializers import IncomeSerializer, TransactionSerializer, DestinationMapSerializer, \
+    RewriteRulesSerializer
 
 
 class FinanceView(APIView):
@@ -67,7 +68,6 @@ class FinanceView(APIView):
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
                                'total': float(vals.amount.sum()), 'transactions': transactions})
         return reversed(group_data)
-
 
 
 class IncomeViewSet(ModelViewSet):
@@ -156,3 +156,13 @@ class TransactionViewSet(ModelViewSet):
             logging.exception("Integrity error:", e)
         except Exception as e:
             logging.exception("An unexpected error occurred:", e)
+
+
+class PayeeView(APIView):
+
+    def get(self, reqest):
+        destination_map = DestinationMap.objects.select_related('category', 'subcategory').all()
+        rewrite_rules = RewriteRules.objects.all()
+        rewrite_rules_serializer = RewriteRulesSerializer(rewrite_rules, many=True)
+        destination_map_serializer = ResponseDestinationMapSerializer(destination_map, many=True)
+        return Response({'payees': destination_map_serializer.data, 'rewrite_rules': rewrite_rules_serializer.data}, status=status.HTTP_200_OK)
