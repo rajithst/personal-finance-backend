@@ -57,6 +57,7 @@ class Transaction(models.Model):
     payment_method = models.ForeignKey(PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
+    destination_original = models.CharField(max_length=255, blank=True, null=True)
     destination = models.CharField(max_length=255, blank=True, null=True)
     alias = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(default=None, blank=True, null=True)
@@ -78,15 +79,11 @@ class Transaction(models.Model):
 class DestinationMap(models.Model):
     id = models.AutoField(primary_key=True)
     destination = models.CharField(max_length=255, blank=True, null=True)
+    destination_original = models.CharField(max_length=255, blank=True, null=True)
     destination_eng = models.CharField(max_length=255, blank=True, null=True)
+    keywords = models.TextField(blank=True, null=True)
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, null=True, blank=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
-
-
-class RewriteRules(models.Model):
-    id = models.AutoField(primary_key=True)
-    destination = models.CharField(max_length=255)
-    keywords = models.TextField(blank=True, null=True)
 
 
 class ImportRules(models.Model):

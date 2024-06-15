@@ -34,7 +34,7 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
         model = Transaction
         fields = ['id', 'category', 'category_text', 'subcategory', 'subcategory_text', 'is_payment', 'is_deleted',
                   'is_merge', 'is_saving', 'is_expense', 'merge_id', 'payment_method', 'payment_method_text', 'amount',
-                  'date', 'destination', 'alias', 'year', 'month', 'month_text', 'notes', 'delete_reason']
+                  'date', 'destination_original', 'destination', 'alias', 'year', 'month', 'month_text', 'notes', 'delete_reason']
 
     year = serializers.SerializerMethodField(method_name='get_year')
     month = serializers.SerializerMethodField(method_name='get_month')
@@ -47,7 +47,7 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
 class ResponseDestinationMapSerializer(serializers.ModelSerializer):
     class Meta:
         model = DestinationMap
-        fields = ['id', 'destination', 'destination_eng', 'category', 'category_text', 'subcategory',
+        fields = ['id', 'destination_original', 'destination', 'destination_eng', 'keywords', 'category', 'category_text', 'subcategory',
                   'subcategory_text']
 
     category_text = serializers.ReadOnlyField(source='category.category')

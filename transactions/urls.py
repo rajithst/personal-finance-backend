@@ -8,10 +8,10 @@ from transactions.apis.importers import TransactionImportView
 router = SimpleRouter()
 router.register('income/', views.IncomeViewSet)
 router.register('transaction', views.TransactionViewSet)
+router.register('payee', views.PayeeViewSet)
 
 urlpatterns = [
     path('list', views.FinanceView.as_view()),
-    path('payee/list', views.PayeeView.as_view()),
     path('import/transactions', TransactionImportView.as_view())
 ]
 urlpatterns += router.urls

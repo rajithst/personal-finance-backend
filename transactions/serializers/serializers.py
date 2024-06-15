@@ -2,7 +2,7 @@ import calendar
 
 from rest_framework import serializers
 from transactions.models import IncomeCategory, TransactionCategory, PaymentMethod, Income, TransactionSubCategory, \
-    Transaction, DestinationMap, RewriteRules
+    Transaction, DestinationMap
 
 
 class IncomeSerializer(serializers.ModelSerializer):
@@ -19,9 +19,4 @@ class TransactionSerializer(serializers.ModelSerializer):
 class DestinationMapSerializer(serializers.ModelSerializer):
     class Meta:
         model = DestinationMap
-        fields = '__all__'
-
-class RewriteRulesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RewriteRules
         fields = '__all__'

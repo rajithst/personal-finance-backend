@@ -7,7 +7,7 @@ from enum import Enum
 import pandas as pd
 from django.conf import settings
 
-from transactions.models import DestinationMap, ImportRules, RewriteRules
+from transactions.models import DestinationMap, ImportRules
 from utils.gcs import GCSHandler
 
 NA_TRANSACTION_CATEGORY_ID = 1000
@@ -84,7 +84,7 @@ class BaseLoader:
             transactions = transactions.drop_duplicates()
             return transactions
         else:
-            columns = ['date', 'destination', 'amount', 'payment_method_id', 'notes', 'alias', 'is_payment',
+            columns = ['date', 'destination_original', 'destination', 'amount', 'payment_method_id', 'notes', 'alias', 'is_payment',
                        'is_deleted', 'is_saving', 'is_income', 'source', 'is_expense']
             return pd.DataFrame(columns=columns)
 
@@ -115,6 +115,7 @@ class RakutenCardLoader(BaseLoader):
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df.assign(destination_original=df.destination)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -146,6 +147,7 @@ class EposCardLoader(BaseLoader):
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df.assign(destination_original=df.destination)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -177,6 +179,7 @@ class DocomoCardLoader(BaseLoader):
             df = self.set_default_props(df)
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
+            df.assign(destination_original=df.destination)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -202,6 +205,7 @@ class CashCardLoader(BaseLoader):
             df_expense = df[['日付', 'お引出金額', 'お取引内容']]
             df_income.columns = ['date', 'amount', 'destination']
             df_expense.columns = ['date', 'amount', 'destination']
+            df.assign(destination_original=df.destination)
             df_expense = self.set_default_props(df_expense)
             df_income = self.set_default_props(df_income)
             df_income['is_expense'] = 0
@@ -221,10 +225,10 @@ class CardLoader:
         payee_maps = list(queryset.values())
         if payee_maps:
             payee_maps = pd.DataFrame(payee_maps)
-            payee_maps = payee_maps[['destination', 'destination_eng', 'category_id', 'subcategory_id']]
-            payee_maps.columns = ['destination', 'alias_map', 'category_id', 'subcategory_id']
+            payee_maps = payee_maps[['destination', 'destination_original', 'destination_eng', 'keywords', 'category_id', 'subcategory_id']]
+            payee_maps.columns = ['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords']
             return payee_maps
-        return pd.DataFrame(columns=['destination', 'alias_map', 'category_id', 'subcategory_id'])
+        return pd.DataFrame(columns=['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords'])
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -233,13 +237,12 @@ class CardLoader:
                 inverted.setdefault(value, key)
         return inverted
 
-    def get_rewrite_rules(self):
-        rules = RewriteRules.objects.all()
+    def get_rewrite_rules(self, rewrite_keywords):
         contains_categories = defaultdict(list)
 
-        for rule in rules:
-            destination = rule.destination
-            keywords = [keyword.strip() for keyword in rule.keywords.split(',') if keyword.strip()]
+        for rule in rewrite_keywords:
+            destination = rule[0]
+            keywords = [keyword.strip() for keyword in rule[1].split(',') if keyword.strip()]
             contains_categories[destination].extend(keywords)
         contains_categories = dict(contains_categories)
         return self._inverse_dict(contains_categories)
@@ -275,16 +278,18 @@ class CardLoader:
             all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
             all_transactions['amount'] = all_transactions['amount'].round(2)
             all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
-            rewrite_rules = self.get_rewrite_rules()
+            payee_maps = self.get_payee_map()
+            rewrite_keywords = payee_maps[['destination_original', 'keywords']].values.tolist()
+            rewrite_rules = self.get_rewrite_rules(rewrite_keywords)
             for field in rewrite_rules:
                 all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'alias'] = \
                     rewrite_rules[field]
                 all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'destination'] = \
-                rewrite_rules[field]
+                    rewrite_rules[field]
 
             all_incomes = all_transactions[all_transactions['is_income'] == 1]
             all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
-            payee_maps = self.get_payee_map()
+            #TODO update import process according to destination_original field
             all_expenses = all_transactions[all_transactions['is_expense'] == 1]
             all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
             all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \

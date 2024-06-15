@@ -7,15 +7,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from transactions.models import Income, Transaction, DestinationMap, RewriteRules
-from transactions.serializers.response_serializers import ResponseIncomeSerializer, ResponseTransactionSerializer, ResponseDestinationMapSerializer
+from transactions.models import Income, Transaction, DestinationMap
+from transactions.serializers.response_serializers import ResponseIncomeSerializer, ResponseTransactionSerializer, \
+    ResponseDestinationMapSerializer
 import calendar
 import datetime
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import IncomeSerializer, TransactionSerializer, DestinationMapSerializer, \
-    RewriteRulesSerializer
+from transactions.serializers.serializers import IncomeSerializer, TransactionSerializer, DestinationMapSerializer
 
 
 class FinanceView(APIView):
@@ -97,6 +97,7 @@ class TransactionViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         data = request.data
+
         is_regular_destination = data.get('is_regular_destination')
         update_similar = data.get('update_similar')
         is_deleted = data.get('is_deleted')
@@ -158,11 +159,31 @@ class TransactionViewSet(ModelViewSet):
             logging.exception("An unexpected error occurred:", e)
 
 
-class PayeeView(APIView):
+class PayeeViewSet(ModelViewSet):
+    queryset = DestinationMap.objects.select_related('category', 'subcategory').all()
+    serializer_class = ResponseDestinationMapSerializer
 
-    def get(self, reqest):
-        destination_map = DestinationMap.objects.select_related('category', 'subcategory').all()
-        rewrite_rules = RewriteRules.objects.all()
-        rewrite_rules_serializer = RewriteRulesSerializer(rewrite_rules, many=True)
-        destination_map_serializer = ResponseDestinationMapSerializer(destination_map, many=True)
-        return Response({'payees': destination_map_serializer.data, 'rewrite_rules': rewrite_rules_serializer.data}, status=status.HTTP_200_OK)
+    def update(self, request, *args, **kwargs):
+        data = request.data
+        pk = data.get('id')
+        keywords = data.get('keywords')
+        category = data.get('category')
+        subcategory = data.get('subcategory')
+        new_destination = data.get('destination')
+        new_alias = data.get('destination_eng')
+        if keywords:
+            keywords = keywords.split(',')
+        exist_settings = DestinationMap.objects.get(pk=pk)
+        is_payee_renamed = data.get('destination') != exist_settings.destination
+        destination = new_destination if is_payee_renamed else exist_settings.destination
+        for kw in keywords:
+            Transaction.objects.filter(destination__contains=kw).update(category_id=category,
+                                                                        subcategory_id=subcategory,
+                                                                        destination=destination,
+                                                                        alias=new_alias)
+
+        serializer = self.serializer_class(exist_settings, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
