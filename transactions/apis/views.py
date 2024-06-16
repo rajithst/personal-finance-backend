@@ -171,16 +171,26 @@ class PayeeViewSet(ModelViewSet):
         subcategory = data.get('subcategory')
         new_destination = data.get('destination')
         new_alias = data.get('destination_eng')
-        if keywords:
-            keywords = keywords.split(',')
         exist_settings = DestinationMap.objects.get(pk=pk)
         is_payee_renamed = data.get('destination') != exist_settings.destination
         destination = new_destination if is_payee_renamed else exist_settings.destination
-        for kw in keywords:
-            Transaction.objects.filter(destination__contains=kw).update(category_id=category,
-                                                                        subcategory_id=subcategory,
-                                                                        destination=destination,
-                                                                        alias=new_alias)
+        update_ids = []
+        if is_payee_renamed:
+            queryset = Transaction.objects.filter(destination=exist_settings.destination)
+            update_ids = list(queryset.values_list('id', flat=True))
+            results = Transaction.objects.filter(id__in=list(update_ids)).update(category_id=category,
+                                                                                                subcategory_id=subcategory,
+                                                                                                destination=destination,
+                                                                                                alias=new_alias)
+
+        if exist_settings.keywords != keywords:
+            queryset = Transaction.objects.exclude(id__in=update_ids)
+            new_keywords = keywords.split(',')
+            for kw in new_keywords:
+                queryset.filter(destination__contains=kw).update(category_id=category,
+                                                                 subcategory_id=subcategory,
+                                                                 destination=destination,
+                                                                 alias=new_alias)
 
         serializer = self.serializer_class(exist_settings, data=request.data)
         if serializer.is_valid():

@@ -44,11 +44,19 @@ class BaseLoader:
         if not self.is_dev_env:
             self.blob_handler = GCSHandler()
 
-    def set_default_props(self, df):
-        df[['notes', 'alias']] = len(df.index) * np.nan
-        df[['is_payment', 'is_deleted', 'is_saving', 'is_income']] = len(df.index) * False
-        df['source'] = DataSource.IMPORT.value
-        df['is_expense'] = 1
+    def set_default_props(self, df, payment_method):
+        params_dict = {
+            'is_payment': False,
+            'is_deleted': False,
+            'is_saving': False,
+            'is_income': False,
+            'notes': np.nan,
+            'alias': np.nan,
+            'is_expense': 1,
+            'source': DataSource.IMPORT.value,
+            'payment_method_id': payment_method
+        }
+        df = df.assign(**params_dict)
         df = df[df.date.isnull() == False]
         df = df[df.amount.isnull() == False]
         return df
@@ -84,9 +92,16 @@ class BaseLoader:
             transactions = transactions.drop_duplicates()
             return transactions
         else:
-            columns = ['date', 'destination_original', 'destination', 'amount', 'payment_method_id', 'notes', 'alias', 'is_payment',
+            columns = ['date', 'destination_original', 'destination', 'amount', 'payment_method_id', 'notes', 'alias',
+                       'is_payment',
                        'is_deleted', 'is_saving', 'is_income', 'source', 'is_expense']
             return pd.DataFrame(columns=columns)
+
+    def clean_destinations(self, df, cleanable_signatures):
+        df['destination'] = df['destination'].apply(
+            lambda x: self.clean_electronic_signatures(x, cleanable_signatures))
+        df.loc[:, 'destination_original'] = df.loc[:, 'destination']
+        return df
 
 
 class RakutenCardLoader(BaseLoader):
@@ -111,11 +126,8 @@ class RakutenCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df['payment_method_id'] = self.payment_method
-            df = self.set_default_props(df)
-            df['destination'] = df['destination'].apply(
-                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df.assign(destination_original=df.destination)
+            df = self.set_default_props(df, self.payment_method)
+            df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -143,11 +155,8 @@ class EposCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df['payment_method_id'] = self.payment_method
-            df = self.set_default_props(df)
-            df['destination'] = df['destination'].apply(
-                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df.assign(destination_original=df.destination)
+            df = self.set_default_props(df, self.payment_method)
+            df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -175,11 +184,8 @@ class DocomoCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df['payment_method_id'] = self.payment_method
-            df = self.set_default_props(df)
-            df['destination'] = df['destination'].apply(
-                lambda x: self.clean_electronic_signatures(x, self.cleanable_signatures))
-            df.assign(destination_original=df.destination)
+            df = self.set_default_props(df, self.payment_method)
+            df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
 
@@ -205,13 +211,12 @@ class CashCardLoader(BaseLoader):
             df_expense = df[['日付', 'お引出金額', 'お取引内容']]
             df_income.columns = ['date', 'amount', 'destination']
             df_expense.columns = ['date', 'amount', 'destination']
-            df.assign(destination_original=df.destination)
-            df_expense = self.set_default_props(df_expense)
-            df_income = self.set_default_props(df_income)
-            df_income['is_expense'] = 0
-            df_income['is_income'] = 1
+            df_expense = self.clean_destinations(df_expense, self.cleanable_signatures)
+            df_income = self.clean_destinations(df_income, self.cleanable_signatures)
+            df_expense = self.set_default_props(df_expense, self.payment_method)
+            df_income = self.set_default_props(df_income, self.payment_method)
+            df_income = df_income.assign(**{'is_expense': 0, 'is_income': 1})
             df = pd.concat([df_income, df_expense])
-            df['payment_method_id'] = self.payment_method
             df['date'] = pd.to_datetime(df['date'], format='%Y.%m.%d').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
@@ -225,10 +230,17 @@ class CardLoader:
         payee_maps = list(queryset.values())
         if payee_maps:
             payee_maps = pd.DataFrame(payee_maps)
-            payee_maps = payee_maps[['destination', 'destination_original', 'destination_eng', 'keywords', 'category_id', 'subcategory_id']]
-            payee_maps.columns = ['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords']
+            payee_maps = payee_maps[
+                ['destination', 'destination_original', 'destination_eng', 'keywords', 'category_id', 'subcategory_id']]
+            payee_maps.columns = ['destination', 'destination_original', 'alias_map', 'keywords', 'category_id',
+                                  'subcategory_id']
+            payee_maps.keywords = payee_maps.keywords.fillna('')
+            payee_maps.destination_original = payee_maps.destination_original.fillna('')
+            payee_maps['keywords'] = payee_maps['keywords'].str.cat(payee_maps['destination_original'],
+                                                                    sep=",").str.strip(',')
             return payee_maps
-        return pd.DataFrame(columns=['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords'])
+        return pd.DataFrame(
+            columns=['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords'])
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -279,17 +291,34 @@ class CardLoader:
             all_transactions['amount'] = all_transactions['amount'].round(2)
             all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
             payee_maps = self.get_payee_map()
-            rewrite_keywords = payee_maps[['destination_original', 'keywords']].values.tolist()
+            rewrite_keywords = payee_maps[['destination', 'keywords']].values.tolist()
             rewrite_rules = self.get_rewrite_rules(rewrite_keywords)
             for field in rewrite_rules:
                 all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'alias'] = \
                     rewrite_rules[field]
                 all_transactions.loc[all_transactions['destination'].str.contains(field, regex=False), 'destination'] = \
                     rewrite_rules[field]
+            existing_payees = payee_maps['destination_original'].unique()
+            new_payees = all_transactions[~all_transactions['destination_original'].isin(existing_payees)]
+            new_payees = new_payees.drop_duplicates(subset='destination_original', keep="first")
+            new_payees = new_payees[['destination', 'destination_original']]
+            new_payees = new_payees.assign(
+                **{'destination_eng': None, 'keywords': None, 'category_id': NA_TRANSACTION_CATEGORY_ID,
+                   'subcategory_id': NA_TRANSACTION_SUB_CATEGORY_ID})
+
+            try:
+                payee_objects = []
+                for new_payee in new_payees.to_dict('records'):
+                    payee_objects.append(DestinationMap(**new_payee))
+                DestinationMap.objects.bulk_create(payee_objects)
+                logging.info('new payees imported')
+            except Exception as e:
+                logging.exception('Error saving new payees')
+            payee_maps = payee_maps[['category_id', 'subcategory_id', 'destination', 'alias_map']]
 
             all_incomes = all_transactions[all_transactions['is_income'] == 1]
             all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
-            #TODO update import process according to destination_original field
+
             all_expenses = all_transactions[all_transactions['is_expense'] == 1]
             all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
             all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
