@@ -81,13 +81,9 @@ class TransactionViewSet(ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data
-        is_regular_destination = data.get('is_regular_destination')
         update_similar = data.get('update_similar')
         if update_similar:
             self.update_similar_transactions(data)
-
-        if is_regular_destination:
-            self.update_regular_destination(data)
 
         serializer = ResponseTransactionSerializer(data=data, partial=True)
         if serializer.is_valid(raise_exception=True):
@@ -108,35 +104,12 @@ class TransactionViewSet(ModelViewSet):
         if update_similar:
             self.update_similar_transactions(data)
 
-        if is_regular_destination:
-            self.update_regular_destination(data)
-
         instance = self.get_object()
         serializer = ResponseTransactionSerializer(instance, data=data, partial=True)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @staticmethod
-    def update_regular_destination(request_data):
-        destination = request_data.get('destination')
-        category = request_data.get('category')
-        subcategory = request_data.get('subcategory')
-        alias = request_data.get('alias')
-        existing_payee = DestinationMap.objects.filter(destination=destination)
-        try:
-            if existing_payee.exists():
-                existing_payee.update(category_id=category, destination_eng=alias, subcategory_id=subcategory)
-            else:
-                DestinationMap.objects.create(destination=destination, destination_eng=alias, category_id=category,
-                                              subcategory_id=subcategory)
-        except ValidationError as e:
-            logging.exception("Validation error:", e)
-        except IntegrityError as e:
-            logging.exception("Integrity error:", e)
-        except Exception as e:
-            logging.exception("An unexpected error occurred:", e)
 
     @staticmethod
     def update_similar_transactions(request_data):
