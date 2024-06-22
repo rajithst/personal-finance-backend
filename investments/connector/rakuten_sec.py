@@ -40,6 +40,7 @@ class RakutenSecLoader:
     def import_foreign_trades(self):
         files = self.get_files(self.foreign_stock_data_path)
         results = []
+        companies = Company.objects.values_list('symbol', flat=True).distinct()
         for file in files:
             if self.is_dev_env:
                 blob_data = os.path.join(settings.MEDIA_ROOT, self.foreign_stock_data_path, file)
@@ -58,7 +59,7 @@ class RakutenSecLoader:
             df.columns = ['purchase_date', 'company', 'settlement_currency', 'quantity', 'purchase_price',
                           'exchange_rate']
             df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
-            companies = Company.objects.values_list('symbol', flat=True).distinct()
+
             df = df[df['company'].apply(lambda x: x in companies)]
             df['exchange_rate'] = df['exchange_rate'].astype(float).round(2)
             df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(2)
@@ -69,6 +70,7 @@ class RakutenSecLoader:
 
     def import_domestic_trades(self):
         files = self.get_files(self.domestic_stock_data_path)
+        companies = Company.objects.values_list('symbol', flat=True).distinct()
         results = []
         for file in files:
             df = self.read_csv(file, self.domestic_stock_data_path)
@@ -97,9 +99,7 @@ class RakutenSecLoader:
             df.columns = ['purchase_date', 'company', 'quantity', 'purchase_price']
             df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
             df['company'] = df['company'].apply(lambda x: str(x) + '.T')
-            companies = Company.objects.values_list('symbol', flat=True).distinct()
             df = df[df['company'].apply(lambda x: x in companies)]
-            #TODO if new company found, add to companies
             df['stock_currency'] = '¥'
             df['settlement_currency'] = '円'
             df['purchase_price'] = df['purchase_price'].apply(lambda x: x.replace(',', '')).astype(float).round(2)

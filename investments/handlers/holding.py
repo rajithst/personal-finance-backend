@@ -2,6 +2,7 @@ import logging
 from datetime import date
 from decimal import Decimal
 from google.appengine.api import taskqueue
+from django.conf import settings
 
 from investments.connector.market_api import MarketApi
 from investments.models import Holding, StockDailyPrice
@@ -15,6 +16,7 @@ class HoldingHandler(object):
 
     def __init__(self):
         self.market_api = MarketApi()
+        self.is_dev_env = settings.ENV == 'dev'
 
     def merge_holding(self, symbol, update_params):
         if not symbol or not update_params:
@@ -27,7 +29,7 @@ class HoldingHandler(object):
         exist_holding = Holding.objects.filter(company_id=symbol)
         if exist_holding.exists():
             exist_holding = exist_holding.first()
-            exist_holding.new_quantity = quantity + exist_holding.quantity
+            exist_holding.quantity = quantity + exist_holding.quantity
             exist_holding.total_investment = exist_holding.total_investment + Decimal(quantity * purchase_price)
             exist_holding.save()
 
@@ -37,11 +39,13 @@ class HoldingHandler(object):
             serializer = HoldingSerializer(data=update_params)
             if serializer.is_valid(raise_exception=True):
                 serializer.save()
-        taskqueue.add(
-            url=STOCK_DATA_UPDATE_URL,
-            queue_name=QUEUE_NAME,
-            method='GET',
-            params={'tickers': symbol})
+
+        if not self.is_dev_env:
+            taskqueue.add(
+                url=STOCK_DATA_UPDATE_URL,
+                queue_name=QUEUE_NAME,
+                method='GET',
+                params={'tickers': symbol})
 
     def update_daily_price(self, symbols):
         logging.info('fetching market data..')
