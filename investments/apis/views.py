@@ -1,8 +1,7 @@
-import logging
+from datetime import date
 
 import pandas as pd
-from django.db.models import Sum, Avg, Max, OuterRef, Subquery, F, Q
-from django.db.models.functions import ExtractMonth, ExtractYear, TruncMonth, TruncYear
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +12,7 @@ from investments.models import StockPurchaseHistory, Company, Dividend, Holding,
 from investments.serializers.response_serializers import ResponseStockPurchaseHistorySerializer, \
     ResponseDividendSerializer, ResponseHoldingSerializer
 from investments.serializers.serializers import CompanySerializer, StockPurchaseHistorySerializer, DividendSerializer, \
-    HoldingSerializer
+    HoldingSerializer, StockDailyPriceSerializer
 
 
 class InvestmentsView(APIView):
@@ -62,7 +61,7 @@ class InvestmentsView(APIView):
                 ex_dividend_date = payer.get('ex_dividend_date')
                 currency = payer.get('stock_currency')
                 filtered_df = stock_purchase_history_df[(stock_purchase_history_df['company'] == ticker) & (
-                            stock_purchase_history_df['purchase_date'] < ex_dividend_date)]
+                        stock_purchase_history_df['purchase_date'] < ex_dividend_date)]
                 eligible_quantity = filtered_df['quantity'].sum()
                 if eligible_quantity:
                     payer['quantity'] = eligible_quantity
@@ -133,6 +132,22 @@ class HoldingViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class CompanyViewSet(viewsets.ViewSet):
+class CompanyViewSet(viewsets.ModelViewSet):
     queryset = Company.objects.all()
     serializer_class = CompanySerializer
+
+
+class StockDailyPriceView(APIView):
+
+    def get_object(self, company_id):
+        try:
+            start_date = date(2024, 1, 1)
+            end_date = date(2024, 12, 31)
+            return StockDailyPrice.objects.filter(company_id=company_id, date__range=(start_date, end_date)).order_by('date')
+        except StockDailyPrice.DoesNotExist:
+            raise Http404
+
+    def get(self, request, symbol):
+        stocks = self.get_object(symbol)
+        serializer = StockDailyPriceSerializer(stocks, many=True)
+        return Response({'prices': serializer.data, 'symbol': symbol})
