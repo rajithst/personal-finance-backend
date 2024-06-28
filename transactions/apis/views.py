@@ -94,12 +94,12 @@ class TransactionViewSet(ModelViewSet):
     def update(self, request, *args, **kwargs):
         data = request.data
 
-        is_regular_destination = data.get('is_regular_destination')
+        pk = self.kwargs['pk']
         update_similar = data.get('update_similar')
-        is_deleted = data.get('is_deleted')
+        merge_ids = data.get('merge_ids')
 
-        if is_deleted:
-            print('delete')
+        if merge_ids:
+            Transaction.objects.filter(id__in=merge_ids).update(is_deleted=True, merge_id=pk)
 
         if update_similar:
             self.update_similar_transactions(data)
