@@ -22,30 +22,41 @@ class HoldingHandler(object):
         if not symbol or not update_params:
             raise ValueError('No symbol or update_params provided')
 
-        quantity = update_params.get('quantity', None)
+        quantity = update_params.get('quantity', 0)
         purchase_price = update_params.get('purchase_price', None)
         if not quantity or not purchase_price:
             raise ValueError('No quantity or  purchase_price provided')
         exist_holding = Holding.objects.filter(company_id=symbol)
-        if exist_holding.exists():
-            exist_holding = exist_holding.first()
-            exist_holding.quantity = quantity + exist_holding.quantity
-            exist_holding.total_investment = exist_holding.total_investment + Decimal(quantity * purchase_price)
-            exist_holding.save()
+        daily_data = self.market_api.get_day_snapshot(tickers=[symbol])
+        current_price = None
+        if daily_data:
+            daily_data = daily_data[0]
+            current_price = daily_data.get('current_price')
+        try:
+            if exist_holding.exists():
+                exist_holding = exist_holding.first()
+                exist_holding.quantity = quantity + exist_holding.quantity
+                exist_holding.total_investment = exist_holding.total_investment + Decimal(quantity * purchase_price)
+                exist_holding.current_price = current_price
+                exist_holding.current_value = current_price * exist_holding.quantity
+                exist_holding.save()
+                return True
 
-        else:
-            update_params['average_price'] = purchase_price
-            update_params['total_investment'] = round(purchase_price * quantity, 2)
-            serializer = HoldingSerializer(data=update_params)
-            if serializer.is_valid(raise_exception=True):
-                serializer.save()
 
-        if not self.is_dev_env:
-            taskqueue.add(
-                url=STOCK_DATA_UPDATE_URL,
-                queue_name=QUEUE_NAME,
-                method='GET',
-                params={'tickers': symbol})
+            else:
+                update_params['average_price'] = purchase_price
+                update_params['total_investment'] = round(purchase_price * quantity, 2)
+                update_params['current_price'] = current_price
+                update_params['current_value'] = current_price * exist_holding.quantity
+                serializer = HoldingSerializer(data=update_params)
+                if serializer.is_valid(raise_exception=True):
+                    serializer.save()
+                    return True
+        except Exception as e:
+            logging.error(e)
+            return False
+
+
 
     def update_daily_price(self, symbols):
         logging.info('fetching market data..')

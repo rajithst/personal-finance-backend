@@ -10,7 +10,7 @@ from rest_framework import status, viewsets
 from investments.handlers.holding import HoldingHandler
 from investments.models import StockPurchaseHistory, Company, Dividend, Holding, StockDailyPrice
 from investments.serializers.response_serializers import ResponseStockPurchaseHistorySerializer, \
-    ResponseDividendSerializer, ResponseHoldingSerializer
+    ResponseDividendSerializer, ResponseHoldingSerializer, ResponseCompanySerializer
 from investments.serializers.serializers import CompanySerializer, StockPurchaseHistorySerializer, DividendSerializer, \
     HoldingSerializer, StockDailyPriceSerializer
 
@@ -21,14 +21,12 @@ class InvestmentsView(APIView):
         stock_purchase_history = StockPurchaseHistory.objects.select_related('company')
         dividend = Dividend.objects.select_related('company').all()
         holding = Holding.objects.select_related('company').all()
-        company = Company.objects.all()
 
         stock_purchase_history_serializer = ResponseStockPurchaseHistorySerializer(stock_purchase_history, many=True)
         stock_purchase_history_data = stock_purchase_history_serializer.data
 
         dividend_serializer = ResponseDividendSerializer(dividend, many=True)
         holdings_serializer = ResponseHoldingSerializer(holding, many=True)
-        company_serializer = CompanySerializer(company, many=True)
 
         dividend_data = dividend_serializer.data
         us_dividends_calculated = domestic_dividends_calculated = []
@@ -41,7 +39,7 @@ class InvestmentsView(APIView):
             us_dividends_calculated = self.calculate_monthly_dividends(dividends_us, stock_purchase_history_data)
             domestic_dividends_calculated = self.calculate_monthly_dividends(dividends_domestic,
                                                                              stock_purchase_history_data)
-        return Response({'companies': company_serializer.data, 'holdings': holdings_serializer.data,
+        return Response({'holdings': holdings_serializer.data,
                          'dividends': {
                              'us': us_dividends_calculated, 'domestic': domestic_dividends_calculated
                          },
@@ -88,53 +86,41 @@ class InvestmentsView(APIView):
 
 
 class StockPurchaseHistoryViewSet(viewsets.ModelViewSet):
-    queryset = StockPurchaseHistory.objects.all()
-    serializer_class = StockPurchaseHistorySerializer
+    queryset = StockPurchaseHistory.objects.select_related('company').all()
+    serializer_class = ResponseStockPurchaseHistorySerializer
 
-    def post(self, request):
-        pk = request.data.get('id')
+    def create(self, request, *args, **kwargs):
         symbol = request.data.get('company')
-        if pk:
-            instance = get_object_or_404(StockPurchaseHistory, pk=pk)
-            serializer = StockPurchaseHistorySerializer(instance, data=request.data)
-        else:
-            serializer = StockPurchaseHistorySerializer(data=request.data)
-
+        serializer = StockPurchaseHistorySerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
-            serializer.save()
-
-        HoldingHandler().merge_holding(symbol, update_params=request.data)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            merge_results = HoldingHandler().merge_holding(symbol, update_params=request.data)
+            if merge_results:
+                serializer.save()
+                holding_serializer = ResponseHoldingSerializer(Holding.objects.select_related('company').filter(company_id=symbol).first())
+                return Response({'holding': holding_serializer.data}, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'Failed to merge holdings'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DividendViewSet(viewsets.ModelViewSet):
-    queryset = Dividend.objects.all()
-    serializer_class = DividendSerializer
+    queryset = Dividend.objects.select_related('company').all()
+    serializer_class = ResponseDividendSerializer
 
-
-class HoldingViewSet(viewsets.ModelViewSet):
-    queryset = Holding.objects.all()
-    serializer_class = HoldingSerializer
-
-    def post(self, request):
-        pk = request.data.get('id')
-        symbol = request.data.get('company')
-        if pk:
-            instance = get_object_or_404(StockPurchaseHistory, pk=pk)
-            serializer = HoldingSerializer(instance, data=request.data)
-        else:
-            serializer = HoldingSerializer(data=request.data)
-
-        if serializer.is_valid(raise_exception=True):
-            serializer.save()
-
-        HoldingHandler().merge_holding(symbol, update_params=request.data)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'dividends': serializer.data}, status=status.HTTP_200_OK)
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
     queryset = Company.objects.all()
-    serializer_class = CompanySerializer
+    serializer_class = ResponseCompanySerializer
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'companies': serializer.data}, status=status.HTTP_200_OK)
 
 
 class StockDailyPriceView(APIView):
@@ -143,7 +129,8 @@ class StockDailyPriceView(APIView):
         try:
             start_date = date(2024, 1, 1)
             end_date = date(2024, 12, 31)
-            return StockDailyPrice.objects.filter(company_id=company_id, date__range=(start_date, end_date)).order_by('date')
+            return StockDailyPrice.objects.filter(company_id=company_id, date__range=(start_date, end_date)).order_by(
+                'date')
         except StockDailyPrice.DoesNotExist:
             raise Http404
 

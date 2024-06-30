@@ -4,12 +4,11 @@ from rest_framework.routers import SimpleRouter
 from investments.apis.updaters import StockDailyUpdaterView, ForexDailyUpdaterView, CompanyDataUpdaterView, \
     DividendDailyUpdaterView, HistoricalStockDataUpdaterView
 from investments.apis.importers import TradeImportView
-from investments.apis.views import HoldingViewSet, StockPurchaseHistoryViewSet, DividendViewSet, CompanyViewSet, \
+from investments.apis.views import StockPurchaseHistoryViewSet, DividendViewSet, CompanyViewSet, \
     InvestmentsView, StockDailyPriceView
 
 router = SimpleRouter()
 router.register(r'stock-purchase-history', StockPurchaseHistoryViewSet)
-router.register(r'holding', HoldingViewSet)
 router.register(r'dividend', DividendViewSet)
 router.register(r'company', CompanyViewSet)
 urlpatterns = [

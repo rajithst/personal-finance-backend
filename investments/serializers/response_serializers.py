@@ -1,6 +1,6 @@
 import calendar
 
-from investments.models import Holding, Dividend, StockPurchaseHistory
+from investments.models import Holding, Dividend, StockPurchaseHistory, Company
 from rest_framework import serializers
 
 
@@ -36,7 +36,6 @@ class ResponseDividendSerializer(serializers.ModelSerializer):
     month = serializers.SerializerMethodField(method_name='get_month')
     month_text = serializers.SerializerMethodField(method_name='get_month_text')
 
-
     def get_year(self, data):
         return data.payment_date.year
 
@@ -58,7 +57,8 @@ class ResponseDividendSerializer(serializers.ModelSerializer):
 class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = StockPurchaseHistory
-        fields = ['id', 'purchase_date', 'year', 'month', 'quantity', 'purchase_price', 'stock_currency', 'exchange_rate', 'company',
+        fields = ['id', 'purchase_date', 'year', 'month', 'quantity', 'purchase_price', 'stock_currency',
+                  'exchange_rate', 'company',
                   'company_name', 'industry', 'sector', 'image']
 
     company_name = serializers.ReadOnlyField(source='company.company_name')
@@ -82,3 +82,20 @@ class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
 
     def get_month(self, data):
         return data.purchase_date.month
+
+
+class ResponseCompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Company
+        fields = ['symbol', 'company_name', 'sector', 'industry', 'exchange', 'currency', 'stock_currency', 'country',
+                  'website',
+                  'image', 'description']
+
+    stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
+    def get_stock_currency(self, data):
+        if data.currency == 'USD':
+            return '$'
+        elif data.currency == 'JPY':
+            return '¥'
+        else:
+            return ''
