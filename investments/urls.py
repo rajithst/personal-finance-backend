@@ -5,7 +5,7 @@ from investments.apis.updaters import StockDailyUpdaterView, ForexDailyUpdaterVi
     DividendDailyUpdaterView, HistoricalStockDataUpdaterView
 from investments.apis.importers import TradeImportView
 from investments.apis.views import StockPurchaseHistoryViewSet, DividendViewSet, CompanyViewSet, \
-    InvestmentsView, StockDailyPriceView
+    InvestmentsView, StockDetailView
 
 router = SimpleRouter()
 router.register(r'stock-purchase-history', StockPurchaseHistoryViewSet)
@@ -14,7 +14,7 @@ router.register(r'company', CompanyViewSet)
 urlpatterns = [
     path('list', InvestmentsView.as_view()),
     path('refresh/stock-data', StockDailyUpdaterView.as_view()),
-    path('stock-daily-price/<str:symbol>/', StockDailyPriceView.as_view()),
+    path('stock/<str:symbol>/', StockDetailView.as_view()),
     path('refresh/histoical-stock-data', HistoricalStockDataUpdaterView.as_view()),
     path('refresh/forex-data', ForexDailyUpdaterView.as_view()),
     path('refresh/company-data', CompanyDataUpdaterView.as_view()),

@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 import pandas as pd
@@ -123,18 +124,28 @@ class CompanyViewSet(viewsets.ModelViewSet):
         return Response({'companies': serializer.data}, status=status.HTTP_200_OK)
 
 
-class StockDailyPriceView(APIView):
+class StockDetailView(APIView):
 
-    def get_object(self, company_id):
+    def get_price_history(self, company_id):
         try:
             start_date = date(2024, 1, 1)
             end_date = date(2024, 12, 31)
-            return StockDailyPrice.objects.filter(company_id=company_id, date__range=(start_date, end_date)).order_by(
+            queryset = StockDailyPrice.objects.filter(company_id=company_id, date__range=(start_date, end_date)).order_by(
                 'date')
-        except StockDailyPrice.DoesNotExist:
-            raise Http404
+            serializer = StockDailyPriceSerializer(queryset, many=True)
+            return serializer.data
+        except Exception as e:
+            logging.error(e)
+
+    def get_purchase_history(self, company_id):
+        try:
+            queryset = StockPurchaseHistory.objects.filter(company_id=company_id).order_by('-purchase_date')
+            serializer = ResponseStockPurchaseHistorySerializer(queryset, many=True)
+            return serializer.data
+        except Exception as e:
+            logging.error(e)
 
     def get(self, request, symbol):
-        stocks = self.get_object(symbol)
-        serializer = StockDailyPriceSerializer(stocks, many=True)
-        return Response({'prices': serializer.data, 'symbol': symbol})
+        stock_price_history = self.get_price_history(symbol)
+        stock_purchase_history = self.get_purchase_history(symbol)
+        return Response({'prices': stock_price_history, 'purchase_history': stock_purchase_history, 'symbol': symbol})
