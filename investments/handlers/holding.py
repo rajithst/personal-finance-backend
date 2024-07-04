@@ -47,7 +47,7 @@ class HoldingHandler(object):
                 update_params['average_price'] = purchase_price
                 update_params['total_investment'] = round(purchase_price * quantity, 2)
                 update_params['current_price'] = current_price
-                update_params['current_value'] = current_price * exist_holding.quantity
+                update_params['current_value'] = current_price * quantity
                 serializer = HoldingSerializer(data=update_params)
                 if serializer.is_valid(raise_exception=True):
                     serializer.save()
