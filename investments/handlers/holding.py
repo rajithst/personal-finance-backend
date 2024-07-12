@@ -1,15 +1,11 @@
 import logging
 from datetime import date
 from decimal import Decimal
-from google.appengine.api import taskqueue
 from django.conf import settings
 
 from investments.connector.market_api import MarketApi
 from investments.models import Holding, StockDailyPrice
 from investments.serializers.serializers import HoldingSerializer, StockDailyPriceSerializer
-
-STOCK_DATA_UPDATE_URL = '/investments/refresh/stock-data'
-QUEUE_NAME = 'update-stock-value'
 
 
 class HoldingHandler(object):
@@ -39,15 +35,18 @@ class HoldingHandler(object):
                 exist_holding.total_investment = exist_holding.total_investment + Decimal(quantity * purchase_price)
                 exist_holding.current_price = current_price
                 exist_holding.current_value = current_price * exist_holding.quantity
+                exist_holding.average_price = round((exist_holding.total_investment / exist_holding.quantity),2)
+                exist_holding.profit_loss = Decimal(exist_holding.current_value) - exist_holding.total_investment
+                exist_holding.price_updated_at = date.today()
                 exist_holding.save()
                 return True
-
-
             else:
                 update_params['average_price'] = purchase_price
                 update_params['total_investment'] = round(purchase_price * quantity, 2)
                 update_params['current_price'] = current_price
                 update_params['current_value'] = current_price * quantity
+                update_params['profit_loss'] = update_params['current_value'] - update_params['total_investment']
+                exist_holding['price_updated_at'] = date.today()
                 serializer = HoldingSerializer(data=update_params)
                 if serializer.is_valid(raise_exception=True):
                     serializer.save()
@@ -55,8 +54,6 @@ class HoldingHandler(object):
         except Exception as e:
             logging.error(e)
             return False
-
-
 
     def update_daily_price(self, symbols):
         logging.info('fetching market data..')
@@ -69,23 +66,26 @@ class HoldingHandler(object):
                 current_holding = current_holding.first()
                 current_price = data.get('current_price')
                 current_value = current_price * current_holding.quantity
-
+                current_holding.average_price = round((current_holding.total_investment / current_holding.quantity),2)
                 current_holding.current_price = current_price
                 current_holding.current_value = current_value
                 current_holding.profit_loss = Decimal(current_value) - current_holding.total_investment
                 current_holding.price_updated_at = date.today()
                 current_holding.save()
 
-                queryset = StockDailyPrice.objects.filter(company_id=data['symbol'], date=data.get('date')).first()
-                if queryset:
-                    queryset.current_price = data.get('current_price')
-                    queryset.change_percentage = data.get('change_percentage')
-                    queryset.change = data.get('change')
-                    queryset.day_high_price = data.get('day_high_price')
-                    queryset.day_low_price = data.get('day_low_price')
-                    queryset.save()
-                else:
-                    serializer = StockDailyPriceSerializer(data=data)
-                    if serializer.is_valid(raise_exception=True):
-                        serializer.save()
+                self.save_stock_price_history(data)
         return daily_data
+
+    def save_stock_price_history(self, data):
+        queryset = StockDailyPrice.objects.filter(company_id=data['symbol'], date=data.get('date')).first()
+        if queryset:
+            queryset.current_price = data.get('current_price')
+            queryset.change_percentage = data.get('change_percentage')
+            queryset.change = data.get('change')
+            queryset.day_high_price = data.get('day_high_price')
+            queryset.day_low_price = data.get('day_low_price')
+            queryset.save()
+        else:
+            serializer = StockDailyPriceSerializer(data=data)
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
