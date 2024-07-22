@@ -9,7 +9,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from transactions.models import Income, Transaction, DestinationMap
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
-    ResponseDestinationMapSerializer
+    ResponseDestinationMapSerializer, ResponseIncomeSerializer
 import pandas as pd
 import logging
 
@@ -116,8 +116,26 @@ class DashboardViewSet(APIView):
 
 
 class IncomeViewSet(ModelViewSet):
-    queryset = Income.objects.all()
-    serializer_class = IncomeSerializer
+    queryset = Income.objects.select_related('category')
+    serializer_class = ResponseIncomeSerializer
+    def _group_by(self, data: pd.DataFrame):
+        if data.empty:
+            return []
+        # df = pd.DataFrame(data)
+        group_data = []
+        for group_k, vals in data.groupby(['year', 'month']):
+            vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
+            vals['amount'] = vals['amount'].astype(float)
+            transactions = vals.to_dict('records')
+            group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
+                               'total': float(vals.amount.sum()), 'transactions': transactions})
+        return reversed(group_data)
+    def list(self, request, *args, **kwargs):
+        year = request.query_params.get('year', 2024)
+        queryset = self.get_queryset().filter(date__year=year)
+        serializer = self.get_serializer(queryset, many=True)
+        df = pd.DataFrame(serializer.data)
+        return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
 
 
 class TransactionViewSet(ModelViewSet):
@@ -216,7 +234,7 @@ class TransactionViewSet(ModelViewSet):
 
 
 class PayeeViewSet(ModelViewSet):
-    queryset = DestinationMap.objects.select_related('category', 'subcategory').all()
+    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by('category_id', 'subcategory_id')
     serializer_class = ResponseDestinationMapSerializer
 
     def update(self, request, *args, **kwargs):
