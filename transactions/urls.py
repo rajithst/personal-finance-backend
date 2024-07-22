@@ -6,12 +6,12 @@ from transactions.apis import views
 from transactions.apis.importers import TransactionImportView
 
 router = SimpleRouter()
-router.register('income/', views.IncomeViewSet)
+router.register('income', views.IncomeViewSet)
 router.register('transaction', views.TransactionViewSet)
 router.register('payee', views.PayeeViewSet)
 
 urlpatterns = [
-    path('list', views.FinanceView.as_view()),
+    path('dashboard', views.DashboardViewSet.as_view()),
     path('import/transactions', TransactionImportView.as_view())
 ]
 urlpatterns += router.urls

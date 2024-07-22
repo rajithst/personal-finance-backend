@@ -1,6 +1,6 @@
-import time
-
 from django.db import IntegrityError
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 from rest_framework import status
 from django.core.exceptions import ValidationError
 from rest_framework.response import Response
@@ -8,53 +8,139 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from transactions.models import Income, Transaction, DestinationMap
-from transactions.serializers.response_serializers import ResponseIncomeSerializer, ResponseTransactionSerializer, \
-    ResponseDestinationMapSerializer
-import calendar
-import datetime
+from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
+    ResponseDestinationMapSerializer, ResponseIncomeSerializer
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import IncomeSerializer, TransactionSerializer, DestinationMapSerializer
+from transactions.serializers.serializers import IncomeSerializer
 
 
-class FinanceView(APIView):
+class DashboardViewSet(APIView):
+
+    def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
+        queryset = (
+            Transaction.objects
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .annotate(month=TruncMonth('date'))
+            .values('month', 'destination_original', 'destination')
+            .annotate(total_amount=Sum('amount'))
+            .order_by('month')
+        )
+        results = {}
+        for item in queryset:
+            date_str = item['month'].strftime('%Y-%m-%d')
+            if date_str not in results:
+                results[date_str] = []
+            results[date_str].append(
+                {'destination_original': item['destination_original'], 'destination': item['destination'],
+                 'amount': item['total_amount']})
+        return results
+
+    def get_monthly_transaction_summary(self, transaction_type, year):
+        queryset = (
+            Transaction.objects
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .annotate(month=TruncMonth('date'))
+            .values('month')
+            .annotate(total_amount=Sum('amount'))
+            .order_by('month')
+        )
+        results = []
+        for item in queryset:
+            date = item['month']
+            results.append({'year': date.year, 'month': date.month, 'amount': item['total_amount']})
+        return results
+
+    def get_monthly_transaction_category_summary(self, transaction_type, year):
+        queryset = (
+            Transaction.objects
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .annotate(month=TruncMonth('date'))
+            .values('month', 'category_id')
+            .annotate(total_amount=Sum('amount'))
+            .order_by('month', 'category_id')
+        )
+        results = {}
+        for item in queryset:
+            date_str = item['month'].strftime('%Y-%m-%d')
+            if date_str not in results:
+                results[date_str] = []
+            results[date_str].append({'category_id': item['category_id'], 'amount': item['total_amount']})
+        return results
+
+    def get_monthly_income_summary(self, year):
+        queryset = (
+            Income.objects
+            .filter(**{'date__year': year}).annotate(month=TruncMonth('date'))
+            .values('month')
+            .annotate(total_amount=Sum('amount'))
+            .order_by('month')
+        )
+        results = []
+        for item in queryset:
+            date = item['month']
+            results.append({'year': date.year, 'month': date.month, 'amount': item['total_amount']})
+        return results
+
+    def get_payment_method_wise_sum(self, transaction_type, year):
+        queryset = (
+            Transaction.objects
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .annotate(month=TruncMonth('date'))
+            .values('month', 'payment_method_id')
+            .annotate(total_amount=Sum('amount'))
+            .order_by('month')
+        )
+        results = {}
+        for item in queryset:
+            date_str = item['month'].strftime('%Y-%m-%d')
+            if date_str not in results:
+                results[date_str] = []
+            results[date_str].append({'category_id': item['payment_method_id'], 'amount': item['total_amount']})
+        return results
+
     def get(self, request):
-        start_date = self.request.query_params.get('start_date', None)
-        end_date = self.request.query_params.get('end_date', None)
-        current_date = datetime.date.today()
-        if not start_date:
-            last_day_of_month = calendar.monthrange(current_date.year, current_date.month)[1]
-            start_date = current_date.replace(day=last_day_of_month)
-            start_date = start_date.strftime('%Y-%m-%d')
-        if not end_date:
-            five_years_ago = current_date - datetime.timedelta(days=365 * 5)
-            end_date = five_years_ago.replace(day=1)
-            end_date = end_date.strftime("%Y-%m-%d")
-        incomes = Income.objects.select_related('category').filter(date__range=[end_date, start_date]).order_by('date')
-        destinations = (DestinationMap.objects.values_list('destination_eng', flat=True)
-                        .exclude(destination_eng=None).distinct().order_by('destination_eng'))
-        transactions = Transaction.objects.select_related('category', 'subcategory', 'payment_method').filter(
-            date__range=[end_date, start_date], is_deleted=False).order_by('date')
-        transactions_serializer = ResponseTransactionSerializer(transactions, many=True)
-        expenses, payments, savings = self.split_transactions(transactions_serializer.data)
+        year = request.query_params.get('year', 2024)
+        incomes = self.get_monthly_income_summary(year)
+        expenses = self.get_monthly_transaction_summary('is_expense', year)
+        payments = self.get_monthly_transaction_summary('is_payment', year)
+        savings = self.get_monthly_transaction_summary('is_saving', year)
+        category_wise_expenses = self.get_monthly_transaction_category_summary('is_expense', year)
+        payment_method_wise_expenses = self.get_payment_method_wise_sum('is_expense', year)
+        payment_by_destination = self.get_monthly_payment_destination_wise_sum('is_payment', year)
+        return Response({"income": incomes, "payment_by_destination": payment_by_destination,
+                         "payment_method_wise_expenses": payment_method_wise_expenses,
+                         "category_wise_expenses": category_wise_expenses, "expense": expenses,
+                         "payment": payments, "saving": savings})
 
-        income_serializer = ResponseIncomeSerializer(incomes, many=True)
-        incomes = self._group_by(pd.DataFrame(income_serializer.data))
-        return Response({"income": incomes, "expense": expenses, "saving": savings, "payment": payments,
-                         "destinations": destinations}, status=status.HTTP_200_OK)
 
-    def split_transactions(self, transactions):
-        if not len(transactions):
-            return [], [], []
-        df = pd.DataFrame(transactions)
-        expenses = df[df['is_expense'] == 1]
-        payments = df[df['is_payment'] == 1]
-        savings = df[df['is_saving'] == 1]
-        expense_group = self._group_by(expenses)
-        payment_group = self._group_by(payments)
-        saving_group = self._group_by(savings)
-        return expense_group, payment_group, saving_group
+class IncomeViewSet(ModelViewSet):
+    queryset = Income.objects.select_related('category')
+    serializer_class = ResponseIncomeSerializer
+    def _group_by(self, data: pd.DataFrame):
+        if data.empty:
+            return []
+        # df = pd.DataFrame(data)
+        group_data = []
+        for group_k, vals in data.groupby(['year', 'month']):
+            vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
+            vals['amount'] = vals['amount'].astype(float)
+            transactions = vals.to_dict('records')
+            group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
+                               'total': float(vals.amount.sum()), 'transactions': transactions})
+        return reversed(group_data)
+    def list(self, request, *args, **kwargs):
+        year = request.query_params.get('year', 2024)
+        queryset = self.get_queryset().filter(date__year=year)
+        serializer = self.get_serializer(queryset, many=True)
+        df = pd.DataFrame(serializer.data)
+        return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
+
+
+class TransactionViewSet(ModelViewSet):
+    queryset = Transaction.objects.select_related('category', 'subcategory', 'payment_method').all()
+    serializer_class = ResponseTransactionSerializer
 
     def _group_by(self, data: pd.DataFrame):
         if data.empty:
@@ -69,15 +155,30 @@ class FinanceView(APIView):
                                'total': float(vals.amount.sum()), 'transactions': transactions})
         return reversed(group_data)
 
+    def list(self, request, *args, **kwargs):
+        query_params = request.query_params
+        year = query_params.get('year', None)
+        target = query_params.get('target', None)
+        category_ids = query_params.get('cat', None)
+        subcategory_ids = query_params.get('subcat', None)
+        filter_params = {'is_deleted': False, 'date__year': year}
+        if target == 'payment':
+            filter_params['is_payment'] = True
+        elif target == 'saving':
+            filter_params['is_saving'] = True
+        elif target == 'expense':
+            filter_params['is_expense'] = True
+        queryset = self.get_queryset().filter(**filter_params).order_by('date')
+        if category_ids:
+            category_ids = category_ids.split(',')
+            queryset = queryset.filter(category_id__in=category_ids)
+        if subcategory_ids:
+            subcategory_ids = subcategory_ids.split(',')
+            queryset = queryset.filter(subcategory_id__in=subcategory_ids)
 
-class IncomeViewSet(ModelViewSet):
-    queryset = Income.objects.all()
-    serializer_class = IncomeSerializer
-
-
-class TransactionViewSet(ModelViewSet):
-    queryset = Transaction.objects.all()
-    serializer_class = TransactionSerializer
+        serializer = self.get_serializer(queryset, many=True)
+        df = pd.DataFrame(serializer.data)
+        return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         data = request.data
@@ -133,7 +234,7 @@ class TransactionViewSet(ModelViewSet):
 
 
 class PayeeViewSet(ModelViewSet):
-    queryset = DestinationMap.objects.select_related('category', 'subcategory').all()
+    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by('category_id', 'subcategory_id')
     serializer_class = ResponseDestinationMapSerializer
 
     def update(self, request, *args, **kwargs):
@@ -169,4 +270,3 @@ class PayeeViewSet(ModelViewSet):
                 logging.exception("An unexpected error occurred:", e)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
