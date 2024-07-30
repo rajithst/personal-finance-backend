@@ -7,11 +7,12 @@ from transactions.apis.importers import TransactionImportView
 
 router = SimpleRouter()
 router.register('income', views.IncomeViewSet)
-router.register('transaction', views.TransactionViewSet)
+router.register('transaction', views.TransactionViewSet, basename='transaction')
 router.register('payee', views.PayeeViewSet)
 
 urlpatterns = [
-    path('dashboard', views.DashboardViewSet.as_view()),
+    path('dashboard', views.DashboardView.as_view()),
+    path('bulk/transaction', views.TransactionBulkView.as_view()),
     path('import/transactions', TransactionImportView.as_view())
 ]
 urlpatterns += router.urls

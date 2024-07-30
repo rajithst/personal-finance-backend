@@ -13,10 +13,8 @@ from transactions.serializers.response_serializers import ResponseTransactionSer
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import IncomeSerializer
 
-
-class DashboardViewSet(APIView):
+class DashboardView(APIView):
 
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
         queryset = (
@@ -118,6 +116,7 @@ class DashboardViewSet(APIView):
 class IncomeViewSet(ModelViewSet):
     queryset = Income.objects.select_related('category')
     serializer_class = ResponseIncomeSerializer
+
     def _group_by(self, data: pd.DataFrame):
         if data.empty:
             return []
@@ -130,6 +129,7 @@ class IncomeViewSet(ModelViewSet):
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
                                'total': float(vals.amount.sum()), 'transactions': transactions})
         return reversed(group_data)
+
     def list(self, request, *args, **kwargs):
         year = request.query_params.get('year', 2024)
         queryset = self.get_queryset().filter(date__year=year)
@@ -234,7 +234,8 @@ class TransactionViewSet(ModelViewSet):
 
 
 class PayeeViewSet(ModelViewSet):
-    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by('category_id', 'subcategory_id')
+    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by('category_id',
+                                                                                               'subcategory_id')
     serializer_class = ResponseDestinationMapSerializer
 
     def update(self, request, *args, **kwargs):
@@ -270,3 +271,20 @@ class PayeeViewSet(ModelViewSet):
                 logging.exception("An unexpected error occurred:", e)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TransactionBulkView(APIView):
+    def put(self, request):
+        data = request.data
+        task = data.get('task')
+        if task == 'delete':
+            delete_ids = data.get('delete_ids')
+            if delete_ids:
+                try:
+                    Transaction.objects.filter(id__in=delete_ids).update(is_deleted=True)
+                    return Response({'status': status.HTTP_200_OK, 'data': delete_ids})
+                except ValidationError as e:
+                    logging.exception("Validation error:", e)
+                    return Response({'status': status.HTTP_400_BAD_REQUEST, 'data': delete_ids})
+        elif task == 'split':
+            pass

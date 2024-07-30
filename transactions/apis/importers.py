@@ -6,7 +6,6 @@ from rest_framework.views import APIView
 
 from transactions.connector.card_loader import CardLoader
 from transactions.models import ImportRules, Transaction, Income
-from transactions.serializers.serializers import TransactionSerializer, IncomeSerializer
 
 
 class TransactionImportView(APIView):
@@ -53,9 +52,9 @@ class TransactionImportView(APIView):
                             existing_rule.last_import_date = last_import_date.strftime('%Y-%m-%d')
                             existing_rule.save()
                         else:
-                            ImportRules.objects.create(source_id=src, last_import_date=last_import_date.strftime('%Y-%m-%d'))
+                            ImportRules.objects.create(source_id=src,
+                                                       last_import_date=last_import_date.strftime('%Y-%m-%d'))
             except Exception as e:
                 logging.exception('Error importing imported rules')
 
         return Response("Successfully saved", status=status.HTTP_201_CREATED)
-

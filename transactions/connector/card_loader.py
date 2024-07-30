@@ -165,7 +165,7 @@ class DocomoCardLoader(BaseLoader):
     def __init__(self):
         super().__init__()
         self.data_path = 'finance/docomo/'
-        self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／']
+        self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／', '　　　　　　　　　／ｉＤ', '　／ｉＤ']
         self.payment_method = PaymentMethod.DOCOMO_CARD.value
 
     def import_data(self):
