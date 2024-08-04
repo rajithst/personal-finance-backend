@@ -3,37 +3,14 @@ import os
 from collections import defaultdict
 
 import numpy as np
-from enum import Enum
 import pandas as pd
 from django.conf import settings
 
+from transactions.common.enums import DataSource, PaymentMethod, CardTypes
+from transactions.common.transaction_const import NA_TRANSACTION_CATEGORY_ID, NA_TRANSACTION_SUB_CATEGORY_ID, \
+    OTHER_INCOME_CATEGORY_ID, SAVINGS_CATEGORY_ID, PAYMENT_CATEGORY_ID
 from transactions.models import DestinationMap, ImportRules
 from utils.gcs import GCSHandler
-
-NA_TRANSACTION_CATEGORY_ID = 1000
-NA_TRANSACTION_SUB_CATEGORY_ID = 1000
-OTHER_INCOME_CATEGORY_ID = 10
-SAVINGS_CATEGORY_ID = 6
-PAYMENT_CATEGORY_ID = 14
-
-
-class PaymentMethod(Enum):
-    RAKUTEN_CARD = 1
-    EPOS_CARD = 2
-    DOCOMO_CARD = 3
-    CASH = 4
-
-
-class CardTypes(Enum):
-    RAKUTEN = 'Rakuten'
-    EPOS = 'Epos'
-    DOCOMO = 'Docomo'
-    CASH = 'Cash'
-
-
-class DataSource(Enum):
-    IMPORT = 1
-    MANUAL_ENTRY = 2
 
 
 class BaseLoader:

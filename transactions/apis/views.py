@@ -6,12 +6,17 @@ from django.core.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from decimal import Decimal
 
-from transactions.models import Income, Transaction, DestinationMap
+from transactions.common.transaction_const import NA_TRANSACTION_SUB_CATEGORY_ID
+from transactions.models import Income, Transaction, DestinationMap, TransactionCategory, PaymentMethod, \
+    TransactionSubCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
     ResponseDestinationMapSerializer, ResponseIncomeSerializer
 import pandas as pd
 import logging
+
+from transactions.serializers.serializers import TransactionSerializer
 
 
 class DashboardView(APIView):
@@ -238,6 +243,11 @@ class PayeeViewSet(ModelViewSet):
                                                                                                'subcategory_id')
     serializer_class = ResponseDestinationMapSerializer
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'payees': serializer.data})
+
     def update(self, request, *args, **kwargs):
         data = request.data
         pk = data.get('id')
@@ -282,9 +292,55 @@ class TransactionBulkView(APIView):
             if delete_ids:
                 try:
                     Transaction.objects.filter(id__in=delete_ids).update(is_deleted=True)
-                    return Response({'status': status.HTTP_200_OK, 'data': delete_ids})
+                    queryset = Transaction.objects.filter(id__in=delete_ids)
+                    response_serializer = ResponseTransactionSerializer(queryset, many=True)
+                    return Response({'status': status.HTTP_200_OK, 'data': response_serializer.data})
                 except ValidationError as e:
                     logging.exception("Validation error:", e)
-                    return Response({'status': status.HTTP_400_BAD_REQUEST, 'data': delete_ids})
+                    return Response({'status': status.HTTP_400_BAD_REQUEST, 'data': None})
         elif task == 'split':
-            pass
+            transaction_data = data.get('main')
+            splits = data.get('splits', [])
+            total_split_amount = 0
+            response_instances = []
+            try:
+                if splits:
+                    for split in splits:
+                        payee = DestinationMap.objects.get(destination=split.get('destination'))
+                        transaction_split = self.extract_valid_fields(transaction_data)
+                        transaction_split['id'] = None
+                        transaction_split['amount'] = Decimal(split.get('amount'))
+                        transaction_split['category_id'] = payee.category_id
+                        transaction_split['subcategory_id'] = NA_TRANSACTION_SUB_CATEGORY_ID
+                        transaction_split['payment_method_id'] = transaction_data.get('payment_method')
+                        transaction_split['destination'] = payee.destination
+                        transaction_split['destination_original'] = payee.destination_original
+                        transaction_split['alias'] = None
+                        total_split_amount += Decimal(split.get('amount'))
+                        instance = Transaction(**transaction_split)
+                        instance.save()
+                        response_instances.append(instance.id)
+                    response_instances.append(transaction_data['id'])
+                    remaining = Decimal(transaction_data['amount']) - total_split_amount
+                    Transaction.objects.filter(id=transaction_data['id']).update(amount=remaining)
+                queryset = Transaction.objects.filter(id__in=response_instances)
+                response_serializer = ResponseTransactionSerializer(queryset, many=True)
+                return Response({'status': status.HTTP_200_OK, 'data': response_serializer.data})
+            except Exception as e:
+                logging.exception("An unexpected error occurred:", e)
+                return Response({'status': status.HTTP_400_BAD_REQUEST, 'data': None})
+
+    def extract_valid_fields(self, transaction_data):
+        valid_fields = [field.name for field in Transaction._meta.get_fields()]
+        override_fields = {'category': 'category_id', 'subcategory': 'subcategory_id', 'payment_method': 'payment_method_id'}
+        for override_field in override_fields.keys():
+            if override_field in valid_fields:
+                valid_fields.remove(override_field)
+                valid_fields.append(override_fields[override_field])
+        transaction_data_copy = {}
+        for field in valid_fields:
+            if field in transaction_data:
+                transaction_data_copy[field] = transaction_data[field]
+            else:
+                transaction_data_copy[field] = None
+        return transaction_data_copy

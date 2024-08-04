@@ -2,8 +2,6 @@ import logging
 from datetime import date
 
 import pandas as pd
-from django.http import Http404
-from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status, viewsets
@@ -12,8 +10,7 @@ from investments.handlers.holding import HoldingHandler
 from investments.models import StockPurchaseHistory, Company, Dividend, Holding, StockDailyPrice
 from investments.serializers.response_serializers import ResponseStockPurchaseHistorySerializer, \
     ResponseDividendSerializer, ResponseHoldingSerializer, ResponseCompanySerializer
-from investments.serializers.serializers import CompanySerializer, StockPurchaseHistorySerializer, DividendSerializer, \
-    HoldingSerializer, StockDailyPriceSerializer
+from investments.serializers.serializers import StockPurchaseHistorySerializer, StockDailyPriceSerializer
 
 
 class InvestmentsView(APIView):
