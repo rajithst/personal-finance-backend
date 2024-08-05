@@ -14,7 +14,7 @@ router.register(r'company', CompanyViewSet)
 urlpatterns = [
     path('list', InvestmentsView.as_view()),
     path('refresh/stock-data', StockDailyUpdaterView.as_view()),
-    path('stock/<str:symbol>/', StockDetailView.as_view()),
+    path('stock-summary/<str:symbol>/', StockDetailView.as_view()),
     path('refresh/histoical-stock-data', HistoricalStockDataUpdaterView.as_view()),
     path('refresh/forex-data', ForexDailyUpdaterView.as_view()),
     path('refresh/company-data', CompanyDataUpdaterView.as_view()),
