@@ -10,11 +10,11 @@ values  (1, 'Salary/Wages'),
         (9, 'Government Assistance'),
         (10, 'Other');
 
-insert into personal_finance.transactions_paymentmethod (id, name, description)
-values  (1, 'Rakuten Card', null),
-        (2, 'EPOS Card', null),
-        (3, 'Docomo Card', null),
-        (4, 'Cash', null);
+insert into personal_finance.transactions_account (id, account_type, account_name, description)
+values  (1, 'CREDIT_CARD', 'Rakuten Card', null),
+        (2, 'CREDIT_CARD', 'EPOS Card', null),
+        (3, 'CREDIT_CARD', 'Docomo Card', null),
+        (4, 'BANK_ACCOUNT', 'Mizuho', null);
 
 insert into personal_finance.transactions_transactioncategory (id, category)
 values  (1, 'Housing'),

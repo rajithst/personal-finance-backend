@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from django.conf import settings
 
-from transactions.common.enums import DataSource, PaymentMethod, CardTypes
+from transactions.common.enums import DataSource, AccountTypes, CardTypes
 from transactions.common.transaction_const import NA_TRANSACTION_CATEGORY_ID, NA_TRANSACTION_SUB_CATEGORY_ID, \
     OTHER_INCOME_CATEGORY_ID, SAVINGS_CATEGORY_ID, PAYMENT_CATEGORY_ID
 from transactions.models import DestinationMap, ImportRules
@@ -21,7 +21,7 @@ class BaseLoader:
         if not self.is_dev_env:
             self.blob_handler = GCSHandler()
 
-    def set_default_props(self, df, payment_method):
+    def set_default_props(self, df, account):
         params_dict = {
             'is_payment': False,
             'is_deleted': False,
@@ -31,7 +31,7 @@ class BaseLoader:
             'alias': np.nan,
             'is_expense': 1,
             'source': DataSource.IMPORT.value,
-            'payment_method_id': payment_method
+            'account_id': account
         }
         df = df.assign(**params_dict)
         df = df[df.date.isnull() == False]
@@ -48,9 +48,9 @@ class BaseLoader:
             return new_value
         return value
 
-    def get_last_import_date(self, payment_method):
+    def get_last_import_date(self, account):
         last_import_date = None
-        import_rule = ImportRules.objects.filter(source=payment_method).first()
+        import_rule = ImportRules.objects.filter(source=account).first()
         if import_rule:
             last_import_date = import_rule.last_import_date
         return last_import_date
@@ -69,7 +69,7 @@ class BaseLoader:
             transactions = transactions.drop_duplicates()
             return transactions
         else:
-            columns = ['date', 'destination_original', 'destination', 'amount', 'payment_method_id', 'notes', 'alias',
+            columns = ['date', 'destination_original', 'destination', 'amount', 'account_id', 'notes', 'alias',
                        'is_payment',
                        'is_deleted', 'is_saving', 'is_income', 'source', 'is_expense']
             return pd.DataFrame(columns=columns)
@@ -86,10 +86,10 @@ class RakutenCardLoader(BaseLoader):
         super().__init__()
         self.data_path = 'finance/rakuten/'
         self.cleanable_signatures = ['楽天ＳＰ', '/N']
-        self.payment_method = PaymentMethod.RAKUTEN_CARD.value
+        self.account = AccountTypes.RAKUTEN_CARD.value
 
     def import_data(self):
-        last_import_date = self.get_last_import_date(self.payment_method)
+        last_import_date = self.get_last_import_date(self.account)
         files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
@@ -103,7 +103,7 @@ class RakutenCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df = self.set_default_props(df, self.payment_method)
+            df = self.set_default_props(df, self.account)
             df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
@@ -114,10 +114,10 @@ class EposCardLoader(BaseLoader):
         super().__init__()
         self.data_path = 'finance/epos/'
         self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
-        self.payment_method = PaymentMethod.EPOS_CARD.value
+        self.account = AccountTypes.EPOS_CARD.value
 
     def import_data(self):
-        last_import_date = self.get_last_import_date(self.payment_method)
+        last_import_date = self.get_last_import_date(self.account)
         files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
@@ -132,7 +132,7 @@ class EposCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df = self.set_default_props(df, self.payment_method)
+            df = self.set_default_props(df, self.account)
             df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
@@ -143,10 +143,10 @@ class DocomoCardLoader(BaseLoader):
         super().__init__()
         self.data_path = 'finance/docomo/'
         self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／', '　　　　　　　　　／ｉＤ', '　／ｉＤ']
-        self.payment_method = PaymentMethod.DOCOMO_CARD.value
+        self.account = AccountTypes.DOCOMO_CARD.value
 
     def import_data(self):
-        last_import_date = self.get_last_import_date(self.payment_method)
+        last_import_date = self.get_last_import_date(self.account)
         files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
@@ -161,7 +161,7 @@ class DocomoCardLoader(BaseLoader):
             df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
             if last_import_date:
                 df = df[df['date'] > last_import_date]
-            df = self.set_default_props(df, self.payment_method)
+            df = self.set_default_props(df, self.account)
             df = self.clean_destinations(df, self.cleanable_signatures)
             results.append(df)
         return self.get_concat_dataframe(results)
@@ -172,10 +172,10 @@ class CashCardLoader(BaseLoader):
         super().__init__()
         self.data_path = 'finance/mizuho/'
         self.cleanable_signatures = []
-        self.payment_method = PaymentMethod.CASH.value
+        self.account = AccountTypes.CASH.value
 
     def import_data(self):
-        last_import_date = self.get_last_import_date(self.payment_method)
+        last_import_date = self.get_last_import_date(self.account)
         files = self.get_files(target_path=self.data_path)
         results = []
         for file in files:
@@ -190,8 +190,8 @@ class CashCardLoader(BaseLoader):
             df_expense.columns = ['date', 'amount', 'destination']
             df_expense = self.clean_destinations(df_expense, self.cleanable_signatures)
             df_income = self.clean_destinations(df_income, self.cleanable_signatures)
-            df_expense = self.set_default_props(df_expense, self.payment_method)
-            df_income = self.set_default_props(df_income, self.payment_method)
+            df_expense = self.set_default_props(df_expense, self.account)
+            df_income = self.set_default_props(df_income, self.account)
             df_income = df_income.assign(**{'is_expense': 0, 'is_income': 1})
             df = pd.concat([df_income, df_expense])
             df['date'] = pd.to_datetime(df['date'], format='%Y.%m.%d').dt.date
@@ -254,10 +254,10 @@ class CardLoader:
         docomo_new_import_date = None if docomo_data.empty else docomo_data['date'].max()
         cash_new_import_date = None if cash_data.empty else cash_data['date'].max()
         import_rules = {
-            PaymentMethod.RAKUTEN_CARD.value: rakuten_new_import_date,
-            PaymentMethod.EPOS_CARD.value: epos_new_import_date,
-            PaymentMethod.DOCOMO_CARD.value: docomo_new_import_date,
-            PaymentMethod.CASH.value: cash_new_import_date
+            AccountTypes.RAKUTEN_CARD.value: rakuten_new_import_date,
+            AccountTypes.EPOS_CARD.value: epos_new_import_date,
+            AccountTypes.DOCOMO_CARD.value: docomo_new_import_date,
+            AccountTypes.CASH.value: cash_new_import_date
         }
 
         all_transactions = pd.concat([rakuten_data, epos_data, docomo_data, cash_data])
@@ -266,7 +266,7 @@ class CardLoader:
             all_transactions.reset_index(drop=True, inplace=True)
             all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
             all_transactions['amount'] = all_transactions['amount'].round(2)
-            all_transactions['payment_method_id'] = all_transactions['payment_method_id'].astype(int)
+            all_transactions['account_id'] = all_transactions['account_id'].astype(int)
             payee_maps = self.get_payee_map()
             rewrite_keywords = payee_maps[['destination', 'keywords']].values.tolist()
             rewrite_rules = self.get_rewrite_rules(rewrite_keywords)

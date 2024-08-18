@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-class PaymentMethod(Enum):
+class AccountTypes(Enum):
     RAKUTEN_CARD = 1
     EPOS_CARD = 2
     DOCOMO_CARD = 3

@@ -32,7 +32,7 @@ class IncomeAdmin(admin.ModelAdmin):
 
 @admin.register(models.Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ['category', 'payment_method', 'amount', 'date', 'notes', ]
+    list_display = ['category', 'account', 'amount', 'date', 'notes', ]
     search_fields = ['category__startswith', 'amount__startswith', 'date__startswith']
 
 
@@ -46,6 +46,6 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
     list_display = ['category']
 
 
-@admin.register(models.PaymentMethod)
-class PaymentMethodAdmin(admin.ModelAdmin):
-    list_display = ['name', 'description']
+@admin.register(models.Account)
+class AccountAdmin(admin.ModelAdmin):
+    list_display = ['account_name', 'description']

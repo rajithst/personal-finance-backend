@@ -9,14 +9,15 @@ from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
 
 from transactions.common.transaction_const import NA_TRANSACTION_SUB_CATEGORY_ID
-from transactions.models import Income, Transaction, DestinationMap, TransactionCategory, PaymentMethod, \
+from transactions.models import Income, Transaction, DestinationMap, Account, IncomeCategory, TransactionCategory, \
     TransactionSubCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
     ResponseDestinationMapSerializer, ResponseIncomeSerializer
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import TransactionSerializer
+from transactions.serializers.serializers import IncomeSerializer, IncomeCategorySerializer, \
+    TransactionCategorySerializer, TransactionSubCategorySerializer, AccountSerializer
 
 
 class DashboardView(APIView):
@@ -86,12 +87,12 @@ class DashboardView(APIView):
             results.append({'year': date.year, 'month': date.month, 'amount': item['total_amount']})
         return results
 
-    def get_payment_method_wise_sum(self, transaction_type, year):
+    def get_account_wise_sum(self, transaction_type, year):
         queryset = (
             Transaction.objects
             .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
             .annotate(month=TruncMonth('date'))
-            .values('month', 'payment_method_id')
+            .values('month', 'account_id')
             .annotate(total_amount=Sum('amount'))
             .order_by('month')
         )
@@ -100,7 +101,7 @@ class DashboardView(APIView):
             date_str = item['month'].strftime('%Y-%m-%d')
             if date_str not in results:
                 results[date_str] = []
-            results[date_str].append({'category_id': item['payment_method_id'], 'amount': item['total_amount']})
+            results[date_str].append({'category_id': item['account_id'], 'amount': item['total_amount']})
         return results
 
     def get(self, request):
@@ -110,10 +111,10 @@ class DashboardView(APIView):
         payments = self.get_monthly_transaction_summary('is_payment', year)
         savings = self.get_monthly_transaction_summary('is_saving', year)
         category_wise_expenses = self.get_monthly_transaction_category_summary('is_expense', year)
-        payment_method_wise_expenses = self.get_payment_method_wise_sum('is_expense', year)
+        account_wise_expenses = self.get_account_wise_sum('is_expense', year)
         payment_by_destination = self.get_monthly_payment_destination_wise_sum('is_payment', year)
         return Response({"income": incomes, "payment_by_destination": payment_by_destination,
-                         "payment_method_wise_expenses": payment_method_wise_expenses,
+                         "account_wise_expenses": account_wise_expenses,
                          "category_wise_expenses": category_wise_expenses, "expense": expenses,
                          "payment": payments, "saving": savings})
 
@@ -144,7 +145,7 @@ class IncomeViewSet(ModelViewSet):
 
 
 class TransactionViewSet(ModelViewSet):
-    queryset = Transaction.objects.select_related('category', 'subcategory', 'payment_method').all()
+    queryset = Transaction.objects.select_related('category', 'subcategory', 'account').all()
     serializer_class = ResponseTransactionSerializer
 
     def _group_by(self, data: pd.DataFrame):
@@ -282,6 +283,25 @@ class PayeeViewSet(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            pk = self.kwargs.get('id', None)
+            name = self.kwargs.get('name', None)
+            if pk:
+                instance = self.get_queryset().get(pk=pk)
+            elif name:
+                instance = self.get_queryset().get(destination=name)
+            else:
+                instance = self.get_object()
+            transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+                destination=instance.destination)
+            serializer = self.get_serializer(instance)
+            transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
+            return Response({'payee': serializer.data, 'transactions': transaction_serializer.data})
+        except:
+            logging.exception("An unexpected error occurred")
+            return Response({'payee': None, 'transactions': None})
+
 
 class TransactionBulkView(APIView):
     def put(self, request):
@@ -312,7 +332,7 @@ class TransactionBulkView(APIView):
                         transaction_split['amount'] = Decimal(split.get('amount'))
                         transaction_split['category_id'] = payee.category_id
                         transaction_split['subcategory_id'] = NA_TRANSACTION_SUB_CATEGORY_ID
-                        transaction_split['payment_method_id'] = transaction_data.get('payment_method')
+                        transaction_split['account_id'] = transaction_data.get('account')
                         transaction_split['destination'] = payee.destination
                         transaction_split['destination_original'] = payee.destination_original
                         transaction_split['alias'] = None
@@ -332,7 +352,7 @@ class TransactionBulkView(APIView):
 
     def extract_valid_fields(self, transaction_data):
         valid_fields = [field.name for field in Transaction._meta.get_fields()]
-        override_fields = {'category': 'category_id', 'subcategory': 'subcategory_id', 'payment_method': 'payment_method_id'}
+        override_fields = {'category': 'category_id', 'subcategory': 'subcategory_id', 'account': 'account_id'}
         for override_field in override_fields.keys():
             if override_field in valid_fields:
                 valid_fields.remove(override_field)
@@ -344,3 +364,19 @@ class TransactionBulkView(APIView):
             else:
                 transaction_data_copy[field] = None
         return transaction_data_copy
+
+
+class ClientSettingsView(APIView):
+
+    def get(self, request):
+        accounts = Account.objects.all()
+        income_categories = IncomeCategory.objects.all()
+        transaction_categories = TransactionCategory.objects.all()
+        transaction_subcategories = TransactionSubCategory.objects.select_related('category').all()
+        income_serializer = IncomeCategorySerializer(income_categories, many=True)
+        transaction_category_serializer = TransactionCategorySerializer(transaction_categories, many=True)
+        transaction_subcategories_serializer = TransactionSubCategorySerializer(transaction_subcategories, many=True)
+        accounts_serializer = AccountSerializer(accounts, many=True)
+        return Response({'accounts': accounts_serializer.data, 'income_categories': income_serializer.data,
+                         'transaction_categories': transaction_category_serializer.data,
+                         'transaction_sub_categories': transaction_subcategories_serializer.data})

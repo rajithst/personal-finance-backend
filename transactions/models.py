@@ -27,13 +27,11 @@ class IncomeCategory(models.Model):
         return self.category
 
 
-class PaymentMethod(models.Model):
+class Account(models.Model):
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=255, blank=False)
+    account_type = models.CharField(max_length=255, blank=True, null=True)
+    account_name = models.CharField(max_length=255, blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
-
-    def __str__(self):
-        return self.name
 
 
 class Income(models.Model):
@@ -54,7 +52,7 @@ class Transaction(models.Model):
     id = models.AutoField(primary_key=True)
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, null=True, blank=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
-    payment_method = models.ForeignKey(PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
     destination_original = models.CharField(max_length=255, blank=True, null=True)
@@ -88,5 +86,5 @@ class DestinationMap(models.Model):
 
 class ImportRules(models.Model):
     id = models.AutoField(primary_key=True)
-    source = models.ForeignKey(PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    source = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     last_import_date = models.DateField(blank=True, null=True)
