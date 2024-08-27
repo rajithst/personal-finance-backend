@@ -16,21 +16,16 @@ import io
 from google.cloud import secretmanager
 from urllib.parse import urlparse
 
+env = environ.Env(DEBUG=(bool, False))
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-env = environ.Env(DEBUG=(bool, False))
-RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'personalfinance.settings.dev')
-ENV = 'prod' if RUNNING_ENV == 'personalfinance.settings.prod' else 'dev'
 
+RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'core.settings.dev')
+ENV = 'prod' if RUNNING_ENV == 'core.settings.prod' else 'dev'
 project_id = os.environ.get('PROJECT_ID')
 BUCKET_NAME = "%s.appspot.com" % project_id
 
-env = environ.Env(DEBUG=(bool, False))
-env_file = os.path.join(BASE_DIR, '.env')
-env.read_env(env_file)
-if env == 'dev' and os.path.isfile(env_file):
-    env.read_env(env_file)
-elif ENV == 'prod':
+if ENV == 'prod':
     gcloud_project = os.environ.get('GOOGLE_CLOUD_PROJECT', None)
     if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
@@ -86,7 +81,7 @@ MIDDLEWARE = [
 
 ]
 
-ROOT_URLCONF = 'personalfinance.urls'
+ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
     {
@@ -105,7 +100,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'personalfinance.wsgi.application'
+WSGI_APPLICATION = 'core.wsgi.application'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
