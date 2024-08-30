@@ -11,7 +11,7 @@ DATABASES = {
         'NAME': 'personal_finance',
         'HOST': 'localhost',
         'USER': 'root',
-        'PASSWORD': ''
+        'PASSWORD': 'Rst@6507'
     }
 }
 ALLOWED_HOSTS = []

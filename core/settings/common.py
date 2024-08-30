@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+from datetime import timedelta
 from pathlib import Path
 import os
 import environ
@@ -52,7 +53,6 @@ if ENV == 'prod':
     else:
         ALLOWED_HOSTS = ["*"]
 
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -63,8 +63,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'debug_toolbar',
     'rest_framework',
+    'djoser',
     "transactions",
-    "investments"
+    "investments",
+    "oauth"
 ]
 
 MIDDLEWARE = [
@@ -146,7 +148,29 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    'COERCE_DECIMAL_TO_STRING': False
+    'COERCE_DECIMAL_TO_STRING': False,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
+
+AUTH_USER_MODEL = "oauth.User"
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'SIGNING_KEY': 'mysigningkey',
+    'TOKEN_OBTAIN_SERIALIZER': "oauth.serializers.TokenObtainPairSerializer",
+}
+
+DJOSER = {
+    'SERIALIZERS': {
+        'user_create': 'oauth.serializers.UserCreateSerializer',
+        #'token_create': 'oauth.serializers.TokenCreateSerializer',
+    },
 }
 
 INTERNAL_IPS = [
@@ -154,6 +178,8 @@ INTERNAL_IPS = [
 ]
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
+
+# AUTH_USER_MODEL = 'User'
 
 LOGGING = {
     'version': 1,
@@ -180,4 +206,3 @@ LOGGING = {
         }
     }
 }
-

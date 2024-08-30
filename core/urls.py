@@ -18,7 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-import debug_toolbar
+
+from oauth.views import TokenObtainPairView
 
 admin.site.site_header = 'Personal Finance Administration'
 admin.site.index_title = 'Welcome to Personal Finance'
@@ -27,6 +28,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('finance/', include('transactions.urls')),
     path('investments/', include('investments.urls')),
+    path('oauth/', include('oauth.urls')),
+    path('auth/', include('djoser.urls')),
+    path('auth/', include('djoser.urls.jwt')),
+
     path("__debug__/", include("debug_toolbar.urls")),
 ]
 

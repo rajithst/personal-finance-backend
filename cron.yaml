@@ -3,16 +3,16 @@ cron:
   url: /investments/refresh/stock-data
   schedule: every 6 hours from 00:30 to 23:59
   timezone: Asia/Tokyo
-  target: backend
+  target: coincraftservice
 
 - description: "daily dividend data update"
   url: /investments/refresh/dividend-data
   schedule: everyday 07:00
   timezone: Asia/Tokyo
-  target: backend
+  target: coincraftservice
 
 - description: "daily forex data update"
   url: /investments/refresh/forex-data
   schedule: everyday 06:00
   timezone: Asia/Tokyo
-  target: backend
+  target: coincraftservice
