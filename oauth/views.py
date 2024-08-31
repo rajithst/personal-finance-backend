@@ -9,13 +9,13 @@ from oauth.serializers import ProfileSerializer, TokenObtainPairSerializer
 
 
 class ProfileViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):
-    queryset = Profile.objects.all()
+    queryset = Profile.objects.select_related('user').all()
     serializer_class = ProfileSerializer
 
     @action(detail=False, methods=['GET', 'PUT'])
     def me(self, request):
-        (profile, created) = Profile.objects.get_or_create(user_id=request.user.id)
         if request.method == 'GET':
+            profile = Profile.objects.select_related('user').get(user_id=request.user.id)
             serializer = ProfileSerializer(profile)
             return Response(serializer.data)
         elif request.method == 'PUT':

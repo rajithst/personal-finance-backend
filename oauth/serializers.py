@@ -23,8 +23,26 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    user_id = serializers.IntegerField(read_only=True)
-
     class Meta:
         model = Profile
-        fields = ['id', 'user_id', 'is_premium']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'password', 'is_premium', 'user_id']
+
+    first_name = serializers.SerializerMethodField('get_first_name')
+    last_name = serializers.SerializerMethodField('get_last_name')
+    password = serializers.SerializerMethodField('get_password')
+    username = serializers.SerializerMethodField('get_username')
+    email = serializers.SerializerMethodField('get_email')
+    def get_first_name(self, obj):
+        return obj.user.first_name
+
+    def get_last_name(self, obj):
+        return obj.user.last_name
+
+    def get_password(self, obj):
+        return obj.user.password
+
+    def get_username(self, obj):
+        return obj.user.username
+
+    def get_email(self, obj):
+        return obj.user.email
