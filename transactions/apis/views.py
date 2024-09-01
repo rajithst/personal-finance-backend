@@ -10,14 +10,15 @@ from decimal import Decimal
 
 from transactions.common.transaction_const import NA_TRANSACTION_SUB_CATEGORY_ID
 from transactions.models import Income, Transaction, DestinationMap, Account, IncomeCategory, TransactionCategory, \
-    TransactionSubCategory
+    TransactionSubCategory, SavingsCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
     ResponseDestinationMapSerializer, ResponseIncomeSerializer
 import pandas as pd
 import logging
 
 from transactions.serializers.serializers import IncomeSerializer, IncomeCategorySerializer, \
-    TransactionCategorySerializer, TransactionSubCategorySerializer, AccountSerializer
+    TransactionCategorySerializer, TransactionSubCategorySerializer, AccountSerializer, \
+    SavingsCategorySerializer
 
 
 class DashboardView(APIView):
@@ -25,7 +26,7 @@ class DashboardView(APIView):
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
         queryset = (
             Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
             .annotate(month=TruncMonth('date'))
             .values('month', 'destination_original', 'destination')
             .annotate(total_amount=Sum('amount'))
@@ -44,7 +45,7 @@ class DashboardView(APIView):
     def get_monthly_transaction_summary(self, transaction_type, year):
         queryset = (
             Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
             .annotate(month=TruncMonth('date'))
             .values('month')
             .annotate(total_amount=Sum('amount'))
@@ -59,7 +60,7 @@ class DashboardView(APIView):
     def get_monthly_transaction_category_summary(self, transaction_type, year):
         queryset = (
             Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
             .annotate(month=TruncMonth('date'))
             .values('month', 'category_id')
             .annotate(total_amount=Sum('amount'))
@@ -76,7 +77,7 @@ class DashboardView(APIView):
     def get_monthly_income_summary(self, year):
         queryset = (
             Income.objects
-            .filter(**{'date__year': year}).annotate(month=TruncMonth('date'))
+            .filter(**{'date__year': year, 'user__id': self.request.user.id}).annotate(month=TruncMonth('date'))
             .values('month')
             .annotate(total_amount=Sum('amount'))
             .order_by('month')
@@ -90,7 +91,7 @@ class DashboardView(APIView):
     def get_account_wise_sum(self, transaction_type, year):
         queryset = (
             Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year})
+            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
             .annotate(month=TruncMonth('date'))
             .values('month', 'account_id')
             .annotate(total_amount=Sum('amount'))
@@ -138,7 +139,7 @@ class IncomeViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         year = request.query_params.get('year', 2024)
-        queryset = self.get_queryset().filter(date__year=year)
+        queryset = self.get_queryset().filter(date__year=year, user__id=self.request.user.id)
         serializer = self.get_serializer(queryset, many=True)
         df = pd.DataFrame(serializer.data)
         return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
@@ -167,7 +168,7 @@ class TransactionViewSet(ModelViewSet):
         target = query_params.get('target', None)
         category_ids = query_params.get('cat', None)
         subcategory_ids = query_params.get('subcat', None)
-        filter_params = {'is_deleted': False, 'date__year': year}
+        filter_params = {'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id}
         if target == 'payment':
             filter_params['is_payment'] = True
         elif target == 'saving':
@@ -191,7 +192,7 @@ class TransactionViewSet(ModelViewSet):
         update_similar = data.get('update_similar')
         if update_similar:
             self.update_similar_transactions(data)
-
+        data['user__id'] = self.request.user.id
         serializer = ResponseTransactionSerializer(data=data, partial=True)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
@@ -369,14 +370,19 @@ class TransactionBulkView(APIView):
 class ClientSettingsView(APIView):
 
     def get(self, request):
-        accounts = Account.objects.all()
-        income_categories = IncomeCategory.objects.all()
-        transaction_categories = TransactionCategory.objects.all()
-        transaction_subcategories = TransactionSubCategory.objects.select_related('category').all()
+        user_id = request.user.id
+        accounts = Account.objects.filter(user_id=user_id).all()
+        income_categories = IncomeCategory.objects.filter(user_id=user_id).all()
+        transaction_categories = TransactionCategory.objects.filter(user_id=user_id).all()
+        transaction_subcategories = TransactionSubCategory.objects.filter(user_id=user_id).select_related('category').all()
+        savings_categories = SavingsCategory.objects.filter(user_id=user_id).all()
         income_serializer = IncomeCategorySerializer(income_categories, many=True)
         transaction_category_serializer = TransactionCategorySerializer(transaction_categories, many=True)
         transaction_subcategories_serializer = TransactionSubCategorySerializer(transaction_subcategories, many=True)
         accounts_serializer = AccountSerializer(accounts, many=True)
-        return Response({'accounts': accounts_serializer.data, 'income_categories': income_serializer.data,
+        savings_serializer = SavingsCategorySerializer(savings_categories, many=True)
+        return Response({'accounts': accounts_serializer.data,
+                         'income_categories': income_serializer.data,
+                         'savings_categories': savings_serializer.data,
                          'transaction_categories': transaction_category_serializer.data,
                          'transaction_sub_categories': transaction_subcategories_serializer.data})

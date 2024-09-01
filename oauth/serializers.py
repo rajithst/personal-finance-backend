@@ -10,6 +10,11 @@ class UserCreateSerializer(BaseUserCreateSerializer):
     class Meta(BaseUserCreateSerializer.Meta):
         fields = ['id', 'username', 'password', 'email', 'first_name', 'last_name']
 
+    def create(self, validated_data):
+        user = super(UserCreateSerializer, self).create(validated_data)
+        Profile.objects.create(user=user)
+        #TODO: create default categories, subcategories, account types on first log
+        return user
 
 class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
     def validate(self, attrs):
