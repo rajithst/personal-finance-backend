@@ -1,15 +1,15 @@
 runtime: python312
-service: backend
+service: coincraftservice
 env: standard
-entrypoint: gunicorn -b :$PORT personalfinance.wsgi:application
+entrypoint: gunicorn -b :$PORT core.wsgi:application
 
 handlers:
 - url: /.*
   script: auto
 
 env_variables:
-  DJANGO_SETTINGS_MODULE: "personalfinance.settings.prod"
-  APPENGINE_URL: https://backend-dot-personal-finance-425009.uc.r.appspot.com
+  DJANGO_SETTINGS_MODULE: "core.settings.prod"
+  APPENGINE_URL: https://coincraftservice-dot-personal-finance-425009.uc.r.appspot.com
   PROJECT_ID: 'personal-finance-425009'
 
 

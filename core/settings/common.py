@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+from datetime import timedelta
 from pathlib import Path
 import os
 import environ
@@ -24,8 +25,9 @@ RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'core.settings.dev')
 ENV = 'prod' if RUNNING_ENV == 'core.settings.prod' else 'dev'
 project_id = os.environ.get('PROJECT_ID')
 BUCKET_NAME = "%s.appspot.com" % project_id
-
+DEBUG = True
 if ENV == 'prod':
+    DEBUG = False
     gcloud_project = os.environ.get('GOOGLE_CLOUD_PROJECT', None)
     if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
@@ -52,7 +54,6 @@ if ENV == 'prod':
     else:
         ALLOWED_HOSTS = ["*"]
 
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -63,8 +64,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'debug_toolbar',
     'rest_framework',
+    'djoser',
     "transactions",
-    "investments"
+    "investments",
+    "oauth"
 ]
 
 MIDDLEWARE = [
@@ -146,7 +149,30 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    'COERCE_DECIMAL_TO_STRING': False
+    'COERCE_DECIMAL_TO_STRING': False,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
+
+
+AUTH_USER_MODEL = "oauth.User"
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'SIGNING_KEY': 'mysigningkey',
+    'TOKEN_OBTAIN_SERIALIZER': "oauth.serializers.TokenObtainPairSerializer",
+}
+
+DJOSER = {
+    'SERIALIZERS': {
+        'user_create': 'oauth.serializers.UserCreateSerializer',
+        #'token_create': 'oauth.serializers.TokenCreateSerializer',
+    },
 }
 
 INTERNAL_IPS = [
@@ -154,6 +180,8 @@ INTERNAL_IPS = [
 ]
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
+
+
 
 LOGGING = {
     'version': 1,
@@ -168,9 +196,9 @@ LOGGING = {
         # }
     },
     'loggers': {
-        '': {
+        'django.db.backends': {
             'handlers': ['console'],
-            'level': 'INFO'
+            'level': 'DEBUG'
         }
     },
     'formatters': {
@@ -180,4 +208,3 @@ LOGGING = {
         }
     }
 }
-

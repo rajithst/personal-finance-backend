@@ -1,9 +1,13 @@
 from django.db import models
+from django.conf import settings
 
 
 class TransactionCategory(models.Model):
     id = models.AutoField(primary_key=True)
     category = models.CharField(max_length=255, blank=True, null=True)
+    category_type = models.IntegerField(blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
     def __str__(self):
         return self.category
@@ -14,17 +18,10 @@ class TransactionSubCategory(models.Model):
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, blank=True, null=True)
     name = models.CharField(max_length=100, blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
     def __str__(self):
         return self.name
-
-
-class IncomeCategory(models.Model):
-    id = models.AutoField(primary_key=True)
-    category = models.CharField(max_length=255, blank=True, null=True)
-
-    def __str__(self):
-        return self.category
 
 
 class Account(models.Model):
@@ -32,20 +29,7 @@ class Account(models.Model):
     account_type = models.CharField(max_length=255, blank=True, null=True)
     account_name = models.CharField(max_length=255, blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
-
-
-class Income(models.Model):
-    id = models.AutoField(primary_key=True)
-    category = models.ForeignKey(IncomeCategory, on_delete=models.SET_NULL, null=True, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
-    destination = models.CharField(max_length=255, blank=True, null=True)
-    notes = models.TextField(default=None, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return str(self.amount) + " " + str(self.date)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
 
 class Transaction(models.Model):
@@ -60,6 +44,7 @@ class Transaction(models.Model):
     alias = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(default=None, blank=True, null=True)
     is_saving = models.BooleanField(default=False)
+    is_income = models.BooleanField(default=False)
     is_payment = models.BooleanField(default=False)
     is_expense = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
@@ -67,6 +52,7 @@ class Transaction(models.Model):
     merge_id = models.IntegerField(default=None, blank=True, null=True)
     delete_reason = models.TextField(default=None, blank=True, null=True)
     source = models.IntegerField(default=0, blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -82,9 +68,13 @@ class DestinationMap(models.Model):
     keywords = models.TextField(blank=True, null=True)
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, null=True, blank=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+
 
 
 class ImportRules(models.Model):
     id = models.AutoField(primary_key=True)
     source = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     last_import_date = models.DateField(blank=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
