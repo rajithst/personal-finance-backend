@@ -7,9 +7,8 @@ import pandas as pd
 from django.conf import settings
 
 from transactions.common.enums import DataSource, AccountTypes, CardTypes
-from transactions.common.transaction_const import NA_TRANSACTION_CATEGORY_ID, NA_TRANSACTION_SUB_CATEGORY_ID, \
-    OTHER_INCOME_CATEGORY_ID, SAVINGS_CATEGORY_ID, PAYMENT_CATEGORY_ID
-from transactions.models import DestinationMap, ImportRules
+from transactions.common.transaction_const import SAVINGS_CATEGORY_TYPE, PAYMENT_CATEGORY_TYPE, INCOME_CATEGORY_TYPE
+from transactions.models import DestinationMap, ImportRules, TransactionCategory, TransactionSubCategory
 from utils.gcs import GCSHandler
 
 
@@ -29,7 +28,7 @@ class BaseLoader:
             'is_income': False,
             'notes': np.nan,
             'alias': np.nan,
-            'is_expense': 1,
+            'is_expense': True,
             'source': DataSource.IMPORT.value,
             'account_id': account
         }
@@ -192,7 +191,7 @@ class CashCardLoader(BaseLoader):
             df_income = self.clean_destinations(df_income, self.cleanable_signatures)
             df_expense = self.set_default_props(df_expense, self.account)
             df_income = self.set_default_props(df_income, self.account)
-            df_income = df_income.assign(**{'is_expense': 0, 'is_income': 1})
+            df_income = df_income.assign(**{'is_expense': False, 'is_income': True})
             df = pd.concat([df_income, df_expense])
             df['date'] = pd.to_datetime(df['date'], format='%Y.%m.%d').dt.date
             if last_import_date:
@@ -202,8 +201,28 @@ class CashCardLoader(BaseLoader):
 
 
 class CardLoader:
+    def __init__(self, request_user_id):
+        if not request_user_id:
+            raise ValueError('request_user_id must be set. Abort import.')
+        self.request_user_id = request_user_id
+        self.savings_category_id = None
+        self.income_category_id = None
+        self.payment_category_id = None
+        self.na_category_id = None
+        self.na_sub_category_id = None
+        self.get_user_settings()
+
+    def get_user_settings(self):
+        category_queryset = TransactionCategory.objects.filter(user_id=self.request_user_id)
+        subcategory_queryset = TransactionSubCategory.objects.filter(user_id=self.request_user_id)
+        self.savings_category_id = category_queryset.filter(category_type=SAVINGS_CATEGORY_TYPE).first().id
+        self.income_category_id = category_queryset.filter(category_type=INCOME_CATEGORY_TYPE).first().id
+        self.payment_category_id = category_queryset.filter(category_type=PAYMENT_CATEGORY_TYPE).first().id
+        self.na_category_id = category_queryset.filter(category='N/A').first().id
+        self.na_sub_category_id = subcategory_queryset.filter(name='N/A').first().id
+
     def get_payee_map(self):
-        queryset = DestinationMap.objects.all()
+        queryset = DestinationMap.objects.filter(user_id=self.request_user_id).all()
         payee_maps = list(queryset.values())
         if payee_maps:
             payee_maps = pd.DataFrame(payee_maps)
@@ -267,6 +286,7 @@ class CardLoader:
             all_transactions['notes'] = all_transactions['notes'].replace({np.nan: None})
             all_transactions['amount'] = all_transactions['amount'].round(2)
             all_transactions['account_id'] = all_transactions['account_id'].astype(int)
+            all_transactions['user_id'] = self.request_user_id
             payee_maps = self.get_payee_map()
             rewrite_keywords = payee_maps[['destination', 'keywords']].values.tolist()
             rewrite_rules = self.get_rewrite_rules(rewrite_keywords)
@@ -280,8 +300,8 @@ class CardLoader:
             new_payees = new_payees.drop_duplicates(subset='destination_original', keep="first")
             new_payees = new_payees[['destination', 'destination_original']]
             new_payees = new_payees.assign(
-                **{'destination_eng': None, 'keywords': None, 'category_id': NA_TRANSACTION_CATEGORY_ID,
-                   'subcategory_id': NA_TRANSACTION_SUB_CATEGORY_ID})
+                **{'destination_eng': None, 'keywords': None, 'category_id': self.na_category_id,
+                   'subcategory_id': self.na_sub_category_id, 'user_id': self.request_user_id})
 
             try:
                 payee_objects = []
@@ -293,28 +313,30 @@ class CardLoader:
                 logging.exception('Error saving new payees')
             payee_maps = payee_maps[['category_id', 'subcategory_id', 'destination', 'alias_map']]
 
-            all_incomes = all_transactions[all_transactions['is_income'] == 1]
-            all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
+            #all_incomes = all_transactions[all_transactions['is_income'] == 1]
+            #all_incomes['category_id'] = OTHER_INCOME_CATEGORY_ID
 
-            all_expenses = all_transactions[all_transactions['is_expense'] == 1]
+            #all_expenses = all_transactions[all_transactions['is_expense'] == 1]
+            all_expenses = all_transactions
             all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
             all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
                 all_expenses['alias']
-            all_expenses = all_expenses.drop(columns=['alias', 'is_income'])
+            #all_expenses = all_expenses.drop(columns=['alias', 'is_income'])
+            all_expenses = all_expenses.drop(columns=['alias'])
             all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
             all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
-
+            all_expenses.loc[all_expenses['is_income'], 'category_id'] = self.income_category_id
             all_expenses['category_id'] = all_expenses['category_id'].replace(
-                {np.nan: NA_TRANSACTION_CATEGORY_ID}).astype(
+                {np.nan: self.na_category_id}).astype(
                 int)
             all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace(
-                {np.nan: NA_TRANSACTION_SUB_CATEGORY_ID}).astype(int)
-            all_expenses['is_saving'] = all_expenses['category_id'] == SAVINGS_CATEGORY_ID
-            all_expenses['is_payment'] = all_expenses['category_id'] == PAYMENT_CATEGORY_ID
+                {np.nan: self.na_sub_category_id}).astype(int)
+            all_expenses['is_saving'] = all_expenses['category_id'] == self.savings_category_id
+            all_expenses['is_payment'] = all_expenses['category_id'] == self.payment_category_id
             logging.info('All expenses processed')
-            return all_expenses.to_dict('records'), all_incomes.to_dict('records'), import_rules
+            return all_expenses.to_dict('records'), import_rules
         else:
-            return None, None, None
+            return None, None
 
 
 class CardLoaderFactory(object):

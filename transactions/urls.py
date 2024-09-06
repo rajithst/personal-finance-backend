@@ -7,7 +7,6 @@ from transactions.apis.importers import TransactionImportView
 from transactions.apis.views import ClientSettingsView
 
 router = SimpleRouter()
-router.register('income', views.IncomeViewSet)
 router.register('transaction', views.TransactionViewSet, basename='transaction')
 router.register('payee', views.PayeeViewSet)
 

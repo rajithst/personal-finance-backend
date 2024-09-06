@@ -13,8 +13,8 @@ class UserCreateSerializer(BaseUserCreateSerializer):
     def create(self, validated_data):
         user = super(UserCreateSerializer, self).create(validated_data)
         Profile.objects.create(user=user)
-        #TODO: create default categories, subcategories, account types on first log
         return user
+
 
 class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
     def validate(self, attrs):
@@ -30,21 +30,19 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'password', 'is_premium', 'user_id']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'onboarding', 'is_premium', 'premium_plan',
+                  'user_id', 'profile_picture', 'is_verified', 'two_factor_enabled', 'theme', 'language']
 
     first_name = serializers.SerializerMethodField('get_first_name')
     last_name = serializers.SerializerMethodField('get_last_name')
-    password = serializers.SerializerMethodField('get_password')
     username = serializers.SerializerMethodField('get_username')
     email = serializers.SerializerMethodField('get_email')
+
     def get_first_name(self, obj):
         return obj.user.first_name
 
     def get_last_name(self, obj):
         return obj.user.last_name
-
-    def get_password(self, obj):
-        return obj.user.password
 
     def get_username(self, obj):
         return obj.user.username

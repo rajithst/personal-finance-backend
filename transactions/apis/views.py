@@ -8,25 +8,26 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
 
-from transactions.common.transaction_const import NA_TRANSACTION_SUB_CATEGORY_ID
-from transactions.models import Income, Transaction, DestinationMap, Account, IncomeCategory, TransactionCategory, \
-    TransactionSubCategory, SavingsCategory
+from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
+    TransactionSubCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
-    ResponseDestinationMapSerializer, ResponseIncomeSerializer
+    ResponseDestinationMapSerializer, ResponseTransactionCategorySerializer, ResponseTransactionSubCategorySerializer
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import IncomeSerializer, IncomeCategorySerializer, \
-    TransactionCategorySerializer, TransactionSubCategorySerializer, AccountSerializer, \
-    SavingsCategorySerializer
+from transactions.serializers.serializers import AccountSerializer, TransactionSerializer
 
 
 class DashboardView(APIView):
 
+    def get_queryset(self):
+        return Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+            user__id=self.request.user.id)
+
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
         queryset = (
-            Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
+            self.get_queryset().filter(
+                **{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
             .annotate(month=TruncMonth('date'))
             .values('month', 'destination_original', 'destination')
             .annotate(total_amount=Sum('amount'))
@@ -44,8 +45,8 @@ class DashboardView(APIView):
 
     def get_monthly_transaction_summary(self, transaction_type, year):
         queryset = (
-            Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
+            self.get_queryset().filter(
+                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
             .annotate(month=TruncMonth('date'))
             .values('month')
             .annotate(total_amount=Sum('amount'))
@@ -59,8 +60,8 @@ class DashboardView(APIView):
 
     def get_monthly_transaction_category_summary(self, transaction_type, year):
         queryset = (
-            Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
+            self.get_queryset().filter(
+                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
             .annotate(month=TruncMonth('date'))
             .values('month', 'category_id')
             .annotate(total_amount=Sum('amount'))
@@ -76,8 +77,7 @@ class DashboardView(APIView):
 
     def get_monthly_income_summary(self, year):
         queryset = (
-            Income.objects
-            .filter(**{'date__year': year, 'user__id': self.request.user.id}).annotate(month=TruncMonth('date'))
+            self.get_queryset().filter(**{'date__year': year}).annotate(month=TruncMonth('date'))
             .values('month')
             .annotate(total_amount=Sum('amount'))
             .order_by('month')
@@ -90,8 +90,9 @@ class DashboardView(APIView):
 
     def get_account_wise_sum(self, transaction_type, year):
         queryset = (
-            Transaction.objects
-            .filter(**{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
+            self.get_queryset()
+            .filter(
+                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
             .annotate(month=TruncMonth('date'))
             .values('month', 'account_id')
             .annotate(total_amount=Sum('amount'))
@@ -120,34 +121,14 @@ class DashboardView(APIView):
                          "payment": payments, "saving": savings})
 
 
-class IncomeViewSet(ModelViewSet):
-    queryset = Income.objects.select_related('category')
-    serializer_class = ResponseIncomeSerializer
-
-    def _group_by(self, data: pd.DataFrame):
-        if data.empty:
-            return []
-        # df = pd.DataFrame(data)
-        group_data = []
-        for group_k, vals in data.groupby(['year', 'month']):
-            vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
-            vals['amount'] = vals['amount'].astype(float)
-            transactions = vals.to_dict('records')
-            group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
-                               'total': float(vals.amount.sum()), 'transactions': transactions})
-        return reversed(group_data)
-
-    def list(self, request, *args, **kwargs):
-        year = request.query_params.get('year', 2024)
-        queryset = self.get_queryset().filter(date__year=year, user__id=self.request.user.id)
-        serializer = self.get_serializer(queryset, many=True)
-        df = pd.DataFrame(serializer.data)
-        return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
-
-
 class TransactionViewSet(ModelViewSet):
     queryset = Transaction.objects.select_related('category', 'subcategory', 'account').all()
     serializer_class = ResponseTransactionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        queryset = queryset.filter(user_id=self.request.user.id)
+        return queryset
 
     def _group_by(self, data: pd.DataFrame):
         if data.empty:
@@ -168,13 +149,15 @@ class TransactionViewSet(ModelViewSet):
         target = query_params.get('target', None)
         category_ids = query_params.get('cat', None)
         subcategory_ids = query_params.get('subcat', None)
-        filter_params = {'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id}
+        filter_params = {'is_deleted': False, 'date__year': year}
         if target == 'payment':
             filter_params['is_payment'] = True
         elif target == 'saving':
             filter_params['is_saving'] = True
         elif target == 'expense':
             filter_params['is_expense'] = True
+        elif target == 'income':
+            filter_params['is_income'] = True
         queryset = self.get_queryset().filter(**filter_params).order_by('date')
         if category_ids:
             category_ids = category_ids.split(',')
@@ -192,16 +175,17 @@ class TransactionViewSet(ModelViewSet):
         update_similar = data.get('update_similar')
         if update_similar:
             self.update_similar_transactions(data)
-        data['user__id'] = self.request.user.id
-        serializer = ResponseTransactionSerializer(data=data, partial=True)
+        data['user'] = self.request.user.id
+        serializer = TransactionSerializer(data=data)
         if serializer.is_valid(raise_exception=True):
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            item = serializer.save()
+            response = Transaction.objects.get(pk=item.pk)
+            response_serializer = ResponseTransactionSerializer(response)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
         data = request.data
-
         pk = self.kwargs['pk']
         update_similar = data.get('update_similar')
         merge_ids = data.get('merge_ids')
@@ -219,8 +203,7 @@ class TransactionViewSet(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @staticmethod
-    def update_similar_transactions(request_data):
+    def update_similar_transactions(self, request_data):
         destination = request_data.get('destination')
         category = request_data.get('category')
         subcategory = request_data.get('subcategory')
@@ -229,9 +212,10 @@ class TransactionViewSet(ModelViewSet):
         is_expense = request_data.get('is_expense')
         alias = request_data.get('alias')
         try:
-            Transaction.objects.filter(destination=destination).update(category_id=category, alias=alias,
-                                                                       subcategory_id=subcategory, is_saving=is_saving,
-                                                                       is_payment=is_payment, is_expense=is_expense)
+            Transaction.objects.filter(destination=destination, user_id=self.request.user.id).update(
+                category_id=category, alias=alias,
+                subcategory_id=subcategory, is_saving=is_saving,
+                is_payment=is_payment, is_expense=is_expense)
         except ValidationError as e:
             logging.exception("Validation error:", e)
         except IntegrityError as e:
@@ -241,12 +225,18 @@ class TransactionViewSet(ModelViewSet):
 
 
 class PayeeViewSet(ModelViewSet):
-    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by('category_id',
-                                                                                               'subcategory_id')
+    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by(
+        'category_id',
+        'subcategory_id')
     serializer_class = ResponseDestinationMapSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        queryset = queryset.filter(user_id=self.request.user.id)
+        return queryset
+
     def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
         return Response({'payees': serializer.data})
 
@@ -258,7 +248,7 @@ class PayeeViewSet(ModelViewSet):
         subcategory = data.get('subcategory')
         new_destination = data.get('destination')
         new_alias = data.get('destination_eng')
-        update_ids = data.get('merge_ids')
+        merge_ids = data.get('merge_ids')
         exist_settings = DestinationMap.objects.get(pk=pk)
         is_payee_renamed = data.get('destination') != exist_settings.destination
         destination = new_destination if is_payee_renamed else exist_settings.destination
@@ -269,16 +259,17 @@ class PayeeViewSet(ModelViewSet):
         if serializer.is_valid(raise_exception=True):
             serializer.save()
 
-            if update_ids:
-                merge_records = DestinationMap.objects.filter(id__in=update_ids)
+            if merge_ids:
+                merge_records = DestinationMap.objects.filter(id__in=merge_ids, user_id=self.request.user.id)
                 target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
 
             try:
-                Transaction.objects.filter(destination__in=target_destinations).update(category_id=category,
-                                                                                       subcategory_id=subcategory,
-                                                                                       destination=destination,
-                                                                                       alias=new_alias)
-                DestinationMap.objects.filter(id__in=update_ids).delete()
+                Transaction.objects.filter(destination__in=target_destinations, user_id=request.user.id).update(
+                    category_id=category,
+                    subcategory_id=subcategory,
+                    destination=destination,
+                    alias=new_alias)
+                DestinationMap.objects.filter(id__in=merge_ids).delete()
             except Exception as e:
                 logging.exception("An unexpected error occurred:", e)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -295,7 +286,7 @@ class PayeeViewSet(ModelViewSet):
             else:
                 instance = self.get_object()
             transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-                destination=instance.destination)
+                destination=instance.destination, user_id=request.user.id)
             serializer = self.get_serializer(instance)
             transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
             return Response({'payee': serializer.data, 'transactions': transaction_serializer.data})
@@ -308,6 +299,7 @@ class TransactionBulkView(APIView):
     def put(self, request):
         data = request.data
         task = data.get('task')
+        user_id = request.user.id
         if task == 'delete':
             delete_ids = data.get('delete_ids')
             if delete_ids:
@@ -332,11 +324,13 @@ class TransactionBulkView(APIView):
                         transaction_split['id'] = None
                         transaction_split['amount'] = Decimal(split.get('amount'))
                         transaction_split['category_id'] = payee.category_id
-                        transaction_split['subcategory_id'] = NA_TRANSACTION_SUB_CATEGORY_ID
+                        # TODO get N/A subcategory id for user
+                        transaction_split['subcategory_id'] = 1000
                         transaction_split['account_id'] = transaction_data.get('account')
                         transaction_split['destination'] = payee.destination
                         transaction_split['destination_original'] = payee.destination_original
                         transaction_split['alias'] = None
+                        transaction_split['user_id'] = user_id
                         total_split_amount += Decimal(split.get('amount'))
                         instance = Transaction(**transaction_split)
                         instance.save()
@@ -372,17 +366,13 @@ class ClientSettingsView(APIView):
     def get(self, request):
         user_id = request.user.id
         accounts = Account.objects.filter(user_id=user_id).all()
-        income_categories = IncomeCategory.objects.filter(user_id=user_id).all()
         transaction_categories = TransactionCategory.objects.filter(user_id=user_id).all()
-        transaction_subcategories = TransactionSubCategory.objects.filter(user_id=user_id).select_related('category').all()
-        savings_categories = SavingsCategory.objects.filter(user_id=user_id).all()
-        income_serializer = IncomeCategorySerializer(income_categories, many=True)
-        transaction_category_serializer = TransactionCategorySerializer(transaction_categories, many=True)
-        transaction_subcategories_serializer = TransactionSubCategorySerializer(transaction_subcategories, many=True)
+        transaction_subcategories = TransactionSubCategory.objects.filter(user_id=user_id).select_related(
+            'category').all()
+        transaction_category_serializer = ResponseTransactionCategorySerializer(transaction_categories, many=True)
+        transaction_subcategories_serializer = ResponseTransactionSubCategorySerializer(transaction_subcategories,
+                                                                                        many=True)
         accounts_serializer = AccountSerializer(accounts, many=True)
-        savings_serializer = SavingsCategorySerializer(savings_categories, many=True)
         return Response({'accounts': accounts_serializer.data,
-                         'income_categories': income_serializer.data,
-                         'savings_categories': savings_serializer.data,
                          'transaction_categories': transaction_category_serializer.data,
                          'transaction_sub_categories': transaction_subcategories_serializer.data})

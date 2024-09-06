@@ -1,29 +1,13 @@
 from rest_framework import serializers
-from transactions.models import Income, Transaction, DestinationMap, Account, IncomeCategory, TransactionCategory, \
-    TransactionSubCategory, SavingsCategory
+from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
+    TransactionSubCategory
 
-
-class IncomeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Income
-        fields = '__all__'
-
-
-class IncomeCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = IncomeCategory
-        fields = '__all__'
-
-class SavingsCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SavingsCategory
-        fields = '__all__'
 
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ['id']
+        fields = '__all__'
 
 
 class TransactionCategorySerializer(serializers.ModelSerializer):

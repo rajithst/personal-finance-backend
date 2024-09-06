@@ -25,8 +25,9 @@ RUNNING_ENV = os.environ.get('DJANGO_SETTINGS_MODULE', 'core.settings.dev')
 ENV = 'prod' if RUNNING_ENV == 'core.settings.prod' else 'dev'
 project_id = os.environ.get('PROJECT_ID')
 BUCKET_NAME = "%s.appspot.com" % project_id
-
+DEBUG = True
 if ENV == 'prod':
+    DEBUG = False
     gcloud_project = os.environ.get('GOOGLE_CLOUD_PROJECT', None)
     if os.environ.get('GOOGLE_CLOUD_PROJECT', None):
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
@@ -157,6 +158,7 @@ REST_FRAMEWORK = {
     ]
 }
 
+
 AUTH_USER_MODEL = "oauth.User"
 
 SIMPLE_JWT = {
@@ -179,7 +181,7 @@ INTERNAL_IPS = [
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
 
-# AUTH_USER_MODEL = 'User'
+
 
 LOGGING = {
     'version': 1,
@@ -194,9 +196,9 @@ LOGGING = {
         # }
     },
     'loggers': {
-        '': {
+        'django.db.backends': {
             'handlers': ['console'],
-            'level': 'INFO'
+            'level': 'DEBUG'
         }
     },
     'formatters': {

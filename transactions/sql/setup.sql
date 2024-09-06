@@ -1,14 +1,4 @@
-insert into personal_finance.transactions_incomecategory (id, category,description, user_id)
-values  (1, 'Salary/Wages', null, 1),
-        (2, 'Freelance Income', null, 1),
-        (3, 'Investment Income', null, 1),
-        (4, 'Rental Income', null, 1),
-        (5, 'Side Gig Income', null, 1),
-        (6, 'Interest Income', null, 1),
-        (7, 'Bonus/Commission', null, 1),
-        (8, 'Gifts/Donations', null, 1),
-        (9, 'Government Assistance', null, 1),
-        (10, 'Other', null, 1);
+
 
 insert into personal_finance.transactions_account (id, account_type, account_name, description, user_id)
 values  (1, 'CREDIT_CARD', 'Rakuten Card', null, 1),
@@ -16,24 +6,30 @@ values  (1, 'CREDIT_CARD', 'Rakuten Card', null, 1),
         (3, 'CREDIT_CARD', 'Docomo Card', null, 1),
         (4, 'BANK_ACCOUNT', 'Mizuho', null, 1);
 
-insert into personal_finance.transactions_transactioncategory (id, category, description, user_id)
-values  (1, 'Housing', null, 1),
-        (2, 'Transportation', null, 1),
-        (3, 'Food', null, 1),
-        (4, 'Utilities', null, 1),
-        (5, 'Taxes', null, 1),
-        (6, 'Savings', null, 1),
-        (7, 'Entertainment', null, 1),
-        (8, 'Shopping', null, 1),
-        (9, 'Clothing and Accessories', null, 1),
-        (10, 'Personal Care', null, 1),
-        (11, 'Healthcare', null, 1),
-        (12, 'Insurance', null, 1),
-        (13, 'Education', null, 1),
-        (14, 'Cash Payments', null, 1),
-        (15, 'Charitable Giving', null, 1),
-        (16, 'Miscellaneous', null, 1),
-        (1000, 'N/A', null, 1);
+#category types
+# 1 -> Transaction
+# 2 -> Income
+# 3 -> Saving
+# 4 -> Payment
+insert into personal_finance.transactions_transactioncategory (id, category, category_type, description, user_id)
+values  (1, 'Housing', 1, null, 1),
+        (2, 'Transportation', 1, null, 1),
+        (3, 'Food', 1, null, 1),
+        (4, 'Utilities', 1, null, 1),
+        (5, 'Taxes', 1, null, 1),
+        (6, 'Savings', 3, null, 1),
+        (7, 'Entertainment', 1, null, 1),
+        (8, 'Shopping', 1, null, 1),
+        (9, 'Clothing and Accessories', 1, null, 1),
+        (10, 'Personal Care', 1, null, 1),
+        (11, 'Healthcare', 1, null, 1),
+        (12, 'Insurance', 1, null, 1),
+        (13, 'Education', 1, null, 1),
+        (14, 'Cash Payments', 4, null, 1),
+        (15, 'Charitable Giving', 1, null, 1),
+        (16, 'Miscellaneous', 1, null, 1),
+        (17, 'Income', 2, null, 1),
+        (1000, 'N/A', 1, null, 1);
 
 insert into personal_finance.transactions_transactionsubcategory (id, name, description, category_id, user_id)
 values  (1, 'Mortgage/Rent', null, 1, 1),
@@ -100,5 +96,15 @@ values  (1, 'Mortgage/Rent', null, 1, 1),
         (62, 'Bank Fees', null, 16, 1),
         (63, 'Postal Fees', null, 16, 1),
         (64, 'Legal/Professional Fees', null, 16, 1),
+        (65, 'Salary/Wages', null, 17 , 1),
+        (66, 'Freelance Income', null, 17 , 1),
+        (67, 'Investment Income', null, 17 , 1),
+        (68, 'Rental Income', null, 17 , 1),
+        (69, 'Side Gig Income', null, 17 , 1),
+        (70, 'Interest Income', null, 17 , 1),
+        (71, 'Bonus/Commission', null, 17 , 1),
+        (72, 'Gifts/Donations', null, 17 , 1),
+        (73, 'Government Assistance', null, 17 , 1),
+        (74, 'Other', null, 17 , 1),
         (1000, 'N/A', null, 1000, 1);
 
