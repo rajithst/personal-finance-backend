@@ -67,6 +67,7 @@ class DestinationMap(models.Model):
     destination_eng = models.CharField(max_length=255, blank=True, null=True)
     keywords = models.TextField(blank=True, null=True)
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, null=True, blank=True)
+    category_type = models.IntegerField(blank=True, null=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 

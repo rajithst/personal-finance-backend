@@ -42,8 +42,7 @@ class ResponseDestinationMapSerializer(serializers.ModelSerializer):
     class Meta:
         model = DestinationMap
         fields = ['id', 'destination_original', 'destination', 'destination_eng', 'keywords', 'category',
-                  'category_text', 'subcategory',
-                  'subcategory_text']
+                  'category_text', 'subcategory', 'subcategory_text', 'category_type']
 
     category_text = serializers.ReadOnlyField(source='category.category')
     subcategory_text = serializers.ReadOnlyField(source='subcategory.name')
