@@ -19,15 +19,19 @@ class TransactionImportView(APIView):
     def post(self, request):
         upload_files = request.FILES.getlist('files')
         account_id = request.data.get('account_id')
+        drop_duplicates = request.data.get('drop_duplicates')
+        import_from_last_date = request.data.get('import_from_last_date')
+        start_date = request.data.get('start_date')
+        end_date = request.data.get('end_date')
         if not account_id or not upload_files:
             return Response({'error': 'Missing file'}, status=status.HTTP_400_BAD_REQUEST)
         is_dev_env = settings.ENV == 'dev'
         bucket_name = settings.BUCKET_NAME
         user = self.request.user
+        file_names = []
         try:
             for upload_file in upload_files:
-                current_time_seconds = int(time.time())
-                upload_file_name = f"{current_time_seconds}_{upload_file.name}"
+                upload_file_name = f"{int(time.time())}_{upload_file.name}"
                 file_name = f"user_{user.id}/finance/acc_{account_id}/{upload_file_name}"
                 if is_dev_env:
                     file_path = os.path.join(settings.MEDIA_ROOT, file_name)
@@ -39,7 +43,8 @@ class TransactionImportView(APIView):
                 else:
                     gcs_handler = GCSHandler()
                     gcs_handler.upload_file(bucket_name, upload_file, file_name)
-                self.process_data(account_id, file_name)
+                file_names.append(file_name)
+            self.process_data(account_id, drop_duplicates, import_from_last_date, start_date, end_date, file_names)
             return Response({'message': 'File uploaded successfully'}, status=status.HTTP_201_CREATED)
         except Exception as e:
             logging.error(e)
@@ -49,13 +54,19 @@ class TransactionImportView(APIView):
         file_name = self.request.get('file_name', None)
         if not account_id:
             return Response({'error': 'Missing account_id'}, status=status.HTTP_400_BAD_REQUEST)
-        return self.process_data(account_id, file_name)
+        return self.process_data(account_id, [file_name])
 
-    def process_data(self, account_id=None, file_name=None):
+    def process_data(self, account_id, drop_duplicates, import_from_last_date, start_date=None, end_date=None, file_names=None, ):
         user = self.request.user
         account_id = int(account_id)
         account_data = Account.objects.filter(user_id=user.id, id=account_id).first()
-        loader = CardLoader(request_user=user, account=account_data, file_name=file_name)
+        loader = CardLoader(request_user=user,
+                            drop_duplicates=drop_duplicates,
+                            import_from_last_date=import_from_last_date,
+                            start_date=start_date,
+                            end_date=end_date,
+                            account=account_data,
+                            file_names=file_names)
         expenses = loader.process()
         if expenses is not None and not expenses.empty:
             last_import_date = expenses['date'].max()
