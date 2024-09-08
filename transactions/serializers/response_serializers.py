@@ -2,7 +2,7 @@ import calendar
 
 from rest_framework import serializers
 
-from transactions.common.transaction_const import EXPENSE_CATEGORY_ID, \
+from transactions.common.transaction_const import EXPENSE_CATEGORY_TYPE, \
     TRANSACTION_CATEGORY_TEXT, INCOME_CATEGORY_TYPE, INCOME_CATEGORY_TEXT, SAVINGS_CATEGORY_TYPE, SAVINGS_CATEGORY_TEXT, \
     PAYMENT_CATEGORY_TYPE, PAYMENT_CATEGORY_TEXT
 from transactions.models import Transaction, DestinationMap, TransactionCategory, TransactionSubCategory
@@ -42,8 +42,7 @@ class ResponseDestinationMapSerializer(serializers.ModelSerializer):
     class Meta:
         model = DestinationMap
         fields = ['id', 'destination_original', 'destination', 'destination_eng', 'keywords', 'category',
-                  'category_text', 'subcategory',
-                  'subcategory_text']
+                  'category_text', 'subcategory', 'subcategory_text', 'category_type']
 
     category_text = serializers.ReadOnlyField(source='category.category')
     subcategory_text = serializers.ReadOnlyField(source='subcategory.name')
@@ -57,7 +56,7 @@ class ResponseTransactionCategorySerializer(serializers.ModelSerializer):
     category_type_text = serializers.SerializerMethodField(method_name='get_category_type_text')
 
     def get_category_type_text(self, obj):
-        if obj.category_type == EXPENSE_CATEGORY_ID:
+        if obj.category_type == EXPENSE_CATEGORY_TYPE:
             return TRANSACTION_CATEGORY_TEXT
         elif obj.category_type == INCOME_CATEGORY_TYPE:
             return INCOME_CATEGORY_TEXT

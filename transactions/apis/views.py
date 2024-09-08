@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
 
+from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
+    PAYMENT_CATEGORY_TYPE
 from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
     TransactionSubCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
@@ -22,17 +24,16 @@ class DashboardView(APIView):
 
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-            user__id=self.request.user.id)
+            user__id=self.request.user.id, is_deleted = False)
 
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
-        queryset = (
-            self.get_queryset().filter(
-                **{transaction_type: True, 'is_deleted': False, 'date__year': year, 'user__id': self.request.user.id})
-            .annotate(month=TruncMonth('date'))
-            .values('month', 'destination_original', 'destination')
-            .annotate(total_amount=Sum('amount'))
-            .order_by('month')
-        )
+        queryset = (self.get_queryset().filter(
+            **{transaction_type: True, 'date__year': year})
+                    .annotate(month=TruncMonth('date'))
+                    .values('month', 'destination_original', 'destination')
+                    .annotate(total_amount=Sum('amount'))
+                    .order_by('month')
+                    )
         results = {}
         for item in queryset:
             date_str = item['month'].strftime('%Y-%m-%d')
@@ -44,14 +45,13 @@ class DashboardView(APIView):
         return results
 
     def get_monthly_transaction_summary(self, transaction_type, year):
-        queryset = (
-            self.get_queryset().filter(
-                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
-            .annotate(month=TruncMonth('date'))
-            .values('month')
-            .annotate(total_amount=Sum('amount'))
-            .order_by('month')
-        )
+        queryset = (self.get_queryset().filter(
+            **{transaction_type: True, 'date__year': year})
+                    .annotate(month=TruncMonth('date'))
+                    .values('month')
+                    .annotate(total_amount=Sum('amount'))
+                    .order_by('month')
+                    )
         results = []
         for item in queryset:
             date = item['month']
@@ -59,14 +59,13 @@ class DashboardView(APIView):
         return results
 
     def get_monthly_transaction_category_summary(self, transaction_type, year):
-        queryset = (
-            self.get_queryset().filter(
-                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
-            .annotate(month=TruncMonth('date'))
-            .values('month', 'category_id')
-            .annotate(total_amount=Sum('amount'))
-            .order_by('month', 'category_id')
-        )
+        queryset = (self.get_queryset().filter(
+            **{transaction_type: True, 'date__year': year})
+                    .annotate(month=TruncMonth('date'))
+                    .values('month', 'category_id')
+                    .annotate(total_amount=Sum('amount'))
+                    .order_by('month', 'category_id')
+                    )
         results = {}
         for item in queryset:
             date_str = item['month'].strftime('%Y-%m-%d')
@@ -75,23 +74,9 @@ class DashboardView(APIView):
             results[date_str].append({'category_id': item['category_id'], 'amount': item['total_amount']})
         return results
 
-    def get_monthly_income_summary(self, year):
-        queryset = (
-            self.get_queryset().filter(**{'date__year': year}).annotate(month=TruncMonth('date'))
-            .values('month')
-            .annotate(total_amount=Sum('amount'))
-            .order_by('month')
-        )
-        results = []
-        for item in queryset:
-            date = item['month']
-            results.append({'year': date.year, 'month': date.month, 'amount': item['total_amount']})
-        return results
-
     def get_account_wise_sum(self, transaction_type, year):
-        queryset = (
-            self.get_queryset()
-            .filter(
+        queryset = self.get_queryset()
+        queryset = (queryset.filter(
                 **{transaction_type: True, 'is_deleted': False, 'date__year': year})
             .annotate(month=TruncMonth('date'))
             .values('month', 'account_id')
@@ -108,7 +93,7 @@ class DashboardView(APIView):
 
     def get(self, request):
         year = request.query_params.get('year', 2024)
-        incomes = self.get_monthly_income_summary(year)
+        incomes = self.get_monthly_transaction_summary('is_income', year)
         expenses = self.get_monthly_transaction_summary('is_expense', year)
         payments = self.get_monthly_transaction_summary('is_payment', year)
         savings = self.get_monthly_transaction_summary('is_saving', year)
@@ -252,7 +237,7 @@ class PayeeViewSet(ModelViewSet):
         exist_settings = DestinationMap.objects.get(pk=pk)
         is_payee_renamed = data.get('destination') != exist_settings.destination
         destination = new_destination if is_payee_renamed else exist_settings.destination
-
+        category_type = data.get('category_type')
         target_destinations = [exist_settings.destination]
 
         serializer = self.serializer_class(exist_settings, data=request.data)
@@ -264,11 +249,35 @@ class PayeeViewSet(ModelViewSet):
                 target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
 
             try:
+                update_params = {
+                    'destination': destination,
+                    'alias': new_alias,
+                    'category_id': category,
+                    'subcategory_id': subcategory,
+                }
+                if category_type == INCOME_CATEGORY_TYPE:
+                    update_params['is_income'] = 1
+                    update_params['is_expense'] = 0
+                    update_params['is_saving'] = 0
+                    update_params['is_payment'] = 0
+                elif category_type == SAVINGS_CATEGORY_TYPE:
+                    update_params['is_income'] = 0
+                    update_params['is_expense'] = 1
+                    update_params['is_saving'] = 1
+                    update_params['is_payment'] = 0
+                elif category_type == EXPENSE_CATEGORY_TYPE:
+                    update_params['is_income'] = 0
+                    update_params['is_expense'] = 1
+                    update_params['is_saving'] = 0
+                    update_params['is_payment'] = 0
+                elif category_type == PAYMENT_CATEGORY_TYPE:
+                    update_params['is_income'] = 0
+                    update_params['is_expense'] = 1
+                    update_params['is_saving'] = 0
+                    update_params['is_payment'] = 1
+
                 Transaction.objects.filter(destination__in=target_destinations, user_id=request.user.id).update(
-                    category_id=category,
-                    subcategory_id=subcategory,
-                    destination=destination,
-                    alias=new_alias)
+                    **update_params)
                 DestinationMap.objects.filter(id__in=merge_ids).delete()
             except Exception as e:
                 logging.exception("An unexpected error occurred:", e)
