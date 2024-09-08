@@ -1,7 +1,7 @@
 import logging
 import os
 from collections import defaultdict
-
+from datetime import datetime
 import numpy as np
 import pandas as pd
 from django.conf import settings
@@ -209,16 +209,19 @@ class ProcessFactory:
 
 class ServiceImporter(BaseLoader):
 
-    def import_data(self, user, account, file_name=None):
+    def import_data(self, user, account, file_names=None):
         if not user:
             raise AuthenticationFailed('Unauthenticated import.')
         data_path = f'user_{user.id}/finance/acc_{account.id}/'
         target_path = data_path
-        processed_data = None
         processor = ProcessFactory.get_processor(account.provider)
-        if file_name:
-            df = self.read_single_file(file_name, read_config=processor.get_read_config())
-            processed_data = processor.process_data(df, account)
+        if file_names:
+            formatted_dfs = []
+            for file_name in file_names:
+                df = self.read_single_file(file_name, read_config=processor.get_read_config())
+                formatted_data = processor.process_data(df, account)
+                formatted_dfs.append(formatted_data)
+            processed_data = pd.concat(formatted_dfs, ignore_index=True)
         else:
             processed_data = self.read_all_files(target_path, read_config=processor.get_read_config())
         if processed_data is not None and not processed_data.empty:
@@ -227,13 +230,16 @@ class ServiceImporter(BaseLoader):
 
 
 class CardLoader:
-    def __init__(self, request_user, account, target=None, file_name=None):
+    def __init__(self, request_user, account, drop_duplicates=True, import_from_last_date=None, start_date=None, end_date=None, file_names=None):
         if not request_user or not account:
             raise ValueError('request_user must be set. Account  should be set.')
-        self.target = target
-        self.file_name = file_name
+        self.file_names = file_names
         self.request_user = request_user
         self.account = account
+        self.drop_duplicates = drop_duplicates
+        self.import_from_last_date = import_from_last_date
+        self.start_date = start_date
+        self.end_date = end_date
         self.savings_category_id = None
         self.income_category_id = None
         self.payment_category_id = None
@@ -286,9 +292,17 @@ class CardLoader:
         return self._inverse_dict(contains_categories)
 
     def process(self):
-        transaction_data = ServiceImporter().import_data(self.request_user, self.account, self.file_name)
-        if self.account.last_import_date:
-            transaction_data = transaction_data[transaction_data['date'] > self.account.last_import_date.date()]
+        transaction_data = ServiceImporter().import_data(self.request_user, self.account, self.file_names)
+        if int(self.import_from_last_date):
+            last_import_date = self.account.last_import_date
+            transaction_data = transaction_data[transaction_data['date'] > last_import_date.date()]
+        else:
+            if self.start_date:
+                transaction_data = transaction_data[transaction_data['date'] >= datetime.strptime(self.start_date,'%Y-%m-%d').date()]
+            if self.end_date:
+                transaction_data = transaction_data[transaction_data['date'] <= datetime.strptime(self.end_date,'%Y-%m-%d').date()]
+        if self.drop_duplicates:
+            transaction_data = transaction_data.drop_duplicates()
 
         if not transaction_data.empty:
             transaction_data.sort_values(by='date', ascending=True, inplace=True)
