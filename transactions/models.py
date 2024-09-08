@@ -28,7 +28,9 @@ class Account(models.Model):
     id = models.AutoField(primary_key=True)
     account_type = models.CharField(max_length=255, blank=True, null=True)
     account_name = models.CharField(max_length=255, blank=True, null=True)
+    provider = models.CharField(max_length=255, blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
+    last_import_date = models.DateTimeField(blank=True, null=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
 
@@ -72,10 +74,3 @@ class DestinationMap(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
 
-
-class ImportRules(models.Model):
-    id = models.AutoField(primary_key=True)
-    source = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
-    last_import_date = models.DateField(blank=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)

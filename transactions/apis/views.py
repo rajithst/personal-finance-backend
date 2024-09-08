@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
 
-from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_ID, \
+from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
     PAYMENT_CATEGORY_TYPE
 from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
     TransactionSubCategory
@@ -265,7 +265,7 @@ class PayeeViewSet(ModelViewSet):
                     update_params['is_expense'] = 1
                     update_params['is_saving'] = 1
                     update_params['is_payment'] = 0
-                elif category_type == EXPENSE_CATEGORY_ID:
+                elif category_type == EXPENSE_CATEGORY_TYPE:
                     update_params['is_income'] = 0
                     update_params['is_expense'] = 1
                     update_params['is_saving'] = 0

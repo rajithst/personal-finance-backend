@@ -8,12 +8,12 @@ class GCSHandler:
     def __init__(self):
         self.client = storage.Client()
 
-    def upload_file(self, bucket_name, source_file_name, destination_blob_name):
+    def upload_file(self, bucket_name, file, file_name, content_type=None):
         """Uploads a file to the specified bucket."""
         bucket = self.client.bucket(bucket_name)
-        blob = bucket.blob(destination_blob_name)
-        blob.upload_from_filename(source_file_name)
-        logging.info(f"File {source_file_name} uploaded to {destination_blob_name}.")
+        blob = bucket.blob(file_name)
+        blob.upload_from_string(file, content_type=content_type)
+        logging.info(f"File {file_name} uploaded.")
 
     def move_blob(self, bucket_name, source_file_name, destination_file_name):
         """Move a blob from one directory to another within the same bucket."""
