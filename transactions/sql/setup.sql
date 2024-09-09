@@ -1,10 +1,10 @@
 
 
-insert into personal_finance.transactions_account (id, account_type, account_name, description, user_id)
-values  (1, 'CREDIT_CARD', 'Rakuten Card', null, 1),
-        (2, 'CREDIT_CARD', 'EPOS Card', null, 1),
-        (3, 'CREDIT_CARD', 'Docomo Card', null, 1),
-        (4, 'BANK_ACCOUNT', 'Mizuho', null, 1);
+insert into personal_finance.transactions_account (id, account_type, account_name, description, user_id,last_import_date,provider)
+values  (1, 'CREDIT_CARD', 'Rakuten Card', null, 1, null, 'Rakuten'),
+        (2, 'CREDIT_CARD', 'EPOS Card', null, 1, null, 'EPOS'),
+        (3, 'CREDIT_CARD', 'Docomo Card', null, 1, null, 'Docomo'),
+        (4, 'BANK_ACCOUNT', 'Mizuho', null, 1, null, 'Mizuho');
 
 #category types
 # 1 -> Transaction
