@@ -22,7 +22,6 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
         profile = Profile.objects.get(user_id=self.user.id)
         serializer = ProfileSerializer(profile)
         data['email'] = self.user.email
-        data['profile_id'] = serializer.data.get('id')
         data['is_premium'] = serializer.data.get('is_premium')
         return data
 

@@ -12,7 +12,7 @@ class GCSHandler:
         """Uploads a file to the specified bucket."""
         bucket = self.client.bucket(bucket_name)
         blob = bucket.blob(file_name)
-        blob.upload_from_string(file, content_type=content_type)
+        blob.upload_from_file(file)
         logging.info(f"File {file_name} uploaded.")
 
     def move_blob(self, bucket_name, source_file_name, destination_file_name):

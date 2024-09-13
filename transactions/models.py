@@ -7,6 +7,8 @@ class TransactionCategory(models.Model):
     category = models.CharField(max_length=255, blank=True, null=True)
     category_type = models.IntegerField(blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
+    can_rename = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
     def __str__(self):
@@ -18,6 +20,8 @@ class TransactionSubCategory(models.Model):
     category = models.ForeignKey(TransactionCategory, on_delete=models.SET_NULL, blank=True, null=True)
     name = models.CharField(max_length=100, blank=True, null=True)
     description = models.CharField(max_length=255, blank=True, null=True)
+    can_rename = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
     def __str__(self):

@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
 
+from silk.profiling.profiler import silk_profile
+
 from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
     PAYMENT_CATEGORY_TYPE
 from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
@@ -17,14 +19,15 @@ from transactions.serializers.response_serializers import ResponseTransactionSer
 import pandas as pd
 import logging
 
-from transactions.serializers.serializers import AccountSerializer, TransactionSerializer
+from transactions.serializers.serializers import AccountSerializer, TransactionSerializer, \
+    TransactionSubCategorySerializer, TransactionCategorySerializer
 
 
 class DashboardView(APIView):
 
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-            user__id=self.request.user.id, is_deleted = False)
+            user__id=self.request.user.id, is_deleted=False)
 
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
         queryset = (self.get_queryset().filter(
@@ -77,12 +80,12 @@ class DashboardView(APIView):
     def get_account_wise_sum(self, transaction_type, year):
         queryset = self.get_queryset()
         queryset = (queryset.filter(
-                **{transaction_type: True, 'is_deleted': False, 'date__year': year})
-            .annotate(month=TruncMonth('date'))
-            .values('month', 'account_id')
-            .annotate(total_amount=Sum('amount'))
-            .order_by('month')
-        )
+            **{transaction_type: True, 'is_deleted': False, 'date__year': year})
+                    .annotate(month=TruncMonth('date'))
+                    .values('month', 'account_id')
+                    .annotate(total_amount=Sum('amount'))
+                    .order_by('month')
+                    )
         results = {}
         for item in queryset:
             date_str = item['month'].strftime('%Y-%m-%d')
@@ -106,13 +109,11 @@ class DashboardView(APIView):
                          "payment": payments, "saving": savings})
 
 
-class TransactionViewSet(ModelViewSet):
-    queryset = Transaction.objects.select_related('category', 'subcategory', 'account').all()
-    serializer_class = ResponseTransactionSerializer
+class TransactionView(APIView):
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        queryset = queryset.filter(user_id=self.request.user.id)
+        queryset = Transaction.objects.select_related('category', 'subcategory', 'account', 'user').filter(
+            user_id=self.request.user.id)
         return queryset
 
     def _group_by(self, data: pd.DataFrame):
@@ -126,9 +127,9 @@ class TransactionViewSet(ModelViewSet):
             transactions = vals.to_dict('records')
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
                                'total': float(vals.amount.sum()), 'transactions': transactions})
-        return reversed(group_data)
+        return list(reversed(group_data))
 
-    def list(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         query_params = request.query_params
         year = query_params.get('year', None)
         target = query_params.get('target', None)
@@ -151,12 +152,12 @@ class TransactionViewSet(ModelViewSet):
             subcategory_ids = subcategory_ids.split(',')
             queryset = queryset.filter(subcategory_id__in=subcategory_ids)
 
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = ResponseTransactionSerializer(queryset, many=True)
         df = pd.DataFrame(serializer.data)
         return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
 
-    def create(self, request, *args, **kwargs):
-        data = request.data
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy()
         update_similar = data.get('update_similar')
         if update_similar:
             self.update_similar_transactions(data)
@@ -166,12 +167,12 @@ class TransactionViewSet(ModelViewSet):
             item = serializer.save()
             response = Transaction.objects.get(pk=item.pk)
             response_serializer = ResponseTransactionSerializer(response)
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def update(self, request, *args, **kwargs):
+    def put(self, request, *args, **kwargs):
         data = request.data
-        pk = self.kwargs['pk']
+        pk = self.kwargs['id']
         update_similar = data.get('update_similar')
         merge_ids = data.get('merge_ids')
 
@@ -181,7 +182,7 @@ class TransactionViewSet(ModelViewSet):
         if update_similar:
             self.update_similar_transactions(data)
 
-        instance = self.get_object()
+        instance = self.get_queryset().get(pk=pk)
         serializer = ResponseTransactionSerializer(instance, data=data, partial=True)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
@@ -209,23 +210,52 @@ class TransactionViewSet(ModelViewSet):
             logging.exception("An unexpected error occurred:", e)
 
 
-class PayeeViewSet(ModelViewSet):
-    queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by(
-        'category_id',
-        'subcategory_id')
-    serializer_class = ResponseDestinationMapSerializer
-
+class BasePayeeView:
     def get_queryset(self):
-        queryset = super().get_queryset()
-        queryset = queryset.filter(user_id=self.request.user.id)
+        queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by(
+            'category_id',
+            'subcategory_id')
         return queryset
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({'payees': serializer.data})
+    def get_by_id(self, pk):
+        instance = self.get_queryset().get(pk=pk)
+        return instance
 
-    def update(self, request, *args, **kwargs):
+    def get_by_name(self, name):
+        instance = self.get_queryset().get(destination=name)
+        return instance
+
+
+class PayeeDetailView(APIView, BasePayeeView):
+    def get(self, request, *args, **kwargs):
+        id = kwargs.get('id', None)
+        name = kwargs.get('name', None)
+        if id:
+            instance = self.get_by_id(id)
+        elif name:
+            instance = self.get_by_name(name)
+        else:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+            destination=instance.destination, user_id=request.user.id)
+        payee_serializer = ResponseDestinationMapSerializer(instance)
+        transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
+        return Response({'payee': payee_serializer.data, 'transactions': transaction_serializer.data})
+
+
+class PayeeView(APIView, BasePayeeView):
+    def get(self, request, *args, **kwargs):
+        id = kwargs.get('id', None)
+        if id:
+            instance = self.get_by_id(id)
+            payee_serializer = ResponseDestinationMapSerializer(instance)
+            return Response({'payee': payee_serializer.data})
+        else:
+            queryset = self.get_queryset()
+            serializer = ResponseDestinationMapSerializer(queryset, many=True)
+            return Response({'payees': serializer.data})
+
+    def put(self, request, *args, **kwargs):
         data = request.data
         pk = data.get('id')
         keywords = data.get('keywords')
@@ -240,7 +270,7 @@ class PayeeViewSet(ModelViewSet):
         category_type = data.get('category_type')
         target_destinations = [exist_settings.destination]
 
-        serializer = self.serializer_class(exist_settings, data=request.data)
+        serializer = ResponseDestinationMapSerializer(exist_settings, data=request.data)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
 
@@ -283,25 +313,6 @@ class PayeeViewSet(ModelViewSet):
                 logging.exception("An unexpected error occurred:", e)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def retrieve(self, request, *args, **kwargs):
-        try:
-            pk = self.kwargs.get('id', None)
-            name = self.kwargs.get('name', None)
-            if pk:
-                instance = self.get_queryset().get(pk=pk)
-            elif name:
-                instance = self.get_queryset().get(destination=name)
-            else:
-                instance = self.get_object()
-            transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-                destination=instance.destination, user_id=request.user.id)
-            serializer = self.get_serializer(instance)
-            transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
-            return Response({'payee': serializer.data, 'transactions': transaction_serializer.data})
-        except:
-            logging.exception("An unexpected error occurred")
-            return Response({'payee': None, 'transactions': None})
 
 
 class TransactionBulkView(APIView):
@@ -385,3 +396,88 @@ class ClientSettingsView(APIView):
         return Response({'accounts': accounts_serializer.data,
                          'transaction_categories': transaction_category_serializer.data,
                          'transaction_sub_categories': transaction_subcategories_serializer.data})
+
+
+class CategorySettingsView(APIView):
+
+    def get_category_queryset(self, params):
+        return TransactionCategory.objects.filter(user_id=self.request.user.id, **params)
+
+    def get_subcategory_queryset(self, params):
+        return TransactionSubCategory.objects.select_related('category').filter(user_id=self.request.user.id, **params)
+
+    def get_transaction_queryset(self, params):
+        return Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+            user_id=self.request.user.id, **params)
+
+    def delete_category_and_subcategories(self, user_id, category_id):
+        na_category_id = self.get_category_queryset({'category': 'N/A'}).first().id
+        na_subcategory_id = self.get_subcategory_queryset({'name': 'N/A'}).first().id
+
+        self.get_transaction_queryset({'category_id': category_id}).update(category_id=na_category_id,
+                                                                           subcategory_id=na_subcategory_id)
+        self.get_subcategory_queryset({'category_id': category_id}).delete()
+        self.get_category_queryset({'id': category_id}).delete()
+
+    def put(self, request):
+        data = request.data.copy()
+        category = data.get('category')
+        subcategories = data.get('subcategories')
+        deleted_subcategories = data.get('deleted_sub_categories')
+        delete_category = data.get('delete_category')
+        user_id = self.request.user.id
+
+        processed_subcategories = []
+
+        category['user_id'] = user_id
+        category_id = category.get('id')
+
+        try:
+            if delete_category:
+                self.delete_category_and_subcategories(user_id, category_id)
+                return Response({'category': None, 'subcategories': []})
+
+            existing_category = self.get_category_queryset({'id': category_id}).first()
+            category_serializer = TransactionCategorySerializer(existing_category, data=category, partial=True)
+            if category_serializer.is_valid(raise_exception=True):
+                saved_category = category_serializer.save()
+            else:
+                return Response(category_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            if deleted_subcategories:
+                deleted_sub_category_ids = [obj.get('id') for obj in deleted_subcategories]
+                na_subcategory_id = self.get_subcategory_queryset({'name': 'N/A'}).first().id
+                self.get_transaction_queryset({'subcategory_id__in': deleted_sub_category_ids}).update(
+                    subcategory_id=na_subcategory_id)
+                self.get_subcategory_queryset({'id__in': deleted_sub_category_ids}).delete()
+
+            subcategory_ids = [obj.get('id') for obj in subcategories]
+            queryset = self.get_subcategory_queryset({'id__in': subcategory_ids})
+            new_subcategories = []
+            for item in subcategories:
+                subcategory_id = item.get('id')
+                if subcategory_id:
+                    instance = queryset.get(id=subcategory_id)
+                    instance.name = item.get('name')
+                    instance.description = item.get('description')
+                    instance.save()
+                    processed_subcategories.append(instance)
+                else:
+                    item['user'] = user_id
+                    new_subcategories.append(item)
+
+            if new_subcategories:
+                subcategory_serializer = TransactionSubCategorySerializer(data=new_subcategories, many=True)
+                if subcategory_serializer.is_valid(raise_exception=True):
+                    saved_items = subcategory_serializer.save()
+                    for item in saved_items:
+                        processed_subcategories.append(item)
+
+            response_category_serializer = ResponseTransactionCategorySerializer(saved_category)
+            response_subcategory_serializer = ResponseTransactionSubCategorySerializer(processed_subcategories,
+                                                                                       many=True)
+            return Response({'category': response_category_serializer.data,
+                             'subcategories': response_subcategory_serializer.data})
+        except ValidationError as e:
+            logging.exception("Validation error:", e)
+            return Response({'status': status.HTTP_400_BAD_REQUEST, })
