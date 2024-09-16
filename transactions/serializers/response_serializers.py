@@ -5,7 +5,7 @@ from rest_framework import serializers
 from transactions.common.transaction_const import EXPENSE_CATEGORY_TYPE, \
     TRANSACTION_CATEGORY_TEXT, INCOME_CATEGORY_TYPE, INCOME_CATEGORY_TEXT, SAVINGS_CATEGORY_TYPE, SAVINGS_CATEGORY_TEXT, \
     PAYMENT_CATEGORY_TYPE, PAYMENT_CATEGORY_TEXT
-from transactions.models import Transaction, DestinationMap, TransactionCategory, TransactionSubCategory
+from transactions.models import Transaction, DestinationMap, TransactionCategory, TransactionSubCategory, Account
 
 
 class DateSerializeHelper(object):
@@ -73,3 +73,8 @@ class ResponseTransactionSubCategorySerializer(serializers.ModelSerializer):
 
     category_text = serializers.ReadOnlyField(source='category.category')
 
+
+class ResponseAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = ['id', 'account_type', 'account_name', 'description', 'last_import_date', 'provider']

@@ -11,6 +11,7 @@ urlpatterns = [
     path('payee-detail/<int:id>/', views.PayeeDetailView.as_view()),
     path('payee-detail/<str:name>/', views.PayeeDetailView.as_view()),
     path('category-settings/', views.CategorySettingsView.as_view()),
+    path('credit-account/', views.CreditAccountView.as_view()),
     path('bulk/transaction/', views.TransactionBulkView.as_view()),
     path('import/transactions/', TransactionImportView.as_view()),
     path('settings/', ClientSettingsView.as_view())

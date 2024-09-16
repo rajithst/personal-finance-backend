@@ -13,7 +13,8 @@ from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_
 from transactions.models import Transaction, DestinationMap, Account, TransactionCategory, \
     TransactionSubCategory
 from transactions.serializers.response_serializers import ResponseTransactionSerializer, \
-    ResponseDestinationMapSerializer, ResponseTransactionCategorySerializer, ResponseTransactionSubCategorySerializer
+    ResponseDestinationMapSerializer, ResponseTransactionCategorySerializer, ResponseTransactionSubCategorySerializer, \
+    ResponseAccountSerializer
 import pandas as pd
 import logging
 
@@ -391,7 +392,7 @@ class ClientSettingsView(APIView):
         transaction_category_serializer = ResponseTransactionCategorySerializer(transaction_categories, many=True)
         transaction_subcategories_serializer = ResponseTransactionSubCategorySerializer(transaction_subcategories,
                                                                                         many=True)
-        accounts_serializer = AccountSerializer(accounts, many=True)
+        accounts_serializer = ResponseAccountSerializer(accounts, many=True)
         return Response({'accounts': accounts_serializer.data,
                          'transaction_categories': transaction_category_serializer.data,
                          'transaction_sub_categories': transaction_subcategories_serializer.data})
@@ -503,3 +504,25 @@ class CategorySettingsView(APIView):
                                                                                    many=True)
         return Response({'category': response_category_serializer.data,
                          'subcategories': response_subcategory_serializer.data})
+
+class CreditAccountView(APIView):
+
+    def post(self, request):
+        data = request.data.copy()
+        data['user'] = self.request.user.id
+        serializer = AccountSerializer(data=data)
+        return self.handle_serializer(serializer)
+
+    def put(self, request):
+        data = request.data.copy()
+        data['user'] = self.request.user.id
+        account = Account.objects.get(pk=data.get('id'))
+        serializer = AccountSerializer(account, data=data, partial=True)
+        return self.handle_serializer(serializer)
+
+    def handle_serializer(self, serializer):
+        if serializer.is_valid(raise_exception=True):
+            saved_item = serializer.save()
+            response_serializer = ResponseAccountSerializer(saved_item)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
