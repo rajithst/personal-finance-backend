@@ -5,7 +5,7 @@ import time
 from django.conf import settings
 from django.core.files.storage import default_storage
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, JSONParser
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,6 +16,7 @@ from utils.gcs import GCSHandler
 
 class TransactionImportView(APIView):
     parser_classes = (MultiPartParser,)
+
     def post(self, request):
         upload_files = request.FILES.getlist('files')
         account_id = request.data.get('account_id')
@@ -49,6 +50,7 @@ class TransactionImportView(APIView):
         except Exception as e:
             logging.error(e)
             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     def get(self, request):
         account_id = self.request.get('account_id', None)
         file_name = self.request.get('file_name', None)
@@ -56,7 +58,8 @@ class TransactionImportView(APIView):
             return Response({'error': 'Missing account_id'}, status=status.HTTP_400_BAD_REQUEST)
         return self.process_data(account_id, [file_name])
 
-    def process_data(self, account_id, drop_duplicates, import_from_last_date, start_date=None, end_date=None, file_names=None, ):
+    def process_data(self, account_id, drop_duplicates, import_from_last_date, start_date=None, end_date=None,
+                     file_names=None, ):
         user = self.request.user
         account_id = int(account_id)
         account_data = Account.objects.filter(user_id=user.id, id=account_id).first()

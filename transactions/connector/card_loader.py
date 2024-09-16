@@ -244,8 +244,6 @@ class CardLoader:
         self.income_category_id = None
         self.payment_category_id = None
         self.expense_category_id = None
-        self.na_category_id = None
-        self.na_sub_category_id = None
         self.get_user_settings()
 
     def get_user_settings(self):
@@ -254,8 +252,6 @@ class CardLoader:
         self.savings_category_id = category_queryset.filter(category_type=SAVINGS_CATEGORY_TYPE).first().id
         self.income_category_id = category_queryset.filter(category_type=INCOME_CATEGORY_TYPE).first().id
         self.payment_category_id = category_queryset.filter(category_type=PAYMENT_CATEGORY_TYPE).first().id
-        self.na_category_id = category_queryset.filter(category='N/A').first().id
-        self.na_sub_category_id = subcategory_queryset.filter(name='N/A').first().id
 
     def get_payee_map(self):
         queryset = DestinationMap.objects.filter(user_id=self.request_user.id).all()
@@ -327,12 +323,12 @@ class CardLoader:
             expense_payees = new_payees[new_payees['is_income'] == 0]
 
             income_payees = income_payees.assign(
-                **{'destination_eng': None, 'keywords': None, 'category_id': self.na_category_id,
-                   'subcategory_id': self.na_sub_category_id, 'user_id': self.request_user.id,
+                **{'destination_eng': None, 'keywords': None, 'category_id': None,
+                   'subcategory_id': None, 'user_id': self.request_user.id,
                    'category_type': INCOME_CATEGORY_TYPE})
             expense_payees = expense_payees.assign(
-                **{'destination_eng': None, 'keywords': None, 'category_id': self.na_category_id,
-                   'subcategory_id': self.na_sub_category_id, 'user_id': self.request_user.id,
+                **{'destination_eng': None, 'keywords': None, 'category_id': None,
+                   'subcategory_id': None, 'user_id': self.request_user.id,
                    'category_type': EXPENSE_CATEGORY_TYPE})
             new_payees = pd.concat([income_payees, expense_payees]).drop(columns=['is_income'])
             try:
@@ -353,11 +349,8 @@ class CardLoader:
             all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
             all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
             all_expenses.loc[all_expenses['is_income'], 'category_id'] = self.income_category_id
-            all_expenses['category_id'] = all_expenses['category_id'].replace(
-                {np.nan: self.na_category_id}).astype(
-                int)
-            all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace(
-                {np.nan: self.na_sub_category_id}).astype(int)
+            all_expenses['category_id'] = all_expenses['category_id'].replace({np.nan: None})
+            all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace({np.nan: None})
             all_expenses['is_saving'] = all_expenses['category_id'] == self.savings_category_id
             all_expenses['is_payment'] = all_expenses['category_id'] == self.payment_category_id
             logging.info('All expenses processed')

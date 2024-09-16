@@ -11,9 +11,6 @@ class TransactionCategory(models.Model):
     can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
-    def __str__(self):
-        return self.category
-
 
 class TransactionSubCategory(models.Model):
     id = models.AutoField(primary_key=True)
@@ -23,9 +20,6 @@ class TransactionSubCategory(models.Model):
     can_rename = models.BooleanField(default=False)
     can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
-
-    def __str__(self):
-        return self.name
 
 
 class Account(models.Model):
@@ -76,5 +70,3 @@ class DestinationMap(models.Model):
     category_type = models.IntegerField(blank=True, null=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
-
-

@@ -1,3 +1,4 @@
+import numpy as np
 from django.db import IntegrityError
 from django.db.models import Sum
 from django.db.models.functions import TruncMonth
@@ -5,10 +6,7 @@ from rest_framework import status
 from django.core.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
 from decimal import Decimal
-
-from silk.profiling.profiler import silk_profile
 
 from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
     PAYMENT_CATEGORY_TYPE
@@ -154,6 +152,7 @@ class TransactionView(APIView):
 
         serializer = ResponseTransactionSerializer(queryset, many=True)
         df = pd.DataFrame(serializer.data)
+        df = df.replace({np.nan: None})
         return Response({'payload': self._group_by(df)}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
@@ -408,16 +407,11 @@ class CategorySettingsView(APIView):
 
     def get_transaction_queryset(self, params):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-            user_id=self.request.user.id, **params)
+            user_id=self.request.user.id, **params).only('id', 'category_id', 'subcategory_id')
 
-    def delete_category_and_subcategories(self, user_id, category_id):
-        na_category_id = self.get_category_queryset({'category': 'N/A'}).first().id
-        na_subcategory_id = self.get_subcategory_queryset({'name': 'N/A'}).first().id
-
-        self.get_transaction_queryset({'category_id': category_id}).update(category_id=na_category_id,
-                                                                           subcategory_id=na_subcategory_id)
-        self.get_subcategory_queryset({'category_id': category_id}).delete()
-        self.get_category_queryset({'id': category_id}).delete()
+    def get_payee_queryset(self, params):
+        return DestinationMap.objects.select_related('category', 'subcategory').filter(user_id=self.request.user.id,
+                                                                                       **params)
 
     def put(self, request):
         data = request.data.copy()
@@ -426,7 +420,6 @@ class CategorySettingsView(APIView):
         deleted_subcategories = data.get('deleted_sub_categories')
         delete_category = data.get('delete_category')
         user_id = self.request.user.id
-
         processed_subcategories = []
 
         category['user_id'] = user_id
@@ -434,7 +427,8 @@ class CategorySettingsView(APIView):
 
         try:
             if delete_category:
-                self.delete_category_and_subcategories(user_id, category_id)
+                self.get_subcategory_queryset({'category_id': category_id}).delete()
+                self.get_category_queryset({'id': category_id}).delete()
                 return Response({'category': None, 'subcategories': []})
 
             existing_category = self.get_category_queryset({'id': category_id}).first()
@@ -446,9 +440,6 @@ class CategorySettingsView(APIView):
 
             if deleted_subcategories:
                 deleted_sub_category_ids = [obj.get('id') for obj in deleted_subcategories]
-                na_subcategory_id = self.get_subcategory_queryset({'name': 'N/A'}).first().id
-                self.get_transaction_queryset({'subcategory_id__in': deleted_sub_category_ids}).update(
-                    subcategory_id=na_subcategory_id)
                 self.get_subcategory_queryset({'id__in': deleted_sub_category_ids}).delete()
 
             subcategory_ids = [obj.get('id') for obj in subcategories]
@@ -467,17 +458,48 @@ class CategorySettingsView(APIView):
                     new_subcategories.append(item)
 
             if new_subcategories:
-                subcategory_serializer = TransactionSubCategorySerializer(data=new_subcategories, many=True)
-                if subcategory_serializer.is_valid(raise_exception=True):
-                    saved_items = subcategory_serializer.save()
-                    for item in saved_items:
-                        processed_subcategories.append(item)
+                self.collect_new_subcategories(new_subcategories, processed_subcategories)
 
-            response_category_serializer = ResponseTransactionCategorySerializer(saved_category)
-            response_subcategory_serializer = ResponseTransactionSubCategorySerializer(processed_subcategories,
-                                                                                       many=True)
-            return Response({'category': response_category_serializer.data,
-                             'subcategories': response_subcategory_serializer.data})
+            return self.handle_success_response(saved_category, None)
         except ValidationError as e:
             logging.exception("Validation error:", e)
             return Response({'status': status.HTTP_400_BAD_REQUEST, })
+
+    def post(self, request):
+        data = request.data.copy()
+        category = data.get('category')
+        subcategories = data.get('subcategories')
+        processed_subcategories = []
+        category['user'] = self.request.user.id
+        new_subcategories = []
+        try:
+            serializer = TransactionCategorySerializer(data=category)
+            if serializer.is_valid(raise_exception=True):
+                item = serializer.save()
+                saved_category = TransactionCategory.objects.get(pk=item.pk)
+                for item in subcategories:
+                    item['user'] = self.request.user.id
+                    item['category'] = saved_category.id
+                    new_subcategories.append(item)
+                self.collect_new_subcategories(new_subcategories, processed_subcategories)
+
+                return self.handle_success_response(saved_category, processed_subcategories)
+        except ValidationError as e:
+            logging.exception("Validation error:", e)
+            return Response({'status': status.HTTP_400_BAD_REQUEST, })
+
+    def collect_new_subcategories(self, new_subcategories, processed_subcategories):
+        subcategory_serializer = TransactionSubCategorySerializer(data=new_subcategories, many=True)
+        if subcategory_serializer.is_valid(raise_exception=True):
+            saved_items = subcategory_serializer.save()
+            for item in saved_items:
+                processed_subcategories.append(item)
+
+    def handle_success_response(self, saved_category, processed_subcategories):
+        response_category_serializer = ResponseTransactionCategorySerializer(saved_category)
+        if not processed_subcategories:
+            processed_subcategories = self.get_subcategory_queryset({'category_id': saved_category.id}).all()
+        response_subcategory_serializer = ResponseTransactionSubCategorySerializer(processed_subcategories,
+                                                                                   many=True)
+        return Response({'category': response_category_serializer.data,
+                         'subcategories': response_subcategory_serializer.data})
