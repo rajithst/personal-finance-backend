@@ -62,7 +62,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'silk',
     'rest_framework',
     'djoser',
     "transactions",
@@ -73,7 +72,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'silk.middleware.SilkyMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -84,8 +82,6 @@ MIDDLEWARE = [
 
 ]
 
-if DEBUG:
-    MIDDLEWARE += ['silk.middleware.SilkyMiddleware']
 
 ROOT_URLCONF = 'core.urls'
 
@@ -166,7 +162,7 @@ AUTH_USER_MODEL = "oauth.User"
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
-    'SIGNING_KEY': 'mysigningkey',
+    'SIGNING_KEY': env('SECRET_KEY') if ENV == 'prod' else 'mySigningKey',
     'TOKEN_OBTAIN_SERIALIZER': "oauth.serializers.TokenObtainPairSerializer",
 }
 

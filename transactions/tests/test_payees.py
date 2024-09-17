@@ -1,6 +1,3 @@
-import random
-from datetime import datetime, timedelta
-
 import pytest
 from rest_framework import status
 from model_bakery import baker
@@ -20,7 +17,6 @@ class TestPayees:
         mock_user = self.get_mock_user()
         authenticated_user(mock_user)
         baker.make(DestinationMap, _quantity=10)
-
 
         # Compare
         response = api_client.get('/finance/payee/')
@@ -43,8 +39,10 @@ class TestPayees:
     def test_if_returns_payee_details_by_id(self, api_client, authenticated_user):
         mock_user = self.get_mock_user()
         authenticated_user(mock_user)
-        destination = baker.make(DestinationMap, user=mock_user, destination='test_destination', destination_original='test_destination_original')
-        transaction = baker.make(Transaction, user=mock_user, destination='test_destination', destination_original='test_destination_original', _quantity=10)
+        destination = baker.make(DestinationMap, user=mock_user, destination='test_destination',
+                                 destination_original='test_destination_original')
+        transaction = baker.make(Transaction, user=mock_user, destination='test_destination',
+                                 destination_original='test_destination_original', _quantity=10)
         response = api_client.get(f'/finance/payee-detail/{destination.id}/')
         assert response.status_code == status.HTTP_200_OK
         assert 'payee' in response.data and 'transactions' in response.data
@@ -52,5 +50,3 @@ class TestPayees:
         transaction_data = response.data['transactions']
         assert payee_data['destination'] == 'test_destination'
         assert len(transaction_data) == 10
-
-

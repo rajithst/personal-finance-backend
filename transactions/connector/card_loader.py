@@ -7,10 +7,10 @@ import pandas as pd
 from django.conf import settings
 from rest_framework.exceptions import AuthenticationFailed
 
-from transactions.common.enums import DataSource, AccountTypes, AccountProviders
+from transactions.common.enums import DataSource, AccountProviders
 from transactions.common.transaction_const import SAVINGS_CATEGORY_TYPE, PAYMENT_CATEGORY_TYPE, INCOME_CATEGORY_TYPE, \
     EXPENSE_CATEGORY_TYPE
-from transactions.models import DestinationMap, TransactionCategory, TransactionSubCategory, Account
+from transactions.models import DestinationMap, TransactionCategory, TransactionSubCategory
 from utils.gcs import GCSHandler
 
 
@@ -95,7 +95,8 @@ class BaseLoader:
         try:
             df['destination'] = df['destination'].apply(
                 lambda x: self.clean_electronic_signatures(x, cleanable_signatures))
-            df['destination_original'] = df.apply(lambda x: x['destination'].strip() if x['destination'] else x['destination'], axis=1)
+            df['destination_original'] = df.apply(
+                lambda x: x['destination'].strip() if x['destination'] else x['destination'], axis=1)
             return df
         except Exception as e:
             logging.exception(e)
@@ -230,7 +231,8 @@ class ServiceImporter(BaseLoader):
 
 
 class CardLoader:
-    def __init__(self, request_user, account, drop_duplicates=True, import_from_last_date=None, start_date=None, end_date=None, file_names=None):
+    def __init__(self, request_user, account, drop_duplicates=True, import_from_last_date=None, start_date=None,
+                 end_date=None, file_names=None):
         if not request_user or not account:
             raise ValueError('request_user must be set. Account  should be set.')
         self.file_names = file_names
@@ -259,8 +261,10 @@ class CardLoader:
         if payee_maps:
             payee_maps = pd.DataFrame(payee_maps)
             payee_maps = payee_maps[
-                ['destination', 'destination_original', 'destination_eng', 'keywords', 'category_id', 'subcategory_id']]
-            payee_maps.columns = ['destination', 'destination_original', 'alias_map', 'keywords', 'category_id',
+                ['destination', 'destination_original', 'destination_eng', 'keywords', 'category_type', 'category_id',
+                 'subcategory_id']]
+            payee_maps.columns = ['destination', 'destination_original', 'alias_map', 'keywords', 'category_type',
+                                  'category_id',
                                   'subcategory_id']
             payee_maps.keywords = payee_maps.keywords.fillna('')
             payee_maps.destination_original = payee_maps.destination_original.fillna('')
@@ -268,7 +272,8 @@ class CardLoader:
                                                                     sep=",").str.strip(',')
             return payee_maps
         return pd.DataFrame(
-            columns=['destination', 'destination_original', 'alias_map', 'category_id', 'subcategory_id', 'keywords'])
+            columns=['destination', 'destination_original', 'alias_map', 'category_type', 'category_id',
+                     'subcategory_id', 'keywords'])
 
     def _inverse_dict(self, d):
         inverted = {}
@@ -294,9 +299,11 @@ class CardLoader:
             transaction_data = transaction_data[transaction_data['date'] > last_import_date.date()]
         else:
             if self.start_date:
-                transaction_data = transaction_data[transaction_data['date'] >= datetime.strptime(self.start_date,'%Y-%m-%d').date()]
+                transaction_data = transaction_data[
+                    transaction_data['date'] >= datetime.strptime(self.start_date, '%Y-%m-%d').date()]
             if self.end_date:
-                transaction_data = transaction_data[transaction_data['date'] <= datetime.strptime(self.end_date,'%Y-%m-%d').date()]
+                transaction_data = transaction_data[
+                    transaction_data['date'] <= datetime.strptime(self.end_date, '%Y-%m-%d').date()]
         if self.drop_duplicates:
             transaction_data = transaction_data.drop_duplicates()
 
@@ -315,8 +322,8 @@ class CardLoader:
                     rewrite_rules[field]
                 transaction_data.loc[transaction_data['destination'].str.contains(field, regex=False), 'destination'] = \
                     rewrite_rules[field]
-            existing_payees = payee_maps['destination_original'].unique()
-            new_payees = transaction_data[~transaction_data['destination_original'].isin(existing_payees)]
+            existing_payees = payee_maps['destination'].unique()
+            new_payees = transaction_data[~transaction_data['destination'].isin(existing_payees)]
             new_payees = new_payees.drop_duplicates(subset='destination_original', keep="first")
             new_payees = new_payees[['destination', 'destination_original', 'is_income']]
             income_payees = new_payees[new_payees['is_income'] == 1]
@@ -339,22 +346,46 @@ class CardLoader:
                 logging.info('new payees imported')
             except Exception as e:
                 logging.exception('Error saving new payees')
-            payee_maps = payee_maps[['category_id', 'subcategory_id', 'destination', 'alias_map']]
+            payee_maps = payee_maps[['category_id', 'subcategory_id', 'destination', 'alias_map', 'category_type']]
 
             all_expenses = transaction_data
             all_expenses = pd.merge(all_expenses, payee_maps, on=['destination'], how='left')
+            all_expenses['category_type'] = pd.to_numeric(all_expenses['category_type'], errors='coerce')
+            all_expenses.loc[
+                all_expenses['category_type'] == EXPENSE_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
+                                                                         'is_saving']] = [True,
+                                                                                          False,
+                                                                                          False,
+                                                                                          False]
+            all_expenses.loc[
+                all_expenses['category_type'] == INCOME_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
+                                                                        'is_saving']] = [False,
+                                                                                         True,
+                                                                                         False,
+                                                                                         False]
+            all_expenses.loc[
+                all_expenses['category_type'] == SAVINGS_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
+                                                                         'is_saving']] = [True,
+                                                                                          False,
+                                                                                          False,
+                                                                                          True]
+            all_expenses.loc[
+                all_expenses['category_type'] == PAYMENT_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
+                                                                         'is_saving']] = [True,
+                                                                                          False,
+                                                                                          True,
+                                                                                          False]
+
             all_expenses.loc[all_expenses['alias_map'].isnull() & all_expenses['alias'].notnull(), 'alias_map'] = \
                 all_expenses['alias']
-            all_expenses = all_expenses.drop(columns=['alias'])
+
+            all_expenses = all_expenses.drop(columns=['alias', 'category_type'])
             all_expenses = all_expenses.rename(columns={'alias_map': 'alias'})
             all_expenses['alias'] = all_expenses['alias'].replace({np.nan: None})
             all_expenses.loc[all_expenses['is_income'], 'category_id'] = self.income_category_id
             all_expenses['category_id'] = all_expenses['category_id'].replace({np.nan: None})
             all_expenses['subcategory_id'] = all_expenses['subcategory_id'].replace({np.nan: None})
-            all_expenses['is_saving'] = all_expenses['category_id'] == self.savings_category_id
-            all_expenses['is_payment'] = all_expenses['category_id'] == self.payment_category_id
             logging.info('All expenses processed')
             return all_expenses
         else:
             return None
-

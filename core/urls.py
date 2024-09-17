@@ -31,7 +31,6 @@ urlpatterns = [
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
-    path('silk/', include('silk.urls', namespace='silk')),
 ]
 
 if settings.DEBUG:
