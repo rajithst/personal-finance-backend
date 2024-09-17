@@ -72,16 +72,15 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'silk.middleware.SilkyMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-
 
 ]
 
@@ -158,11 +157,9 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
-        #'rest_framework.permissions.IsAuthenticated',
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ]
 }
-
 
 AUTH_USER_MODEL = "oauth.User"
 
@@ -176,7 +173,6 @@ SIMPLE_JWT = {
 DJOSER = {
     'SERIALIZERS': {
         'user_create': 'oauth.serializers.UserCreateSerializer',
-        #'token_create': 'oauth.serializers.TokenCreateSerializer',
     },
 }
 
@@ -185,8 +181,6 @@ INTERNAL_IPS = [
 ]
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
-
-
 
 LOGGING = {
     'version': 1,

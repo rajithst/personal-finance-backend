@@ -505,6 +505,7 @@ class CategorySettingsView(APIView):
         return Response({'category': response_category_serializer.data,
                          'subcategories': response_subcategory_serializer.data})
 
+
 class CreditAccountView(APIView):
 
     def post(self, request):
