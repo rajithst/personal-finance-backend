@@ -1,6 +1,6 @@
 import numpy as np
 from django.db import IntegrityError
-from django.db.models import Sum
+from django.db.models import Sum, Case, When, IntegerField
 from django.db.models.functions import TruncMonth
 from rest_framework import status
 from django.core.exceptions import ValidationError
@@ -48,7 +48,7 @@ class DashboardView(APIView):
 
     def get_monthly_transaction_summary(self, transaction_type, year):
         queryset = (self.get_queryset().filter(
-            **{transaction_type: True, 'date__year': year})
+            **{transaction_type: True, 'date__year': year}, is_deleted=False)
                     .annotate(month=TruncMonth('date'))
                     .values('month')
                     .annotate(total_amount=Sum('amount'))
@@ -213,6 +213,11 @@ class TransactionView(APIView):
 class BasePayeeView:
     def get_queryset(self):
         queryset = DestinationMap.objects.select_related('category', 'subcategory').all().order_by(
+            Case(
+                When(category_id__isnull=True, then=1),
+                When(category_id__isnull=False, then=0),
+                output_field=IntegerField(),
+            ),
             'category_id',
             'subcategory_id')
         return queryset
