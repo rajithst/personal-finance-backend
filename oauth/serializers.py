@@ -11,19 +11,29 @@ class UserCreateSerializer(BaseUserCreateSerializer):
         fields = ['id', 'username', 'password', 'email', 'first_name', 'last_name']
 
     def create(self, validated_data):
+        # create profile record when create a new user
         user = super(UserCreateSerializer, self).create(validated_data)
         Profile.objects.create(user=user)
         return user
 
 
 class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        profile = Profile.objects.get(user_id=user.id)
+        token['first_name'] = user.first_name
+        token['last_name'] = user.last_name
+        token['is_premium'] = profile.is_premium
+        token['profile_id'] = profile.id
+        return token
     def validate(self, attrs):
         data = super().validate(attrs)
         profile = Profile.objects.get(user_id=self.user.id)
-        serializer = ProfileSerializer(profile)
-        data['email'] = self.user.email
-        data['is_premium'] = serializer.data.get('is_premium')
-        return data
+        if profile:
+            return {'token': data['access'], 'refresh': data['refresh']}
+        else:
+            return {'token': None, 'refresh': None,}
 
 
 class ProfileSerializer(serializers.ModelSerializer):
