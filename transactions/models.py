@@ -1,5 +1,15 @@
+import logging
+
 from django.db import models
 from django.conf import settings
+
+from oauth.middleware import get_current_user
+
+
+class RequestManager(models.Manager):
+    def get_queryset(self):
+        current_user = get_current_user()
+        return super().get_queryset().filter(user_id=current_user.id)
 
 
 class TransactionCategory(models.Model):
@@ -11,6 +21,13 @@ class TransactionCategory(models.Model):
     can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
+    objects = RequestManager()
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
+
 
 class TransactionSubCategory(models.Model):
     id = models.AutoField(primary_key=True)
@@ -21,6 +38,13 @@ class TransactionSubCategory(models.Model):
     can_delete = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
 
+    objects = RequestManager()
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
+
 
 class Account(models.Model):
     id = models.AutoField(primary_key=True)
@@ -30,6 +54,13 @@ class Account(models.Model):
     description = models.CharField(max_length=255, blank=True, null=True)
     last_import_date = models.DateTimeField(blank=True, null=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+
+    objects = RequestManager()
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
 
 
 class Transaction(models.Model):
@@ -56,8 +87,12 @@ class Transaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return str(self.amount) + " " + str(self.date)
+    objects = RequestManager()
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
 
 
 class DestinationMap(models.Model):
@@ -70,3 +105,10 @@ class DestinationMap(models.Model):
     category_type = models.IntegerField(blank=True, null=True)
     subcategory = models.ForeignKey(TransactionSubCategory, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+
+    objects = RequestManager()
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)

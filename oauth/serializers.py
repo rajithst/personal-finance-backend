@@ -11,7 +11,6 @@ class UserCreateSerializer(BaseUserCreateSerializer):
         fields = ['id', 'username', 'password', 'email', 'first_name', 'last_name']
 
     def create(self, validated_data):
-        # create profile record when create a new user
         user = super(UserCreateSerializer, self).create(validated_data)
         Profile.objects.create(user=user)
         return user

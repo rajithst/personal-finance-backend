@@ -1,6 +1,6 @@
 import calendar
 
-from investments.models import Holding, Dividend, StockPurchaseHistory, Company
+from investments.models import Holding, StockPurchaseHistory, Company, DividendPayment
 from rest_framework import serializers
 
 
@@ -21,9 +21,9 @@ class ResponseHoldingSerializer(serializers.ModelSerializer):
         return (obj.profit_loss / obj.total_investment) * 100
 
 
-class ResponseDividendSerializer(serializers.ModelSerializer):
+class ResponseDividendPaymentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Dividend
+        model = DividendPayment
         fields = ['id', 'company', 'amount', 'ex_dividend_date', 'payment_date', 'payment_received', 'company_name',
                   'industry', 'sector', 'image', 'stock_currency', 'year', 'month', 'month_text']
 

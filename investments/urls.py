@@ -1,24 +1,23 @@
 from django.urls import path
-from rest_framework.routers import SimpleRouter
 
-from investments.apis.updaters import StockDailyUpdaterView, ForexDailyUpdaterView, CompanyDataUpdaterView, \
-    DividendDailyUpdaterView, HistoricalStockDataUpdaterView
-from investments.apis.importers import TradeImportView
-from investments.apis.views import StockPurchaseHistoryViewSet, DividendViewSet, CompanyViewSet, \
-    InvestmentsView, StockDetailView
+from investments.apis.company_api import CompanyValueUpdaterView
+from investments.apis.dividend_api import DividendPaymentView, DividendImporterView, DividendIncomeView
+from investments.apis.forex_api import DailyForexValueUpdateView
+from investments.apis.stock_api import StockPurchaseHistoryView, StockDetailView, DailyStockValueUpdateView, \
+    StockPurchaseImportView, BulkStockValueUpdaterView
+from investments.apis.views import DashboardView
 
-router = SimpleRouter()
-router.register(r'stock-purchase-history', StockPurchaseHistoryViewSet)
-router.register(r'dividend', DividendViewSet)
-router.register(r'company', CompanyViewSet)
 urlpatterns = [
-    path('list', InvestmentsView.as_view()),
-    path('refresh/stock-data', StockDailyUpdaterView.as_view()),
-    path('stock-summary/<str:symbol>/', StockDetailView.as_view()),
-    path('refresh/histoical-stock-data', HistoricalStockDataUpdaterView.as_view()),
-    path('refresh/forex-data', ForexDailyUpdaterView.as_view()),
-    path('refresh/company-data', CompanyDataUpdaterView.as_view()),
-    path('refresh/dividend-data', DividendDailyUpdaterView.as_view()),
-    path('prepare/dividend-payment', DividendDailyUpdaterView.as_view()),
-    path('import/trade/', TradeImportView.as_view()),
-] + router.urls
+    path('dashboard/', DashboardView.as_view()),
+    path('dividends/income/', DividendIncomeView.as_view()),
+    path('dividends/sync/', DividendImporterView.as_view()),
+    path('dividends/payment/', DividendPaymentView.as_view()),
+    path('stocks/detail/', StockDetailView.as_view()),
+    path('stocks/sync/daily', DailyStockValueUpdateView.as_view()),
+    path('forex/sync/daily/', DailyForexValueUpdateView.as_view()),
+    path('stocks/sync/bulk/', BulkStockValueUpdaterView.as_view()),
+    path('stocks/purchases/history/', StockPurchaseHistoryView.as_view()),
+    path('stocks/purchases/upload/', StockPurchaseImportView.as_view()),
+    path('company/sync/', CompanyValueUpdaterView.as_view()),
+]
+

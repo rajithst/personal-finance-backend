@@ -3,7 +3,6 @@ from transactions.models import Transaction, DestinationMap, Account, Transactio
     TransactionSubCategory
 
 
-
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
