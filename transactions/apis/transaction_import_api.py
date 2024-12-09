@@ -4,7 +4,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from transactions.services.transaction_import_service import TransactionImportService
-from utils.uploader import FileUploadService
 
 
 class TransactionImportView(APIView):
@@ -32,9 +31,8 @@ class TransactionImportView(APIView):
             'upload_files': upload_files,
             'account_id': account_id,
         }
-
-        upload_service = FileUploadService()
-        uploaded_files = upload_service.upload_transaction_files(upload_parameters)
+        import_service = TransactionImportService()
+        uploaded_files = import_service.upload_transaction_files(upload_parameters)
         if not uploaded_files:
             return Response({'message': 'Failed to upload files', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -48,7 +46,7 @@ class TransactionImportView(APIView):
             'files': uploaded_files,
         }
 
-        import_service = TransactionImportService()
+
         is_imported = import_service.import_transactions(import_parameters)
         if is_imported:
             return Response({'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)

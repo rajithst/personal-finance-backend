@@ -59,7 +59,6 @@ class MarketApi:
             snapshot['timestamp'] = datetime.fromtimestamp(snapshot['timestamp']).date()
             day_data = self.map_to_model(snapshot, DAILY_SNAPSHOT_FIELDS, DAILY_SNAPSHOT_REMAP_FIELDS)
             day_data['company_id'] = ticker
-            day_data['company'] = ticker
             daily_data.append(day_data)
         return daily_data
 

@@ -1,11 +1,9 @@
 import logging
-import os
 import numpy as np
 import pandas as pd
-from django.conf import settings
 
 from common.enums import DataSource, AccountProviders
-from utils.import_service_worker import ServiceLoader
+from workflow.import_workflow import ImportWorkflowContract
 
 
 class BaseLoader:
@@ -59,7 +57,7 @@ class BaseLoader:
             logging.exception(e)
 
 
-class RakutenCardLoader(BaseLoader, ServiceLoader):
+class RakutenCardLoader(BaseLoader, ImportWorkflowContract):
     def __init__(self):
         super().__init__()
         self.cleanable_signatures = ['楽天ＳＰ', '/N']
@@ -79,7 +77,7 @@ class RakutenCardLoader(BaseLoader, ServiceLoader):
         return super().validate_dataframe(transactions)
 
 
-class EposCardLoader(BaseLoader, ServiceLoader):
+class EposCardLoader(BaseLoader, ImportWorkflowContract):
     def __init__(self):
         super().__init__()
         self.cleanable_signatures = ['／Ｎ', '／ＮＦＣ', 'ＡＰ／', '／ＮＦＣ ()', '／ＮＦＣ', '	ＡＰ／']
@@ -105,7 +103,7 @@ class EposCardLoader(BaseLoader, ServiceLoader):
         return super().validate_dataframe(transactions)
 
 
-class DocomoCardLoader(BaseLoader, ServiceLoader):
+class DocomoCardLoader(BaseLoader, ImportWorkflowContract):
     def __init__(self):
         super().__init__()
         self.cleanable_signatures = ['／ｉＤ', 'ｉＤ／', '　／ｉＤ', 'ｉＤ／', '　　　　　　　　　／ｉＤ', '　／ｉＤ']
@@ -131,7 +129,7 @@ class DocomoCardLoader(BaseLoader, ServiceLoader):
         return super().validate_dataframe(transactions)
 
 
-class MizuhoBankLoader(BaseLoader, ServiceLoader):
+class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
     def __init__(self):
         super().__init__()
         self.cleanable_signatures = []

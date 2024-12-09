@@ -4,27 +4,42 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from rest_framework.exceptions import ValidationError
 
+from common.enums import WorkflowContextType
 from oauth.middleware import get_current_user
 
 from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, \
     PAYMENT_CATEGORY_TYPE
 from transactions.models import Transaction, Account, DestinationMap, TransactionCategory
 from transactions.services.card_loaders import TransactionProcessFactory
-from utils.import_service_worker import ImportServiceWorker
+from transactions.validators.import_validator import ImportParamsValidator
+from transactions.validators.upload_validator import UploadParamsValidator
+from workflow.import_workflow import ImportWorkflow
+from workflow.providers.storage_backend_provider import StorageBackendProvider
+from workflow.upload_workflow import UploadWorkflow
+
+logger = logging.getLogger(__name__)
 
 
 class TransactionImportService:
-    def import_transactions(self, import_params):
-        user = get_current_user()
-        account_id = import_params['account_id']
-        account = Account.objects.filter(id=account_id).first()
-        account_processor = TransactionProcessFactory.get_processor(account.provider)
-        file_names = import_params.get('files', None)
-        import_params['last_import_date'] = account.last_import_date
+    def __init__(self, transaction_process_factory=None, storage_factory=None, import_workflow=None,
+                 upload_workflow=None):
+        self.transaction_process_factory = transaction_process_factory or TransactionProcessFactory
+        self.storage_factory = storage_factory or StorageBackendProvider
+        self.import_workflow = import_workflow or ImportWorkflow
+        self.upload_workflow = upload_workflow or UploadWorkflow
 
-        service = ImportServiceWorker(account, account_processor)
-        transactions = service.load_transactions(file_names)
+    def import_transactions(self, import_params):
+
+        ImportParamsValidator.validate(import_params)
+        account = self.get_account_from_id(import_params['account_id'])
+        if not account:
+            raise ValidationError({"account_id": "Invalid account ID."})
+        import_params['last_import_date'] = account.last_import_date
+        account_processor = self.transaction_process_factory.get_processor(account.provider)
+        service = self.import_workflow(account, account_processor)
+        transactions = service.import_data_from_files(WorkflowContextType.TRANSACTION_FILES, import_params.get('files', None))
         transactions = self.get_applicable_transactions(transactions, import_params)
         if transactions.empty:
             return True
@@ -45,17 +60,32 @@ class TransactionImportService:
                 payee_objects.append(DestinationMap(**new_payee))
 
             for expense in expense_records:
-                expense['user_id'] = user.id
+                expense['user_id'] = get_current_user().id
                 expense_objects.append(Transaction(**expense))
             try:
                 is_transactions_imported = Transaction.objects.bulk_create(expense_objects)
                 if is_transactions_imported:
-                    Account.objects.filter(id=account_id).update(last_import_date=last_import_date)
+                    Account.objects.filter(id=account.id).update(last_import_date=last_import_date)
                     DestinationMap.objects.bulk_create(payee_objects)
                 return is_transactions_imported
             except Exception as e:
                 logging.exception('Error importing Expenses objects: %s', e)
                 return False
+
+    def upload_transaction_files(self, upload_params):
+        try:
+            UploadParamsValidator.validate(upload_params)
+            account = self.get_account_from_id(upload_params['account_id'])
+            service = self.upload_workflow(account)
+            uploaded_files = service.upload_files(WorkflowContextType.TRANSACTION_FILES, upload_params['upload_files'])
+            return uploaded_files
+        except Exception as e:
+            logger.error(f"Error uploading purchase files: {e}")
+            raise e
+
+    def get_account_from_id(self, account_id):
+        account = Account.objects.filter(id=account_id).first()
+        return account
 
     def get_applicable_transactions(self, transaction_data, import_params):
         import_from_last_date = import_params.get('import_from_last_date', None)

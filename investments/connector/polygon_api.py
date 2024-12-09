@@ -1,3 +1,5 @@
+from typing import Iterator
+
 from polygon import RESTClient
 
 class PolygonAPI:
@@ -10,15 +12,15 @@ class PolygonAPI:
     def get_dividend_calendar(self, ticker, from_date, to_date=None):
         if not ticker:
             raise Exception('Ticker is required')
-        dividend_data, status = self.client.list_dividends(pay_date_gte=from_date, pay_date_lte=to_date)
         results = []
-        if status == 'OK':
-            for dv in dividend_data:
+        dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date)
+        if isinstance(dividend_response, Iterator):
+            for dv in dividend_response:
                 obj = {
-                    'symbol': dv['ticker'],
-                    'amount': round(dv['cash_amount'], 2),
-                    'ex_dividend_date': dv['ex_dividend_date'],
-                    'payment_date': dv['pay_date'],
+                    'symbol': dv.ticker,
+                    'amount': round(dv.cash_amount, 2),
+                    'ex_dividend_date': dv.ex_dividend_date,
+                    'payment_date': dv.pay_date,
                 }
                 results.append(obj)
         return results

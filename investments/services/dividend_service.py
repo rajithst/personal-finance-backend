@@ -6,85 +6,135 @@ from django.conf import settings
 from django.db.models import Sum
 
 from investments.connector.polygon_api import PolygonAPI
-from investments.models import Holding, Company, DividendHistory, StockPurchaseHistory, DividendPayment
+from investments.models import Holding, Company, DividendHistory, StockPurchaseHistory, DividendPayment, Portfolio
 # from google.appengine.api import taskqueue
 
 from investments.serializers.response_serializers import ResponseDividendPaymentSerializer
+from investments.serializers.serializers import DividendHistorySerializer, DividendPaymentSerializer
+from investments.validators.dividend_validator import DividendValidator
 
 DIVIDEND_TAX_RATE = 20.315
 
 
 class DividendService:
+    """
+    A service class to handle dividend-related operations such as calculations,
+    updates, imports, and income retrieval.
+
+    Attributes:
+        dividend_api (PolygonAPI): The API client for fetching dividend data.
+    """
+    def __init__(self, dividend_api=None):
+        """
+        Initializes the DividendService.
+
+        Args:
+            dividend_api (PolygonAPI, optional): The API client for fetching dividend data.
+        """
+        self.dividend_api = dividend_api or PolygonAPI()
 
     def calculate_dividend_payments(self):
+        """
+        Calculates and records dividend payments for holdings.
+
+        Iterates through holdings, checks for eligible dividend payments, and
+        records them in the DividendPayment model if not already recorded.
+
+        Raises:
+            Exception: Logs any error encountered during the calculation process.
+        """
         today = date.today().strftime('%Y-%m-%d')
-        holding_companies = Holding.objects.select_related('company').values_list('company_id', flat=True).distinct()
-        try:
-            for company in holding_companies:
-                dividend_payer = DividendHistory.objects.filter(company_id=company, payment_date_gte=today)
-                if dividend_payer:
-                    dividend_payer = dividend_payer[0]
-                    ex_dividend_date = dividend_payer.ex_dividend_date
-                    purchased_shares = StockPurchaseHistory.objects.filter(company_id=company,
-                                                                           purchase_date__lt=ex_dividend_date).annotate(
-                        shares=Sum('quantity')).values('shares')
-                    dividend_payment = DividendPayment.objects.filter(company_id=company,
-                                                                      payment_date=dividend_payer.payment_date)
-                    if not dividend_payment.exists():
-                        DividendPayment.objects.create(
+        portfolio_users = Portfolio.cron_objects.only('id', 'user_id').distinct()
+        for portfolio_user in portfolio_users:
+            user_id = portfolio_user.user_id
+            portfolio_id = portfolio_user.id
+            holding_companies = Holding.cron_objects.select_related('company').filter(portfolio_id=portfolio_id, user_id=user_id).values_list('company_id', flat=True).distinct()
+            try:
+                for company in holding_companies:
+                    dividend_payer = DividendHistory.objects.filter(company_id=company, payment_date__gte=today).first()
+                    if dividend_payer:
+                        ex_dividend_date = dividend_payer.ex_dividend_date
+                        purchased_shares = (StockPurchaseHistory.cron_objects
+                                            .filter(company_id=company,
+                                                    portfolio_id=portfolio_id,
+                                                    user_id=user_id,
+                                                    purchase_date__lt=ex_dividend_date)
+                                            .aggregate(total_shares=Sum('quantity'))
+                                            .get('total_shares', 0)
+                                            )
+
+                        DividendPayment.cron_objects.update_or_create(
                             company_id=company,
-                            amount=dividend_payer.amount,
-                            pre_tax_amount=dividend_payer.amount,
-                            quantity=purchased_shares,
                             payment_date=dividend_payer.payment_date,
-                            payment_received=False,
+                            portfolio_id=portfolio_id,
+                            user_id=user_id,
+                            defaults={
+                                'amount': dividend_payer.amount,
+                                'quantity': purchased_shares or 0,
+                            }
                         )
-                    else:
-                        dividend_payment.update(amount=dividend_payer.amount, quantity=purchased_shares)
-        except Exception as e:
-            logging.exception('Failed to calculate dividend payments ')
+                return True
+            except Exception as e:
+                logging.exception('Failed to calculate dividend payments.')
+                return False
 
-    def update_dividends(self, ticker, from_date, to_date):
-        client = PolygonAPI()
-        if not from_date:
-            from_date = date.today().strftime('%Y-%m-%d')
-        if not to_date:
-            to_date = date.today() + relativedelta(days=+5)
-            to_date = to_date.strftime('%Y-%m-%d')
-        current_year = date.today().year
-        dividends = client.get_dividend_calendar(ticker, from_date, to_date)
+    def update_dividend_history(self, request_params):
+
+        DividendValidator.validate_request(request_params)
+        from_date = request_params.get('from_date') or date.today().strftime('%Y-%m-%d')
+        to_date = request_params.get('to_date') or (date.today() + relativedelta(days=+5)).strftime('%Y-%m-%d')
+        company = request_params.get('company')
+
+        dividends = self.dividend_api.get_dividend_calendar(company, from_date, to_date)
+        dividend_objects = []
         for dividend in dividends:
-            payment_date = dividend['payment_date']
-            queryset = DividendHistory.objects.filter(company_id=ticker, payment_date__year=current_year,
-                                                      payment_date=payment_date)
-            if not queryset.exists():
-                DividendHistory.objects.create(
-                    company_id=ticker,
-                    amount=dividend['amount'],
-                    ex_dividend_date=dividend['ex_dividend_date'],
-                    payment_date=payment_date,
+            dividend, created = DividendHistory.objects.update_or_create(
+                company_id=company,
+                payment_date=dividend['payment_date'],
+                defaults={
+                    'amount': dividend['amount'],
+                    'ex_dividend_date': dividend['ex_dividend_date'],
+                }
+            )
+            dividend_objects.append(dividend)
+        return DividendHistorySerializer(dividend_objects, many=True).data
 
-                )
-            else:
-                queryset.update(amount=dividend['amount'])
+    def enqueue_dividend_refresh_tasks(self):
+        """
+        Imports dividend data for all companies in the database.
 
-    def import_dividends(self):
+        Raises:
+            EnvironmentError: If the method is called in a development environment
+            or if no companies are found in the database.
+        """
         is_dev_env = settings.ENV == 'dev'
-        if is_dev_env:
-            raise EnvironmentError('Cannot import dividends from dev environment')
         companies = Company.objects.values_list('symbol', flat=True).distinct()
         if not companies:
             raise EnvironmentError('Cannot import dividends from empty company list. Please insert a company list')
-        for company in companies:
-            pass
-            # taskqueue.add(
-            #     name='future-dividends',
-            #     url='/investments/dividends/daily',
-            #     target='worker',
-            #     params={'company': company})
+
+        from_date = date.today().strftime('%Y-%m-%d')
+        to_date = (date.today() + relativedelta(days=+5)).strftime('%Y-%m-%d')
+        if is_dev_env:
+            for company in companies[:5]:
+                self.update_dividend_history({'company': company, 'from_date': from_date, 'to_date': to_date})
+                self.calculate_dividend_payments()
+
+        else:
+            for company in companies[:5]:
+                pass
+                # taskqueue.add(
+                #     name='sync-dividends',
+                #     url='/investments/dividends/sync/daily',
+                #     target='coincraftservice',
+                #     params={'company': company, 'from_date': from_date, 'to_date': to_date})
 
     def get_dividend_income(self):
+        """
+        Retrieves all dividend payments and serializes the data.
+
+        Returns:
+            list: Serialized dividend payment data.
+        """
         dividends = DividendPayment.objects.all()
         serializer = ResponseDividendPaymentSerializer(dividends, many=True)
         return serializer.data
-

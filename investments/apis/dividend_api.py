@@ -3,6 +3,7 @@ import logging
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
 
 from investments.services.dividend_service import DividendService
 
@@ -15,22 +16,23 @@ class DividendIncomeView(APIView):
         return Response({'dividend_incomes': dividend_incomes}, status=status.HTTP_200_OK)
 
 
-class DividendPaymentView(APIView):
+class DividendPaymentUpdaterView(APIView):
+
+    permission_classes = (AllowAny,)
 
     def get(self, request):
-        logging.info('calculating dividend payments..')
-        ticker = request.query_params.get('ticker')
-        if ticker is None:
-            return Response({'message': 'Company ticker is required'}, status=status.HTTP_400_BAD_REQUEST)
+        logging.info('updating dividend payments..')
         service = DividendService()
-        service.calculate_dividend_payments()
-        return Response({'message': 'Task created'}, status=status.HTTP_200_OK)
+        service.update_dividend_history(request.query_params)
+        response = service.calculate_dividend_payments()
+        return Response({'dividend_payments': response}, status=status.HTTP_200_OK)
 
 
 class DividendImporterView(APIView):
+    permission_classes = [AllowAny]
 
     def get(self, request):
         logging.info('import dividend data..')
         service = DividendService()
-        service.import_dividends()
+        service.import_dividend_declares()
         return Response({'message': 'Task created'}, status=status.HTTP_200_OK)

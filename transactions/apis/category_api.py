@@ -2,8 +2,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from transactions.serializers.response_serializers import ResponseTransactionCategorySerializer, \
-    ResponseTransactionSubCategorySerializer
 from transactions.services.category_service import CategoryService
 
 

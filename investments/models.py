@@ -2,13 +2,18 @@ from django.conf import settings
 from django.db import models
 
 from oauth.middleware import get_current_user
+from transactions.models import Account
 
 
 class RequestManager(models.Manager):
     def get_queryset(self):
         current_user = get_current_user()
-        return super().get_queryset().filter(user_id=current_user.id)
+        if current_user:
+            return super().get_queryset().filter(user_id=current_user.id)
 
+class CronManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset()
 
 class CompanyIndustry(models.Model):
     id = models.AutoField(primary_key=True)
@@ -27,13 +32,16 @@ class CompanySector(models.Model):
 class Portfolio(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50)
-    description = models.TextField()
-    currency = models.CharField(max_length=50)
+    description = models.TextField(null=True, blank=True)
+    currency = models.CharField(max_length=50, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
     objects = RequestManager()
+
+    cron_objects = CronManager()
+
 
     def save(self, *args, **kwargs):
         if not self.user:
@@ -69,6 +77,8 @@ class StockPurchaseHistory(models.Model):
     stock_currency = models.CharField(max_length=12, null=True, blank=True)
     exchange_rate = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True, null=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -78,6 +88,7 @@ class StockPurchaseHistory(models.Model):
 
     objects = RequestManager()
 
+    cron_objects = CronManager()
     def save(self, *args, **kwargs):
         if not self.user:
             self.user = get_current_user()
@@ -96,10 +107,7 @@ class IndexFund(models.Model):
 
 class Holding(models.Model):
     id = models.AutoField(primary_key=True)
-    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True)
-    index_fund = models.ForeignKey(IndexFund, on_delete=models.CASCADE, null=True, blank=True)
-    is_index_fund = models.BooleanField(default=False)
     quantity = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     average_price = models.DecimalField(max_digits=12, decimal_places=2)
     current_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -108,6 +116,32 @@ class Holding(models.Model):
     profit_loss = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     stock_currency = models.CharField(max_length=12, null=True, blank=True)
     price_updated_at = models.DateField(null=True, blank=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    objects = RequestManager()
+
+    cron_objects = CronManager()
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
+
+
+class IndexFundHolding(models.Model):
+    id = models.AutoField(primary_key=True)
+    fund = models.ForeignKey(IndexFund, on_delete=models.CASCADE, null=True, blank=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    average_price = models.DecimalField(max_digits=12, decimal_places=2)
+    current_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_investment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    current_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    profit_loss = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    fund_currency = models.CharField(max_length=12, null=True, blank=True)
+    price_updated_at = models.DateField(null=True, blank=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -140,12 +174,14 @@ class DividendPayment(models.Model):
     pre_tax_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     tax_rate = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True, null=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
     objects = RequestManager()
 
+    cron_objects = CronManager()
     def save(self, *args, **kwargs):
         if not self.user:
             self.user = get_current_user()
@@ -182,11 +218,13 @@ class IndexFundDailyPrice(models.Model):
 class IndexFundPurchaseHistory(models.Model):
     id = models.AutoField(primary_key=True)
     purchase_date = models.DateField(null=True, blank=True)
-    index_fund = models.ForeignKey(IndexFund, on_delete=models.SET_NULL, null=True, blank=True)
+    fund = models.ForeignKey(IndexFund, on_delete=models.SET_NULL, null=True, blank=True)
     purchase_amount = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     settlement_currency = models.CharField(max_length=12, null=True, blank=True)
     exchange_rate = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True, null=True)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
