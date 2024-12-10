@@ -1,9 +1,11 @@
+import calendar
 import logging
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 
 from investments.connector.polygon_api import PolygonAPI
 from investments.models import Holding, Company, DividendHistory, StockPurchaseHistory, DividendPayment, Portfolio
@@ -24,6 +26,7 @@ class DividendService:
     Attributes:
         dividend_api (PolygonAPI): The API client for fetching dividend data.
     """
+
     def __init__(self, dividend_api=None):
         """
         Initializes the DividendService.
@@ -48,7 +51,9 @@ class DividendService:
         for portfolio_user in portfolio_users:
             user_id = portfolio_user.user_id
             portfolio_id = portfolio_user.id
-            holding_companies = Holding.cron_objects.select_related('company').filter(portfolio_id=portfolio_id, user_id=user_id).values_list('company_id', flat=True).distinct()
+            holding_companies = Holding.cron_objects.select_related('company').filter(portfolio_id=portfolio_id,
+                                                                                      user_id=user_id).values_list(
+                'company_id', flat=True).distinct()
             try:
                 for company in holding_companies:
                     dividend_payer = DividendHistory.objects.filter(company_id=company, payment_date__gte=today).first()
@@ -65,6 +70,7 @@ class DividendService:
 
                         DividendPayment.cron_objects.update_or_create(
                             company_id=company,
+                            ex_dividend_date=ex_dividend_date,
                             payment_date=dividend_payer.payment_date,
                             portfolio_id=portfolio_id,
                             user_id=user_id,
@@ -129,12 +135,21 @@ class DividendService:
                 #     params={'company': company, 'from_date': from_date, 'to_date': to_date})
 
     def get_dividend_income(self):
-        """
-        Retrieves all dividend payments and serializes the data.
-
-        Returns:
-            list: Serialized dividend payment data.
-        """
-        dividends = DividendPayment.objects.all()
-        serializer = ResponseDividendPaymentSerializer(dividends, many=True)
-        return serializer.data
+        dividends_by_month = DividendPayment.objects.annotate(
+            year_month=TruncMonth('payment_date')
+        ).values('year_month').annotate(
+            total_amount=Sum('amount')
+        ).order_by('-year_month')
+        dividends_by_month_with_records = []
+        for month_data in dividends_by_month:
+            year_month = month_data['year_month']
+            total_amount = month_data['total_amount']
+            records_for_month = DividendPayment.objects.filter(
+                payment_date__year=year_month.year,
+                payment_date__month=year_month.month
+            )
+            serializer = ResponseDividendPaymentSerializer(records_for_month, many=True)
+            dividends_by_month_with_records.append({'year': year_month.year, 'month': year_month.month,
+                                                    'month_text': calendar.month_name[year_month.month],
+                                                    'total': total_amount, 'dividends': serializer.data})
+        return dividends_by_month_with_records

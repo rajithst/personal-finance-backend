@@ -170,6 +170,7 @@ class DividendPayment(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     quantity = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     payment_date = models.DateField(blank=True, null=True)
+    ex_dividend_date = models.DateField(blank=True, null=True)
     payment_received = models.BooleanField(default=False)
     pre_tax_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     tax_rate = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)

@@ -13,7 +13,7 @@ class DividendIncomeView(APIView):
     def get(self, request):
         service = DividendService()
         dividend_incomes = service.get_dividend_income()
-        return Response({'dividend_incomes': dividend_incomes}, status=status.HTTP_200_OK)
+        return Response(dividend_incomes, status=status.HTTP_200_OK)
 
 
 class DividendPaymentUpdaterView(APIView):
@@ -34,5 +34,5 @@ class DividendImporterView(APIView):
     def get(self, request):
         logging.info('import dividend data..')
         service = DividendService()
-        service.import_dividend_declares()
+        service.enqueue_dividend_refresh_tasks()
         return Response({'message': 'Task created'}, status=status.HTTP_200_OK)
