@@ -35,6 +35,16 @@ class DashboardService:
     def get_monthly_payment_payee_summary(self, year=None):
         return self.get_monthly_payment_destination_wise_sum('is_payment', year)
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
+        """
+        Get the monthly payment destination wise sum.
+
+        Args:
+            transaction_type (str): The transaction type.
+            year (int): The year.
+
+        Returns:
+            dict: The monthly payment destination wise sum.
+        """
         queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year})
                     .annotate(month=TruncMonth('date'))
@@ -54,6 +64,16 @@ class DashboardService:
 
 
     def get_monthly_transaction_summary(self, transaction_type, year=None):
+        """
+        Get the monthly transaction summary.
+
+        Args:
+            transaction_type (str): The transaction type.
+            year (int): The year.
+
+        Returns:
+            list: The monthly transaction summary.
+        """
         queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year or self.year}, is_deleted=False)
                     .annotate(month=TruncMonth('date'))
@@ -68,6 +88,16 @@ class DashboardService:
         return results
 
     def get_monthly_transaction_category_summary(self, transaction_type, year):
+        """
+        Get the monthly transaction category summary.
+
+        Args:
+            transaction_type (str): The transaction type.
+            year (int): The year.
+
+        Returns:
+            dict: The monthly transaction category summary.
+        """
         queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year or self.year})
                     .annotate(month=TruncMonth('date'))
@@ -84,6 +114,16 @@ class DashboardService:
         return results
 
     def get_account_wise_sum(self, transaction_type, year):
+        """
+        Get the account wise sum.
+
+        Args:
+            transaction_type (str): The transaction type.
+            year (int): The year.
+
+        Returns:
+            dict: The account wise sum.
+        """
         queryset = self.get_queryset()
         queryset = (queryset.filter(
             **{transaction_type: True, 'date__year': year})
@@ -102,6 +142,12 @@ class DashboardService:
         return results
 
     def get_top_ten_expenses(self):
+        """
+        Get the top ten expenses.
+
+        Returns:
+            list: The top ten expenses.
+        """
         queryset = self.get_queryset()
         today = datetime.today()
         first_day_of_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)

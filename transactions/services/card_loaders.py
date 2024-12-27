@@ -14,8 +14,8 @@ class BaseLoader:
             'is_deleted': False,
             'is_saving': False,
             'is_income': False,
-            'notes': np.nan,
-            'alias': np.nan,
+            'notes': '',
+            'alias': '',
             'is_expense': True,
             'source': DataSource.IMPORT.value,
             'account_id': account.id

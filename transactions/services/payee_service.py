@@ -2,7 +2,6 @@ import logging
 
 from django.db.models import Case, When, IntegerField
 
-from oauth.middleware import get_current_user
 from transactions.common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
     PAYMENT_CATEGORY_TYPE
 from transactions.models import DestinationMap, Transaction
@@ -13,6 +12,12 @@ from transactions.serializers.response_serializers import ResponseDestinationMap
 class PayeeService:
 
     def get_custom_queryset(self):
+        """
+        Gets the custom queryset for the payee.
+
+        Returns:
+            QuerySet: The custom queryset for the payee.
+        """
         queryset = DestinationMap.objects.select_related('category', 'subcategory').order_by(
             Case(
                 When(category_id__isnull=True, then=1),
@@ -32,6 +37,15 @@ class PayeeService:
         return instance
 
     def get_payee_details(self, request_data):
+        """
+        Gets the payee details.
+
+        Args:
+            request_data (dict): The request data.
+
+        Returns:
+            dict: The payee details.
+        """
         id = request_data.get('id', None)
         name = request_data.get('name', None)
         instance = None
@@ -51,6 +65,15 @@ class PayeeService:
         return {'payee': payee_serializer.data, 'transactions': transaction_serializer.data}
 
     def get_payees(self, request_data):
+        """
+        Gets the payees.
+
+        Args:
+            request_data (dict): The request data.
+
+        Returns:
+            dict: The payees.
+        """
         id = request_data.get('id', None)
         if id:
             instance = self.get_by_id(id)
@@ -62,6 +85,15 @@ class PayeeService:
             return serializer.data
 
     def update_payee(self, request_data):
+        """
+        Updates the payee.
+
+        Args:
+            request_data (dict): The request data.
+
+        Returns:
+            tuple: A tuple containing a boolean value and the updated payee.
+        """
         id = request_data.get('id')
         merge_ids = request_data.get('merge_ids')
         new_destination = request_data.get('destination')

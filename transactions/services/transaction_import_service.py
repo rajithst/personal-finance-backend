@@ -31,6 +31,15 @@ class TransactionImportService:
         self.upload_workflow = upload_workflow or UploadWorkflow
 
     def import_transactions(self, import_params):
+        """
+        Imports the transactions from the provided files.
+
+        Args:
+            import_params (dict): The import parameters.
+
+        Returns:
+            bool: The result of the import.
+        """
 
         ImportParamsValidator.validate(import_params)
         account = self.get_account_from_id(import_params['account_id'])
@@ -73,6 +82,15 @@ class TransactionImportService:
                 return False
 
     def upload_transaction_files(self, upload_params):
+        """
+        Uploads the transaction files.
+
+        Args:
+            upload_params (dict): The upload parameters.
+
+        Returns:
+            list: The uploaded files.
+        """
         try:
             UploadParamsValidator.validate(upload_params)
             account = self.get_account_from_id(upload_params['account_id'])
@@ -84,10 +102,29 @@ class TransactionImportService:
             raise e
 
     def get_account_from_id(self, account_id):
+        """
+        Gets the account from the provided account ID.
+
+        Args:
+            account_id (int): The account ID.
+
+        Returns:
+            Account: The account.
+        """
         account = Account.objects.filter(id=account_id).first()
         return account
 
     def get_applicable_transactions(self, transaction_data, import_params):
+        """
+        Gets the applicable transactions.
+
+        Args:
+            transaction_data (DataFrame): The transaction data.
+            import_params (dict): The import parameters.
+
+        Returns:
+            DataFrame: The applicable transactions.
+        """
         import_from_last_date = import_params.get('import_from_last_date', None)
         drop_duplicates = import_params.get('drop_duplicates', None)
         start_date = import_params.get('start_date', None)
@@ -107,6 +144,12 @@ class TransactionImportService:
         return transaction_data
 
     def get_payee_map(self):
+        """
+        Gets the payee map.
+
+        Returns:
+            DataFrame: The payee map.
+        """
         queryset = DestinationMap.objects.all()
         payee_maps = list(queryset.values())
         if payee_maps:
@@ -127,7 +170,15 @@ class TransactionImportService:
                      'subcategory_id', 'keywords'])
 
     def get_rewrite_rules(self, payee_maps):
+        """
+        Gets the rewrite rules.
 
+        Args:
+            payee_maps (DataFrame): The payee maps.
+
+        Returns:
+            dict: The rewrite rules.
+        """
         def inverse_dict(d):
             inverted = {}
             for key, values in d.items():
@@ -155,6 +206,17 @@ class TransactionImportService:
 
     def find_new_payees(self, payees, transactions):
 
+        """
+        Finds the new payees.
+
+        Args:
+            payees (DataFrame): The payees.
+            transactions (DataFrame): The transactions.
+
+        Returns:
+            DataFrame: The new payees.
+        """
+
         existing_payees = payees['destination'].unique()
         current_user = get_current_user()
         new_payees = transactions[~transactions['destination'].isin(existing_payees)]
@@ -176,8 +238,19 @@ class TransactionImportService:
 
     def assign_category_ids(self, payees, transactions):
 
+        """
+        Assigns the category IDs to the transactions.
+
+        Args:
+            payees (DataFrame): The payees.
+            transactions (DataFrame): The transactions.
+
+        Returns:
+            DataFrame: The transactions with the category IDs
+        """
+
         payee_maps = payees[['category_id', 'subcategory_id', 'destination', 'alias_map', 'category_type']]
-        income_category_id = TransactionCategory.objects.filter(category_type=INCOME_CATEGORY_TYPE).first().id
+        income_category = TransactionCategory.objects.filter(category_type=INCOME_CATEGORY_TYPE).first()
         transactions = pd.merge(transactions, payee_maps, on=['destination'], how='left')
         transactions['category_type'] = pd.to_numeric(transactions['category_type'], errors='coerce')
         transactions.loc[
@@ -211,7 +284,8 @@ class TransactionImportService:
         transactions = transactions.drop(columns=['alias', 'category_type'])
         transactions = transactions.rename(columns={'alias_map': 'alias'})
         transactions['alias'] = transactions['alias'].replace({np.nan: None})
-        transactions.loc[transactions['is_income'], 'category_id'] = income_category_id
+        if income_category:
+            transactions.loc[transactions['is_income'], 'category_id'] = income_category.id
         transactions['category_id'] = transactions['category_id'].replace({np.nan: None})
         transactions['subcategory_id'] = transactions['subcategory_id'].replace({np.nan: None})
         return transactions

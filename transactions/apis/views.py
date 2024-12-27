@@ -2,13 +2,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from transactions.models import Account, TransactionCategory, \
-    TransactionSubCategory
-from transactions.serializers.response_serializers import ResponseTransactionCategorySerializer, \
-    ResponseTransactionSubCategorySerializer, \
-    ResponseAccountSerializer
-from transactions.serializers.serializers import AccountSerializer
+from transactions.services.account_service import CreditAccountService
 from transactions.services.dashboard_service import DashboardService
+from transactions.services.settings_service import SettingsService
 from transactions.validators.dashboard_validator import DashboardValidator
 
 
@@ -40,36 +36,35 @@ class DashboardView(APIView):
 class ClientSettingsView(APIView):
 
     def get(self, request):
-        user_id = request.user.id
-        accounts = Account.objects.filter(user_id=user_id).all()
-        transaction_categories = TransactionCategory.objects.filter(user_id=user_id).all()
-        transaction_subcategories = TransactionSubCategory.objects.filter(user_id=user_id).select_related(
-            'category').all()
-        transaction_category_serializer = ResponseTransactionCategorySerializer(transaction_categories, many=True)
-        transaction_subcategories_serializer = ResponseTransactionSubCategorySerializer(transaction_subcategories,
-                                                                                        many=True)
-        accounts_serializer = ResponseAccountSerializer(accounts, many=True)
-        return Response({'accounts': accounts_serializer.data,
-                         'transaction_categories': transaction_category_serializer.data,
-                         'transaction_sub_categories': transaction_subcategories_serializer.data})
+
+        try:
+            service = SettingsService()
+            accounts = service.get_credit_accounts()
+            transaction_categories = service.get_transaction_categories()
+            transaction_subcategories = service.get_transaction_subcategories()
+            return Response({'data': {
+                'accounts': accounts,
+                'transaction_categories': transaction_categories,
+                'transaction_subcategories': transaction_subcategories
+            }, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CreditAccountView(APIView):
 
     def post(self, request):
-        data = request.data.copy()
-        serializer = AccountSerializer(data=data)
-        return self.handle_serializer(serializer)
+        try:
+            service = CreditAccountService()
+            account = service.create_account(request.data)
+            return Response({'data': account, 'status': True, 'message': 'Success'}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request):
-        data = request.data.copy()
-        account = Account.objects.get(pk=data.get('id'))
-        serializer = AccountSerializer(account, data=data, partial=True)
-        return self.handle_serializer(serializer)
-
-    def handle_serializer(self, serializer):
-        if serializer.is_valid(raise_exception=True):
-            saved_item = serializer.save()
-            response_serializer = ResponseAccountSerializer(saved_item)
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            service = CreditAccountService()
+            account = service.update_account(request.data)
+            return Response({'data': account, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
