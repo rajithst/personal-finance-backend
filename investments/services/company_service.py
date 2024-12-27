@@ -5,45 +5,22 @@ from django.db import transaction
 from requests import RequestException
 
 from investments.connector.market_api import MarketApi
-from investments.models import CompanySector, CompanyIndustry
+from investments.models import CompanySector, CompanyIndustry, Company
+from investments.serializers.response_serializers import ResponseCompanySerializer
 from investments.serializers.serializers import CompanySerializer
+from investments.validators.stock_validator import BulkTickerValidator
 
 logger = logging.getLogger(__name__)
 
 
 class CompanyService:
-    """
-    A service class to handle company data import and processing.
-
-    Attributes:
-        market_api (MarketApi): The API connector for fetching market data.
-    """
     def __init__(self, market_api=None):
-        """
-        Initializes the CompanyService with a market API connector.
-
-        Args:
-            market_api (MarketApi, optional): The market API connector. Defaults to a new MarketApi instance.
-        """
         self.market_api = market_api or MarketApi()
 
-    def import_company_information(self, request_data):
-        """
-        Imports and processes company information from external API.
-
-        Args:
-            request_data (dict): Request payload containing company tickers.
-
-        Returns:
-            tuple: A boolean indicating success, and the response data or errors.
-
-        Raises:
-            ValueError: If no tickers are provided in the request data.
-        """
-        companies = request_data.get('tickers')
-        if not companies:
-            logger.error("No tickers provided.")
-            raise ValueError("Tickers are required.")
+    def fetch_company_info(self, request_data):
+        BulkTickerValidator().validate(request_data)
+        companies = request_data.get('companies')
+        companies = list(set(companies.split(',')))
         company_data = self.get_company_data(companies)
 
         sectors = {s.name: s.id for s in CompanySector.objects.all()}
@@ -63,15 +40,6 @@ class CompanyService:
         return self.bulk_create_company(company_objects)
 
     def bulk_create_company(self, company_data):
-        """
-        Bulk creates company records in the database.
-
-        Args:
-            company_data (list): List of company data dictionaries.
-
-        Returns:
-            tuple: A boolean indicating success, and the response data or errors.
-        """
         with transaction.atomic():
             serializer = CompanySerializer(data=company_data, many=True)
             if serializer.is_valid(raise_exception=True):
@@ -80,19 +48,6 @@ class CompanyService:
             return False, serializer.errors
 
     def get_company_data(self, companies):
-        """
-        Fetches company data from the market API with retry logic.
-
-        Args:
-            companies (list): List of company tickers.
-
-        Returns:
-            list: A list of company data dictionaries.
-
-        Raises:
-            ValueError: If no tickers are provided.
-            Exception: If the API fails after all retry attempts.
-        """
         if not companies:
             logger.error("No tickers provided.")
             raise ValueError("Tickers are required.")
@@ -107,3 +62,7 @@ class CompanyService:
                 time.sleep(2 ** attempt)
         logger.error("Failed to fetch company data after 3 retries.")
         raise Exception("Failed to fetch company data after 3 retries.")
+
+    def get_company_list(self):
+        companies = ResponseCompanySerializer(Company.objects.select_related('sector', 'industry').all(), many=True)
+        return companies.data

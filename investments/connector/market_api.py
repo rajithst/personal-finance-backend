@@ -101,6 +101,10 @@ class MarketApi:
                 continue
             for d in data:
                 daily_prices = self.map_to_model(d, HISTORICAL_DATA_FIELDS, HISTORICAL_DATA_REMAP_FIELDS)
+                daily_prices['change_percentage'] = round(daily_prices['change_percentage'], 2)
+                daily_prices['current_price'] = round(daily_prices['current_price'], 2)
+                daily_prices['day_high_price'] = round(daily_prices['day_high_price'], 2)
+                daily_prices['day_low_price'] = round(daily_prices['day_low_price'], 2)
                 daily_prices['company_id'] = ticker
                 historical_data.append(daily_prices)
         return historical_data

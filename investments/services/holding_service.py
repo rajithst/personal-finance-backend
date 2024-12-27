@@ -10,7 +10,7 @@ from investments.connector.market_api import MarketApi
 from investments.models import Holding
 from investments.serializers.response_serializers import ResponseHoldingSerializer
 from investments.serializers.serializers import HoldingSerializer
-from investments.validators.holding_validator import HoldingValidator
+from investments.validators.holding_validator import CreateHoldingValidator, ListHoldingValidator
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,9 @@ class HoldingService:
     def __init__(self, market_api=None):
         self.market_api = market_api or MarketApi()
 
-    def get_current_holdings(self):
-        queryset = Holding.objects.select_related('company').filter(portfolio_id=1)
+    def get_current_holdings(self, request_data):
+        ListHoldingValidator().validate(request_data)
+        queryset = Holding.objects.select_related('company').filter(portfolio_id=request_data.get('portfolio'))
         return ResponseHoldingSerializer(queryset, many=True).data
 
     def get_current_holding_price(self, company):
@@ -37,7 +38,7 @@ class HoldingService:
 
     def create_holding(self, create_params):
         try:
-            validated_params = HoldingValidator.validate_request(create_params)
+            validated_params = CreateHoldingValidator.validate(create_params)
             company = validated_params['company']
             quantity = validated_params['quantity']
             purchase_price = validated_params['purchase_price']
@@ -73,7 +74,7 @@ class HoldingService:
 
     def merge_holding(self, update_params):
         try:
-            validated_params = HoldingValidator.validate_request(update_params)
+            validated_params = CreateHoldingValidator.validate(update_params)
             company = validated_params['company']
             quantity = validated_params['quantity']
             purchase_price = validated_params['purchase_price']

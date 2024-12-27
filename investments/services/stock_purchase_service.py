@@ -1,14 +1,17 @@
 import logging
+
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from common.enums import BrokerProviders, WorkflowContextType
-from investments.models import StockPurchaseHistory, Portfolio
+from investments.models import StockPurchaseHistory, Portfolio, Company
 from investments.serializers.response_serializers import ResponseStockPurchaseHistorySerializer
 from investments.serializers.serializers import StockPurchaseHistorySerializer
 from investments.services.broker_loaders import RakutenBrokerForeignStockLoader, \
     RakutenBrokerDomesticStockLoader
+from investments.services.company_service import CompanyService
 from investments.validators.import_validator import ImportParamsValidator
+from investments.validators.stock_validator import PurchaseHistoryValidator
 from investments.validators.upload_validator import UploadParamsValidator
 from transactions.models import Account
 from workflow.import_workflow import ImportWorkflow, ImportWorkflowContract
@@ -37,7 +40,8 @@ class StockPurchaseService:
                 raise ValidationError({"portfolio_id": "Invalid account ID."})
             account_processor = self.broker_factory.get_processor(account.provider, import_params.get('target', None))
             service = self.import_workflow(account, account_processor)
-            trades = service.import_data_from_files(WorkflowContextType.INVESTMENT_FILES, import_params.get('files', None))
+            trades = service.import_data_from_files(WorkflowContextType.INVESTMENT_FILES,
+                                                    import_params.get('files', None))
             if trades.empty:
                 return True
             trades = trades.assign(**{'account': account.id, 'portfolio': portfolio.id})
@@ -66,6 +70,12 @@ class StockPurchaseService:
             raise e
 
     def create_bulk_purchase(self, trade_data):
+        companies = [item.get('company') for item in trade_data]
+        existing_companies = list(Company.objects.values_list('symbol', flat=True))
+        new_companies = [c for c in companies if c not in existing_companies]
+        if new_companies:
+            company_service = CompanyService()
+            company_service.fetch_company_info({'companies': ','.join(new_companies)})
         with transaction.atomic():
             purchase_history_serializer = StockPurchaseHistorySerializer(data=trade_data, many=True)
             if purchase_history_serializer.is_valid(raise_exception=True):
@@ -81,9 +91,8 @@ class StockPurchaseService:
         return False, serializer.errors
 
     def get_purchase_history(self, purchase_params):
-        filter_params = {}
-        if purchase_params.get('portfolio'):
-            filter_params['portfolio_id'] = purchase_params.get('portfolio')
+        PurchaseHistoryValidator.validate(purchase_params)
+        filter_params = {'portfolio_id': purchase_params.get('portfolio')}
         if purchase_params.get('company'):
             filter_params['company_id'] = purchase_params.get('company')
         queryset = StockPurchaseHistory.objects.select_related('company').filter(**filter_params)

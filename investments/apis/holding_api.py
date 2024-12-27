@@ -12,5 +12,10 @@ logger = logging.getLogger(__name__)
 class HoldingView(APIView):
 
     def get(self, request):
-        service = HoldingService()
-        return Response(service.get_current_holdings(), status=status.HTTP_200_OK)
+        try:
+            service = HoldingService()
+            response = service.get_current_holdings(request.query_params.copy())
+            return Response({'data': response, 'status': True, 'message': 'success'},  status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception('Failed to get holdings', exc_info=e)
+            return Response({'data': None, 'status': False, 'message': 'success'},  status=status.HTTP_200_OK)

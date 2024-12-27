@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from investments.services.forex_service import ForexService
 
 
-class DailyForexValueUpdateView(APIView):
+class DailyForexValueDaemonView(APIView):
 
     def get(self, request):
         logging.info('updating forex data..')

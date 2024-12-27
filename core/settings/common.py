@@ -9,13 +9,14 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+import io
+import os
 from datetime import timedelta
 from pathlib import Path
-import os
-import environ
-import io
-from google.cloud import secretmanager
 from urllib.parse import urlparse
+
+import environ
+from google.cloud import secretmanager
 
 env = environ.Env(DEBUG=(bool, False))
 
@@ -82,7 +83,6 @@ MIDDLEWARE = [
     'oauth.middleware.ThreadLocalMiddleware',
 
 ]
-
 
 ROOT_URLCONF = 'core.urls'
 
@@ -184,7 +184,8 @@ LOGGING = {
     'disable_existing_loggers': False,
     'handlers': {
         'console': {
-            'class': 'logging.StreamHandler'
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
         },
         # 'file': {
         #     'class': 'logging.FileHandler',
@@ -199,6 +200,10 @@ LOGGING = {
         'verbose': {
             'format': '{asctime} - ({levelname}) - {name} - {message}',
             'style': '{'
-        }
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
     }
 }

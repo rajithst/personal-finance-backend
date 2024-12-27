@@ -23,6 +23,7 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
         profile = Profile.objects.get(user_id=user.id)
         token['first_name'] = user.first_name
         token['last_name'] = user.last_name
+        token['email'] = user.email
         token['is_premium'] = profile.is_premium
         token['profile_id'] = profile.id
         return token

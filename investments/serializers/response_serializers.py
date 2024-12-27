@@ -1,6 +1,6 @@
 import calendar
 
-from investments.models import Holding, StockPurchaseHistory, Company, DividendPayment, Portfolio
+from investments.models import Holding, StockPurchaseHistory, Company, DividendPayment, Portfolio, StockDailyPrice
 from rest_framework import serializers
 
 
@@ -83,16 +83,29 @@ class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
     def get_month(self, data):
         return data.purchase_date.month
 
+class ResponseStockPriceHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockDailyPrice
+        fields = ['id', 'date', 'current_price', 'change_percentage', 'change', 'day_high_price', 'day_low_price',
+                  'company', 'company_name', 'industry', 'sector', 'image']
+
+    image = serializers.ReadOnlyField(source='company.image')
+    company_name = serializers.ReadOnlyField(source='company.company_name')
+    industry = serializers.ReadOnlyField(source='company.industry.name')
+    sector = serializers.ReadOnlyField(source='company.sector.name')
+
+
+
 
 class ResponseCompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = ['symbol', 'company_name', 'sector', 'industry', 'exchange', 'currency', 'stock_currency', 'country',
-                  'website',
-                  'image', 'description']
+                  'website', 'image', 'description']
 
     stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
-
+    industry = serializers.ReadOnlyField(source='company.industry.name')
+    sector = serializers.ReadOnlyField(source='company.sector.name')
     def get_stock_currency(self, data):
         if data.currency == 'USD':
             return '$'

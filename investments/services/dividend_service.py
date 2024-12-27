@@ -13,7 +13,7 @@ from investments.models import Holding, Company, DividendHistory, StockPurchaseH
 
 from investments.serializers.response_serializers import ResponseDividendPaymentSerializer
 from investments.serializers.serializers import DividendHistorySerializer, DividendPaymentSerializer
-from investments.validators.dividend_validator import DividendValidator
+from investments.validators.dividend_validator import DividendValidator, DividendPaymentValidator
 
 DIVIDEND_TAX_RATE = 20.315
 
@@ -134,7 +134,8 @@ class DividendService:
                 #     target='coincraftservice',
                 #     params={'company': company, 'from_date': from_date, 'to_date': to_date})
 
-    def get_dividend_income(self):
+    def get_dividend_income(self, request_params):
+        DividendPaymentValidator.validate_request(request_params)
         dividends_by_month = DividendPayment.objects.annotate(
             year_month=TruncMonth('payment_date')
         ).values('year_month').annotate(

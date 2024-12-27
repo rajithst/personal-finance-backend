@@ -10,6 +10,7 @@ from oauth.middleware import get_current_user
 from transactions.models import Transaction, DestinationMap
 from transactions.serializers.response_serializers import ResponseTransactionSerializer
 from transactions.serializers.serializers import TransactionSerializer
+from transactions.validators.transaction_validator import TransactionListValidator
 
 
 class TransactionListService:
@@ -31,6 +32,8 @@ class TransactionListService:
         return list(reversed(group_data))
 
     def get_transactions(self, query_params):
+
+        TransactionListValidator().validate(query_params)
         year = query_params.get('year', None)
         target = query_params.get('target', None)
         category_ids = query_params.get('cat', None)

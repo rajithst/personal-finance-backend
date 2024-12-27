@@ -1,47 +1,29 @@
 import logging
+import time
 from datetime import date
 
 from django.db import transaction
 
 from investments.connector.market_api import MarketApi
-from investments.models import StockDailyPrice
+from investments.models import StockDailyPrice, Company
 from investments.serializers.serializers import StockDailyPriceSerializer
+from investments.validators.stock_validator import TickerValidator, BulkTickerValidator
 
 logger = logging.getLogger(__name__)
 
 
 class StockService:
-    """
-    Service class for managing stock data. This includes updating daily stock prices,
-    retrieving price history, and syncing historical stock data.
-
-    Attributes:
-        market_api (MarketApi): An instance of the MarketApi for fetching stock data.
-    """
     def __init__(self, market_api=None):
-        """
-        Initializes the StockService with a provided or default MarketApi instance.
-
-        Args:
-            market_api (MarketApi, optional): A custom MarketApi instance for fetching stock data.
-                Defaults to None, in which case a new MarketApi instance is created.
-        """
         self.market_api = market_api or MarketApi()
 
-    def update_daily_price(self, companies):
-        """
-        Updates daily stock prices for a list of companies.
-
-        Args:
-            companies (list): List of company symbols for which to update daily prices.
-
-        Raises:
-            ValueError: If no company symbols are provided or if market data fetching fails.
-        """
-        logging.info('fetching market data..')
-        if not companies:
-            raise ValueError('No symbols provided')
+    def update_daily_price(self, request_data):
         try:
+            companies = request_data.get('companies', '')
+            if not companies:
+                companies = Company.objects.values_list('symbol', flat=True)
+            else:
+                companies = companies.split(',')
+
             daily_data = self.market_api.get_day_snapshot(tickers=companies)
         except Exception as e:
             logging.error(f"Error fetching market data: {e}")
@@ -61,26 +43,17 @@ class StockService:
                 entry.day_low_price = data.get('day_low_price')
                 entry.save()
             else:
-                price_object = self.extract_new_price_object(data)
+                price_object = self.create_stock_daily_price_object(data)
                 new_entries.append(price_object)
         if new_entries:
             with transaction.atomic():
-                serializer = StockDailyPriceSerializer(data=new_entries, many=True)
-                if serializer.is_valid(raise_exception=True):
-                    serializer.save()
+                StockDailyPrice.objects.bulk_create(new_entries)
 
-    def get_price_history(self, company, start_date=None, end_date=None):
-        """
-        Retrieves the price history for a specific company within a date range.
-
-        Args:
-            company (str): The symbol of the company.
-            start_date (datetime.date, optional): The start date of the range. Defaults to January 1 of the current year.
-            end_date (datetime.date, optional): The end date of the range. Defaults to December 31 of the current year.
-
-        Returns:
-            list: Serialized price history data for the specified company and date range.
-        """
+    def get_price_history(self, request_data):
+        TickerValidator.validate(request_data)
+        start_date = request_data.get('start_date')
+        end_date = request_data.get('end_date')
+        company = request_data.get('company')
         today = date.today()
         if not start_date and not end_date:
             start_date = date(today.year, 1, 1)
@@ -92,51 +65,40 @@ class StockService:
         return serializer.data
 
     def sync_historical_data(self, request_data):
-        """
-        Syncs historical stock price data for a list of tickers.
+        BulkTickerValidator.validate(request_data)
 
-        Args:
-            request_data (dict): Contains the tickers and optional date range for syncing:
-                - tickers (list): List of company symbols to fetch data for.
-                - from_date (str, optional): Start date of the range (YYYY-MM-DD).
-                - to_date (str, optional): End date of the range (YYYY-MM-DD).
-
-        Returns:
-            bool: True if successful, otherwise raises an exception.
-        """
-        tickers = request_data.get('tickers')
         from_date = request_data.get('from_date', None)
         to_date = request_data.get('to_date', None)
-        if not tickers:
-            raise ValueError("Tickers are required for syncing historical data.")
-        historical_data = self.market_api.get_historical_data(tickers, from_date=from_date, to_date=to_date)
-        new_entries = []
-        for data in historical_data:
-            price_object = self.extract_new_price_object(data)
-            new_entries.append(price_object)
-        if new_entries:
-            with transaction.atomic():
-                serializer = StockDailyPriceSerializer(data=new_entries, many=True)
-                if serializer.is_valid(raise_exception=True):
-                    serializer.save()
+        companies = request_data.get('companies')
+        companies = companies.split(',')
 
-    def extract_new_price_object(self, data):
-        """
-        Extracts a new stock price object from raw data.
+        def chunk_list(lst, chunk_size):
+            for i in range(0, len(lst), chunk_size):
+                yield lst[i:i + chunk_size]
+        try:
+            for batch in chunk_list(companies, 10):
+                historical_data = self.market_api.get_historical_data(batch, from_date=from_date, to_date=to_date)
+                new_entries = []
+                for data in historical_data:
+                    price_object = self.create_stock_daily_price_object(data)
+                    new_entries.append(price_object)
+                if new_entries:
+                    with transaction.atomic():
+                        StockDailyPrice.objects.bulk_create(new_entries)
+                time.sleep(10)
+            return True
+        except Exception as e:
+            logging.exception(f"Error fetching historical data: {e}")
+            raise ValueError("Failed to fetch historical data.")
 
-        Args:
-            data (dict): Raw data from the market API.
+    def create_stock_daily_price_object(self, data):
+        return StockDailyPrice(
+            company_id=data['company_id'],
+            date=data['date'],
+            current_price=data['current_price'],
+            change_percentage=data['change_percentage'],
+            change=data['change'],
+            day_high_price=data['day_high_price'],
+            day_low_price=data['day_low_price'],
 
-        Returns:
-            dict: A formatted stock price object ready for database insertion.
-        """
-        price_object = {
-            'date': data.get('date'),
-            'change_percentage': data.get('change_percentage'),
-            'change': data.get('change'),
-            'current_price': data.get('current_price'),
-            'day_high_price': data.get('day_high_price'),
-            'day_low_price': data.get('day_low_price'),
-            'company_id': data['company_id'],
-        }
-        return price_object
+        )
