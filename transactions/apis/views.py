@@ -42,8 +42,12 @@ class ClientSettingsView(APIView):
             accounts = service.get_credit_accounts()
             transaction_categories = service.get_transaction_categories()
             transaction_subcategories = service.get_transaction_subcategories()
+            account_types = service.get_account_types()
+            account_providers = service.get_account_providers()
             return Response({'data': {
                 'accounts': accounts,
+                'account_types': account_types,
+                'account_providers': account_providers,
                 'transaction_categories': transaction_categories,
                 'transaction_subcategories': transaction_subcategories
             }, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
