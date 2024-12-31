@@ -1,8 +1,8 @@
 import pytest
 from rest_framework.test import APIClient
+from model_bakery import baker
 
 from oauth.models import User
-
 
 @pytest.fixture
 def api_client():
@@ -10,8 +10,18 @@ def api_client():
 
 
 @pytest.fixture
-def authenticated_user(api_client):
-    def do_authenticated_user(mock_user):
-        return api_client.force_authenticate(user=mock_user)
+def authenticate(api_client):
+    def do_authenticated_user():
+        return api_client.force_authenticate(user=baker.make(User))
 
     return do_authenticated_user
+
+
+
+
+
+
+
+
+
+
