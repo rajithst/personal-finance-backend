@@ -10,13 +10,13 @@ from oauth.permissions import AppEngineCronPermission
 
 class DailyForexValueDaemonView(APIView):
     permission_classes = [AppEngineCronPermission]
+
     def get(self, request):
-        logging.info('updating forex data..')
-        query_params = request.query_params
-        currency = query_params.get('currency', None)
-        if not currency:
-            return Response({'error': 'currency is required'}, status=status.HTTP_400_BAD_REQUEST)
-        currencies = currency.split(',')
-        service = ForexService()
-        forex_data = service.update_daily_price(currencies)
-        return Response({'data': forex_data}, status=status.HTTP_200_OK)
+        try:
+            service = ForexService()
+            forex_data = service.update_daily_price(request.query_params.copy())
+            return Response({'data': forex_data, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logging.exception('Failed to update forex prices', exc_info=e)
+            return Response({'data': None, 'message': str(e), 'status': False},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
