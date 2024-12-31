@@ -3,9 +3,9 @@ import logging
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
 
 from investments.services.dividend_service import DividendService
+from oauth.permissions import AppEngineCronPermission
 
 
 class DividendIncomeView(APIView):
@@ -22,7 +22,7 @@ class DividendIncomeView(APIView):
 
 
 class DividendIncomeDaemonView(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
@@ -37,13 +37,13 @@ class DividendIncomeDaemonView(APIView):
 
 
 class DividendPaymentDaemonView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
             service = DividendService()
             service.enqueue_dividend_refresh_tasks()
-            return Response({'data': None, 'message': 'Enqueue dividend '}, status=status.HTTP_200_OK)
+            return Response({'data': None, 'message': 'Enqueue dividend', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:
             logging.exception('Failed to enqueue dividend refresh tasks', exc_info=e)
             return Response({'data': None, 'message': str(e), 'status': False}, status=status.HTTP_400_BAD_REQUEST)

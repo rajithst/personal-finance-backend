@@ -6,12 +6,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from investments.services.stock_service import StockService
+from oauth.permissions import AppEngineCronPermission
 
 logger = logging.getLogger(__name__)
 
 
 class DailyStockValueDaemonView(APIView):
 
+    permission_classes = [AppEngineCronPermission]
     def get(self, request):
         try:
             stock_service = StockService()
@@ -52,7 +54,7 @@ class StockPriceHistoryView(APIView):
 
 
 class BulkStockValueUpdaterView(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
