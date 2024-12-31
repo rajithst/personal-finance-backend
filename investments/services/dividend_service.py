@@ -81,7 +81,7 @@ class DividendService:
                         )
                 return True
             except Exception as e:
-                logging.exception('Failed to calculate dividend payments.')
+                logging.exception(f'Failed to calculate dividend payments. {e}')
                 return False
 
     def update_dividend_history(self, request_params):
@@ -94,7 +94,7 @@ class DividendService:
         dividends = self.dividend_api.get_dividend_calendar(company, from_date, to_date)
         dividend_objects = []
         for dividend in dividends:
-            dividend, created = DividendHistory.objects.update_or_create(
+            dividend, _ = DividendHistory.objects.update_or_create(
                 company_id=company,
                 payment_date=dividend['payment_date'],
                 defaults={

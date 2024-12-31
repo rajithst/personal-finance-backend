@@ -73,7 +73,7 @@ class StockPurchaseHistoryView(APIView):
             return Response({
                 'data': purchase_history, 'message': 'success', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.exception(f"Error retrieving purchase history")
+            logger.exception(f"Error retrieving purchase history {e}")
             return Response({
                 'data': None, 'message': str(e), 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -81,7 +81,7 @@ class StockPurchaseHistoryView(APIView):
         try:
             with transaction.atomic():
                 service = StockPurchaseService()
-                is_created, response = service.create_purchase(request.data.copy())
+                is_created, _ = service.create_purchase(request.data.copy())
                 if not is_created:
                     logger.warning("Failed to create stock purchase.")
                     return Response({

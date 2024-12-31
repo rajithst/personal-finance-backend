@@ -21,7 +21,7 @@ class PolygonAPI:
 
     def get_dividend_calendar(self, ticker, from_date, to_date=None):
         if not ticker:
-            raise Exception('Ticker is required')
+            raise ValueError('Ticker is required')
         results = []
         dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date)
         if isinstance(dividend_response, Iterator):

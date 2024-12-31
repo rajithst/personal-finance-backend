@@ -21,7 +21,7 @@ class TransactionListService:
     def _group_by(self, data: pd.DataFrame):
         if data.empty:
             return []
-        # df = pd.DataFrame(data)
+
         group_data = []
         for group_k, vals in data.groupby(['year', 'month']):
             vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
@@ -129,7 +129,6 @@ class TransactionBulkService:
         splits = request_data.get('splits', [])
         user = get_current_user()
         total_split_amount = 0
-        split_items = []
         response_instances = []
         try:
             if splits:

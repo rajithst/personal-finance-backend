@@ -20,11 +20,11 @@ class ThreadLocalMiddleware:
 
     def __call__(self, request):
         try:
-            if not request.path in BYPASS_AUTHENTICATION:
+            if request.path not in BYPASS_AUTHENTICATION:
                 jwt_authenticator = JWTAuthentication()
                 result = jwt_authenticator.authenticate(request)
                 if result is not None:
-                    user, token = result
+                    user, _ = result
                     if user:
                         _thread_locals.user = user
                         request.user = user

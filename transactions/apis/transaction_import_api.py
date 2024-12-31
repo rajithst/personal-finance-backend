@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -37,6 +39,8 @@ class TransactionImportView(APIView):
             return Response({'message': 'Failed to upload files', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
         failed_uploads = [file for file in uploaded_files if file not in upload_files]
+        if failed_uploads:
+            logging.info(f"These files uploading failed: {failed_uploads}")
         import_parameters = {
             'account_id': account_id,
             'drop_duplicates': drop_duplicates,

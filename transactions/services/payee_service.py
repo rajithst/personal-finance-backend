@@ -46,11 +46,11 @@ class PayeeService:
         Returns:
             dict: The payee details.
         """
-        id = request_data.get('id', None)
+        payee_id = request_data.get('id', None)
         name = request_data.get('name', None)
         instance = None
-        if id:
-            instance = self.get_by_id(id)
+        if payee_id:
+            instance = self.get_by_id(payee_id)
         elif name:
             instance = self.get_by_name(name)
 
@@ -74,9 +74,9 @@ class PayeeService:
         Returns:
             dict: The payees.
         """
-        id = request_data.get('id', None)
-        if id:
-            instance = self.get_by_id(id)
+        payee_id = request_data.get('id', None)
+        if payee_id:
+            instance = self.get_by_id(payee_id)
             payee_serializer = ResponseDestinationMapSerializer(instance)
             return payee_serializer.data
         else:
@@ -94,7 +94,7 @@ class PayeeService:
         Returns:
             tuple: A tuple containing a boolean value and the updated payee.
         """
-        id = request_data.get('id')
+        payee_id = request_data.get('id')
         merge_ids = request_data.get('merge_ids')
         new_destination = request_data.get('destination')
         new_alias = request_data.get('destination_eng')
@@ -102,7 +102,7 @@ class PayeeService:
         subcategory = request_data.get('subcategory')
         category_type = request_data.get('category_type')
 
-        exist_settings = DestinationMap.objects.get(pk=id)
+        exist_settings = DestinationMap.objects.get(pk=payee_id)
 
         is_payee_renamed = request_data.get('destination') != exist_settings.destination
         destination = new_destination if is_payee_renamed else exist_settings.destination

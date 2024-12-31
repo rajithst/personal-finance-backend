@@ -38,7 +38,7 @@ if ENV == 'prod':
         payload = client.access_secret_version(name=name).payload.data.decode('UTF-8')
         env.read_env(io.StringIO(payload))
     else:
-        raise Exception('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
+        raise RuntimeError('No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.')
 
     APPENGINE_URL = os.environ.get("APPENGINE_URL", default=None)
     if APPENGINE_URL:
