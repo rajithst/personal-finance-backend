@@ -34,6 +34,8 @@ class Portfolio(models.Model):
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, blank=True)
     currency = models.CharField(max_length=50, null=True, blank=True)
+    goal = models.CharField(max_length=50, null=True, blank=True)
+    goal_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

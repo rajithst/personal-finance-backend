@@ -1,3 +1,4 @@
+from common.constants import ACCOUNT_TYPE_INVESTMENT_ACCOUNT
 from investments.models import Portfolio
 from investments.serializers.response_serializers import ResponsePortfolioSerializer
 from transactions.models import Account
@@ -12,6 +13,6 @@ class SettingsService:
         return serializer.data
 
     def get_broker_accounts(self):
-        accounts = Account.objects.filter(account_type='INVESTMENT_ACCOUNT').all()
+        accounts = Account.objects.filter(account_type=ACCOUNT_TYPE_INVESTMENT_ACCOUNT).all()
         serializer = ResponseAccountSerializer(accounts, many=True)
         return serializer.data

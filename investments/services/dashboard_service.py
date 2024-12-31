@@ -5,22 +5,19 @@ from decimal import Decimal
 from django.db.models import Sum, F
 from django.db.models.functions import TruncMonth
 
-from investments.models import StockPurchaseHistory, Holding, Portfolio, StockDailyPrice
-from investments.serializers.response_serializers import ResponsePortfolioSerializer
-from transactions.models import Account
-
-
-
+from investments.models import StockPurchaseHistory, Holding, StockDailyPrice
+from investments.serializers.response_serializers import ResponseHoldingSerializer
 
 
 class DashboardService:
 
-    def get_monthly_invested_amount(self, year):
-        filter_params = {}
-        if year:
-            filter_params['purchase_date__year'] = year
+    def __init__(self, portfolio_id=None, year=None):
+        self.portfolio = portfolio_id
+        self.year = year
+
+    def get_monthly_invested_amount(self):
         queryset = (StockPurchaseHistory.objects.select_related('company')
-                    .filter(**filter_params)
+                    .filter(portfolio_id=self.portfolio)
                     .annotate(month=TruncMonth('purchase_date')).values('month', 'purchase_price', 'quantity')
                     .annotate(
             total_amount=Sum(F('purchase_price') * F('quantity'))).order_by('month')
@@ -32,7 +29,7 @@ class DashboardService:
         return results
 
     def get_portfolio_allocation(self):
-        holdings = Holding.objects.select_related('company').filter(portfolio_id=1)
+        holdings = Holding.objects.select_related('company').filter(portfolio_id=self.portfolio)
 
         sector_allocation = defaultdict(Decimal)
         industry_allocation = defaultdict(Decimal)
@@ -52,13 +49,15 @@ class DashboardService:
             industry_name = industry['company__industry__name']
             industry_allocation[industry_name] = Decimal(industry['total_value'] or 0)
 
+        sector_allocation = dict(sorted(sector_allocation.items(), key=lambda item: item[1], reverse=True))
+        industry_allocation = dict(sorted(industry_allocation.items(), key=lambda item: item[1], reverse=True))
         return {
             "sector_allocation": sector_allocation,
             "industry_allocation": industry_allocation,
         }
 
     def get_performance(self):
-        holdings = Holding.objects.select_related('company').filter(portfolio_id=1)
+        holdings = Holding.objects.select_related('company').filter(portfolio_id=self.portfolio)
         aggregated_data = holdings.aggregate(
             total_investment=Sum('total_investment'),
             current_portfolio_value=Sum('current_value'),
@@ -74,6 +73,31 @@ class DashboardService:
             "total_profit": total_profit
         }
 
+    def get_sector_wise_performance(self):
+
+        sector_wise_data = (
+            Holding.objects
+            .filter(portfolio_id=self.portfolio)
+            .values('company__sector__name')
+            .annotate(
+                total_investment=Sum('total_investment'),
+                total_current_value=Sum('current_value'),
+                total_profit_loss=Sum('profit_loss')
+            )
+            .order_by('-total_investment')
+        )
+
+        result = []
+        for sector_data in sector_wise_data:
+            sector = sector_data['company__sector__name']
+            result.append({
+                'sector': sector,
+                'total_investment': sector_data['total_investment'],
+                'total_current_value': sector_data['total_current_value'],
+                'total_profit_loss': sector_data['total_profit_loss']
+            })
+        return result
+
     def get_portfolio_growth_daily(self):
         """
         Calculate the daily portfolio growth and invested amount for a given portfolio.
@@ -82,7 +106,7 @@ class DashboardService:
         :return: List of dictionaries containing daily growth and invested amount
         """
         # Fetch all purchase histories for the portfolio
-        purchase_histories = StockPurchaseHistory.objects.filter(portfolio_id=1)
+        purchase_histories = StockPurchaseHistory.objects.filter(portfolio_id=self.portfolio)
 
         # Fetch daily prices for the stocks in the portfolio
         stock_symbols = purchase_histories.values_list('company__symbol', flat=True).distinct()
@@ -127,4 +151,3 @@ class DashboardService:
             current_date += timedelta(days=1)
 
         return daily_growth
-
