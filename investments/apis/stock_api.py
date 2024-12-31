@@ -1,7 +1,6 @@
 import logging
 
 from rest_framework import status
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -38,8 +37,8 @@ class StockPriceHistoryView(APIView):
             service = StockService()
             stock_price_history = service.get_price_history(request.query_params.copy())
             if stock_price_history is None:
-                logger.warning(f"No price history found")
-            logger.info(f"Successfully fetched stock details for company")
+                logger.warning("No price history found")
+            logger.info("Successfully fetched stock details for company")
             return Response(
                 {'data': stock_price_history or [],
                  'message': 'success', 'status': True
@@ -48,7 +47,7 @@ class StockPriceHistoryView(APIView):
             )
 
         except Exception as e:
-            logger.exception(f"Error occurred while fetching stock details")
+            logger.exception("Error occurred while fetching stock details")
             return Response({'data': None, 'message': str(e), 'status': False},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -61,7 +60,7 @@ class BulkStockValueUpdaterView(APIView):
             service = StockService()
             response = service.sync_historical_data(request.query_params.copy())
             if response:
-                logger.info(f"Successfully synced historical data.")
+                logger.info("Successfully synced historical data.")
                 return Response({'data': response, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
             logger.warning("Syncing historical data failed for the provided tickers.")
             return Response({'data': response, 'message': 'Failed to sync historical data', 'status': False},

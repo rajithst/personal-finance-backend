@@ -37,11 +37,11 @@ class MarketApi:
     def get_company_data(self, tickers):
         logging.info('Getting company information.')
         if not tickers or len(tickers) == 0:
-            raise Exception('Ticker is required')
+            raise ValueError('Ticker is required')
         if not isinstance(tickers, list):
-            raise Exception('Tickers must be a list of symbols')
+            raise ValueError('Tickers must be a list of symbols')
         if len(tickers) > 50:
-            raise Exception('Tickers must not be more than 15 symbols')
+            raise ValueError('Tickers must not be more than 15 symbols')
         company_data = []
         for ticker in tickers:
             data = fmpsdk.company_profile(self.API_KEY, ticker)
@@ -55,7 +55,7 @@ class MarketApi:
 
     def get_day_snapshot(self, tickers):
         if not tickers or len(tickers) == 0:
-            raise Exception('Ticker is required')
+            raise ValueError('Ticker is required')
         daily_data = []
         for ticker in tickers:
             snapshot = fmpsdk.quote(self.API_KEY, ticker)
@@ -71,7 +71,7 @@ class MarketApi:
 
     def get_forex_snapshot(self, tickers):
         if not tickers or len(tickers) == 0:
-            raise Exception('Tickers is required')
+            raise ValueError('Tickers is required')
         forex_data = []
         for ticker in tickers:
             snapshot = fmpsdk.quote(self.API_KEY, ticker)
@@ -84,7 +84,7 @@ class MarketApi:
 
     def get_dividend_calendar(self, tickers, from_date, to_date=None):
         if not tickers or len(tickers) == 0:
-            raise Exception('Tickers is required')
+            raise ValueError('Tickers is required')
         dividend_data = []
         dividend_info = fmpsdk.calendar.dividend_calendar(apikey=self.API_KEY, from_date=from_date, to_date=to_date)
         for dv in dividend_info:
@@ -100,7 +100,7 @@ class MarketApi:
 
     def get_historical_data(self, tickers, from_date=None, to_date=None):
         if not tickers or len(tickers) == 0:
-            raise Exception('Tickers is required')
+            raise ValueError('Tickers is required')
         historical_data = []
         for ticker in tickers:
             data = fmpsdk.historical_price_full(self.API_KEY, ticker, from_date, to_date)

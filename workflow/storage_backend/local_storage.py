@@ -21,7 +21,7 @@ class LocalStorageHandler(StorageBackendContract):
                     destination.write(chunk)
             return True
         except Exception as e:
-            logging.exception('failed to write files to the storage backend')
+            logging.exception(f'failed to write files to the storage backend {e}')
             return False
 
     def list_files(self, prefix=None):

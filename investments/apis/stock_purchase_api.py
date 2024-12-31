@@ -47,15 +47,15 @@ class StockPurchaseImportView(APIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             with transaction.atomic():
-                logger.info(f"Imported trades: {len(imported_trades)}. Starting bulk purchase creation.")
-                purchases_saved, response = purchase_service.create_bulk_purchase(imported_trades)
+                logger.info("Imported trades: {len(imported_trades)}. Starting bulk purchase creation.")
+                purchases_saved, _ = purchase_service.create_bulk_purchase(imported_trades)
                 if not purchases_saved:
                     logger.error("Bulk purchase creation failed.")
                     return Response({'data': None, 'message': 'Failed to create bulk purchase', 'status': False},
                                     status=status.HTTP_400_BAD_REQUEST)
                 logger.info("Bulk purchase creation successful. Merging holdings.")
                 holding_service = HoldingService()
-                response = holding_service.merge_bulk_holdings(imported_trades)
+                _ = holding_service.merge_bulk_holdings(imported_trades)
             return Response({'data': imported_trades, 'message': 'Successfully imported trades', 'status': True})
 
         except Exception as e:
@@ -69,7 +69,7 @@ class StockPurchaseHistoryView(APIView):
         try:
             service = StockPurchaseService()
             purchase_history = service.get_purchase_history(request.query_params.copy())
-            logger.info(f"Successfully retrieved purchase history")
+            logger.info("Successfully retrieved purchase history")
             return Response({
                 'data': purchase_history, 'message': 'success', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:

@@ -61,7 +61,7 @@ class CompanyService:
                 logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 time.sleep(2 ** attempt)
         logger.error("Failed to fetch company data after 3 retries.")
-        raise Exception("Failed to fetch company data after 3 retries.")
+        raise RuntimeError("Failed to fetch company data after 3 retries.")
 
     def get_company_list(self):
         companies = ResponseCompanySerializer(Company.objects.select_related('sector', 'industry').all(), many=True)

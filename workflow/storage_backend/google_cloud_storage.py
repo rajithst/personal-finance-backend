@@ -46,7 +46,7 @@ class GCSHandler(StorageBackendContract):
             blob.upload_from_file(file)
             return True
         except Exception as e:
-            logging.exception('Failed to upload file')
+            logging.exception(f'Failed to upload file {e}')
 
     def list_files(self, prefix=None):
         """
@@ -94,7 +94,7 @@ class GCSHandler(StorageBackendContract):
                 return self.read_csv_file(as_byte, read_config)
             return None
         except Exception as e:
-            logging.exception('Error downloading file from bucket')
+            logging.exception(f'Error downloading file from bucket {e}')
 
     def read_all_files(self, prefix, read_config):
         files = self.list_files(prefix)
@@ -118,4 +118,4 @@ class GCSHandler(StorageBackendContract):
         try:
             return pd.read_csv(as_byte, **read_config)
         except Exception as e:
-            logging.exception('Error reading file from bucket')
+            logging.exception(f'Error reading file from bucket {e}')

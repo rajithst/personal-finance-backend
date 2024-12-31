@@ -3,7 +3,10 @@ import calendar
 from investments.models import Holding, StockPurchaseHistory, Company, DividendPayment, Portfolio, StockDailyPrice
 from rest_framework import serializers
 
-
+COMPANY_NAME_SOURCE = 'company.company_name'
+COMPANY_INDUSTRY_SOURCE = 'company.industry.name'
+COMPANY_SECTOR_SOURCE = 'company.sector.name'
+COMPANY_IMAGE_SOURCE = 'company.image'
 class ResponseHoldingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Holding
@@ -12,10 +15,10 @@ class ResponseHoldingSerializer(serializers.ModelSerializer):
                   'profit_loss', 'price_updated_at', 'profit_change_percentage', 'company', 'company_name', 'image']
 
     profit_change_percentage = serializers.SerializerMethodField(method_name='get_profit_change_percentage')
-    company_name = serializers.ReadOnlyField(source='company.company_name')
-    industry = serializers.ReadOnlyField(source='company.industry.name')
-    sector = serializers.ReadOnlyField(source='company.sector.name')
-    image = serializers.ReadOnlyField(source='company.image')
+    company_name = serializers.ReadOnlyField(source=COMPANY_NAME_SOURCE)
+    industry = serializers.ReadOnlyField(source=COMPANY_INDUSTRY_SOURCE)
+    sector = serializers.ReadOnlyField(source=COMPANY_SECTOR_SOURCE)
+    image = serializers.ReadOnlyField(source=COMPANY_IMAGE_SOURCE)
 
     def get_profit_change_percentage(self, obj):
         return (obj.profit_loss / obj.total_investment) * 100
@@ -27,10 +30,10 @@ class ResponseDividendPaymentSerializer(serializers.ModelSerializer):
         fields = ['id', 'company', 'amount', 'quantity', 'payment_date', 'payment_received', 'company_name',
                   'industry', 'sector', 'image', 'stock_currency', 'year', 'month', 'month_text']
 
-    company_name = serializers.ReadOnlyField(source='company.company_name')
-    image = serializers.ReadOnlyField(source='company.image')
-    industry = serializers.ReadOnlyField(source='company.industry.name')
-    sector = serializers.ReadOnlyField(source='company.sector.name')
+    company_name = serializers.ReadOnlyField(source=COMPANY_NAME_SOURCE)
+    image = serializers.ReadOnlyField(source=COMPANY_IMAGE_SOURCE)
+    industry = serializers.ReadOnlyField(source=COMPANY_INDUSTRY_SOURCE)
+    sector = serializers.ReadOnlyField(source=COMPANY_SECTOR_SOURCE)
     stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
     year = serializers.SerializerMethodField(method_name='get_year')
     month = serializers.SerializerMethodField(method_name='get_month')
@@ -61,10 +64,10 @@ class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
                   'exchange_rate', 'company',
                   'company_name', 'industry', 'sector', 'image']
 
-    image = serializers.ReadOnlyField(source='company.image')
-    company_name = serializers.ReadOnlyField(source='company.company_name')
-    industry = serializers.ReadOnlyField(source='company.industry.name')
-    sector = serializers.ReadOnlyField(source='company.sector.name')
+    image = serializers.ReadOnlyField(source=COMPANY_IMAGE_SOURCE)
+    company_name = serializers.ReadOnlyField(source=COMPANY_NAME_SOURCE)
+    industry = serializers.ReadOnlyField(source=COMPANY_INDUSTRY_SOURCE)
+    sector = serializers.ReadOnlyField(source=COMPANY_SECTOR_SOURCE)
     stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
     year = serializers.SerializerMethodField(method_name='get_year')
     month = serializers.SerializerMethodField(method_name='get_month')
@@ -90,10 +93,10 @@ class ResponseStockPriceHistorySerializer(serializers.ModelSerializer):
         fields = ['id', 'date', 'current_price', 'change_percentage', 'change', 'day_high_price', 'day_low_price',
                   'company', 'company_name', 'industry', 'sector', 'image']
 
-    image = serializers.ReadOnlyField(source='company.image')
-    company_name = serializers.ReadOnlyField(source='company.company_name')
-    industry = serializers.ReadOnlyField(source='company.industry.name')
-    sector = serializers.ReadOnlyField(source='company.sector.name')
+    image = serializers.ReadOnlyField(source=COMPANY_IMAGE_SOURCE)
+    company_name = serializers.ReadOnlyField(source=COMPANY_NAME_SOURCE)
+    industry = serializers.ReadOnlyField(source=COMPANY_INDUSTRY_SOURCE)
+    sector = serializers.ReadOnlyField(source=COMPANY_SECTOR_SOURCE)
 
 
 class ResponseCompanySerializer(serializers.ModelSerializer):
@@ -103,8 +106,8 @@ class ResponseCompanySerializer(serializers.ModelSerializer):
                   'website', 'image', 'description']
 
     stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
-    industry = serializers.ReadOnlyField(source='company.industry.name')
-    sector = serializers.ReadOnlyField(source='company.sector.name')
+    industry = serializers.ReadOnlyField(source=COMPANY_INDUSTRY_SOURCE)
+    sector = serializers.ReadOnlyField(source=COMPANY_SECTOR_SOURCE)
 
     def get_stock_currency(self, data):
         if data.currency == 'USD':

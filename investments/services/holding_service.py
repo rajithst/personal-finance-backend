@@ -127,7 +127,8 @@ class HoldingService:
             existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
             if existing_holding:
                 existing_holding_dict = model_to_dict(existing_holding)
-                update_params = self.update_holding_object(existing_holding_dict, update_params)
+                current_price = Decimal(round(self.get_current_holding_price(company), 2))
+                update_params = self.update_holding_object(existing_holding_dict, update_params, current_price)
                 self.update_holding(existing_holding.id, update_params)
                 updated_holding = Holding.objects.filter(id=existing_holding.id).first()
                 return ResponseHoldingSerializer(updated_holding).data
