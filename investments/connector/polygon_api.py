@@ -1,13 +1,23 @@
 from typing import Iterator
-
+from django.conf import settings
 from polygon import RESTClient
+
 
 class PolygonAPI:
     def __init__(self):
-        self.API_KEY = '8dWkPLTjCVxRwKRJD_cUfzBsDr8l1v9B'
+        
+        self.API_KEY = None
+        self.config()
         if not self.API_KEY:
-            raise EnvironmentError(f"MARKET_API_KEY not set: {self.API_KEY}")
+            raise EnvironmentError(f"POLYGON_API_KEY not set: {self.API_KEY}")
         self.client = RESTClient(self.API_KEY)
+        
+    def config(self):
+        if settings.ENV == 'dev':
+            from dev_config import POLYGON_API_KEY
+            self.API_KEY = POLYGON_API_KEY
+        else:
+            self.API_KEY = settings.env('MARKET_API_KEY')
 
     def get_dividend_calendar(self, ticker, from_date, to_date=None):
         if not ticker:

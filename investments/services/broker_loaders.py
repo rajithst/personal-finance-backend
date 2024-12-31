@@ -35,7 +35,7 @@ class BaseLoader(object):
         """
         params_dict = {
             'account_id': account.id,
-            'notes': np.nan,
+            'notes': '',
         }
         df = df.assign(**params_dict)
         return df

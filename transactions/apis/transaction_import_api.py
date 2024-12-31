@@ -46,7 +46,6 @@ class TransactionImportView(APIView):
             'files': uploaded_files,
         }
 
-
         is_imported = import_service.import_transactions(import_parameters)
         if is_imported:
             return Response({'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)

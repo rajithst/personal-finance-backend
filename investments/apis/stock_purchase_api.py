@@ -2,7 +2,6 @@ import logging
 
 from django.db import transaction
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -47,36 +46,17 @@ class StockPurchaseImportView(APIView):
                 return Response({'data': None, 'message': 'No trades imported', 'status': False},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            failed_merges = []
             with transaction.atomic():
                 logger.info(f"Imported trades: {len(imported_trades)}. Starting bulk purchase creation.")
                 purchases_saved, response = purchase_service.create_bulk_purchase(imported_trades)
-
                 if not purchases_saved:
                     logger.error("Bulk purchase creation failed.")
-                    return Response({'data': None, 'message': 'Failed to save purchases', 'status': False},
+                    return Response({'data': None, 'message': 'Failed to create bulk purchase', 'status': False},
                                     status=status.HTTP_400_BAD_REQUEST)
-
                 logger.info("Bulk purchase creation successful. Merging holdings.")
                 holding_service = HoldingService()
-
-                for trade in imported_trades:
-                    response = holding_service.merge_holding(trade)
-                    if not response:
-                        failed_merges.append(trade)
-
-            if failed_merges:
-                logger.warning(f"Holdings merge failed for {len(failed_merges)} trades.")
-                return Response(
-                    {
-                        'data': {'failed_trades': failed_merges},
-                        'message': 'Partially imported: Some holdings could not be merged.',
-                        'status': True,
-                    },
-                    status=status.HTTP_207_MULTI_STATUS,
-                )
+                response = holding_service.merge_bulk_holdings(imported_trades)
             return Response({'data': imported_trades, 'message': 'Successfully imported trades', 'status': True})
-
 
         except Exception as e:
             logger.exception("Error occurred during the stock purchase import process.")

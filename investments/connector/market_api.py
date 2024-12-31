@@ -12,11 +12,18 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
 class MarketApi:
     def __init__(self):
 
-        self.API_KEY = '0Hs8qYwmaIcR2YITC5RIwPdwnLarAt0f'
+        self.API_KEY = None
+        self.config()
         if not self.API_KEY:
             raise EnvironmentError(f"MARKET_API_KEY not set: {self.API_KEY}")
 
-
+    def config(self):
+        if settings.ENV == 'dev':
+            from dev_config import MARKET_API_KEY
+            self.API_KEY = MARKET_API_KEY
+        else:
+            self.API_KEY = settings.env('MARKET_API_KEY')
+        
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}
         for field in fields:

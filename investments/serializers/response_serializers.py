@@ -83,6 +83,7 @@ class ResponseStockPurchaseHistorySerializer(serializers.ModelSerializer):
     def get_month(self, data):
         return data.purchase_date.month
 
+
 class ResponseStockPriceHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = StockDailyPrice
@@ -95,8 +96,6 @@ class ResponseStockPriceHistorySerializer(serializers.ModelSerializer):
     sector = serializers.ReadOnlyField(source='company.sector.name')
 
 
-
-
 class ResponseCompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
@@ -106,6 +105,7 @@ class ResponseCompanySerializer(serializers.ModelSerializer):
     stock_currency = serializers.SerializerMethodField(method_name='get_stock_currency')
     industry = serializers.ReadOnlyField(source='company.industry.name')
     sector = serializers.ReadOnlyField(source='company.sector.name')
+
     def get_stock_currency(self, data):
         if data.currency == 'USD':
             return '$'

@@ -1,10 +1,12 @@
 import logging
 import time
+import json
 from datetime import date
 from decimal import Decimal
 
 from requests import RequestException
 from rest_framework.exceptions import ValidationError
+from django.forms.models import model_to_dict
 
 from investments.connector.market_api import MarketApi
 from investments.models import Holding
@@ -36,16 +38,19 @@ class HoldingService:
                 time.sleep(2)
         raise MarketApiError(f"Failed to fetch data for {company} after 3 retries.")
 
-    def create_holding(self, create_params):
+    def create_holding_object(self, create_params):
         try:
             validated_params = CreateHoldingValidator.validate(create_params)
             company = validated_params['company']
             quantity = validated_params['quantity']
             purchase_price = validated_params['purchase_price']
             portfolio = validated_params['portfolio']
+            current_price = create_params.get('current_price', None)
 
-            # Fetch the current price
-            current_price = Decimal(round(self.get_current_holding_price(company), 2))
+            if not current_price:
+                current_price = Decimal(round(self.get_current_holding_price(company), 2))
+            else:
+                current_price = Decimal(round(current_price, 2))
             purchase_price = Decimal(round(purchase_price, 2))
 
             # Build the holding object
@@ -53,6 +58,7 @@ class HoldingService:
                 'quantity': quantity,
                 'average_price': Decimal(round(purchase_price, 2)),
                 'current_price': Decimal(round(current_price, 2)),
+                'current_value': Decimal(round(current_price * quantity, 2)),
                 'total_investment': Decimal(round(purchase_price * quantity, 2)),
                 'profit_loss': Decimal(round(quantity * (current_price - purchase_price), 2)),
                 'stock_currency': create_params.get('stock_currency'),
@@ -60,44 +66,115 @@ class HoldingService:
                 'company': company,
                 'portfolio': portfolio,
             }
-
-            # Serialize and save the holding
-            serializer = HoldingSerializer(data=holding_object)
-            if serializer.is_valid(raise_exception=True):
-                instance = serializer.save()
-                response_serializer = ResponseHoldingSerializer(instance=instance)
-                return response_serializer.data
-            return None
+            return holding_object
         except ValidationError as e:
             logging.error(f"Create holding validation error: {e}")
             return None
+
+    def update_holding_object(self, existing_holding_dict, trade, current_price):
+        trade_purchase_price = trade['purchase_price']
+        trade_purchase_quantity = trade['quantity']
+        total_quantity = trade['quantity'] + existing_holding_dict['quantity']
+        total_investment = Decimal(round(trade_purchase_quantity * trade_purchase_price, 2)) + existing_holding_dict[
+            'total_investment']
+        current_value = Decimal(round(current_price * total_quantity, 2))
+        updated_holding = {
+            'quantity': total_quantity,
+            'average_price': Decimal(round(total_investment / total_quantity, 2)),
+            'current_price': Decimal(round(current_price, 2)),
+            'total_investment': Decimal(total_investment),
+            'current_value': current_value,
+            'profit_loss': Decimal(round(current_value - total_investment, 2)),
+            'stock_currency': trade.get('stock_currency'),
+            'price_updated_at': date.today(),
+            'company': existing_holding_dict['company'],
+            'portfolio': existing_holding_dict['portfolio'],
+        }
+        if 'id' in existing_holding_dict:
+            updated_holding['id'] = existing_holding_dict['id']
+
+        return updated_holding
+
+    def save_holding(self, holding, is_bulk=False):
+        if is_bulk:
+            if not isinstance(holding, list):
+                raise ValidationError("Bulk holding data should be a list.")
+            serializer = HoldingSerializer(data=holding, many=True)
+        else:
+            serializer = HoldingSerializer(data=holding)
+        if serializer.is_valid(raise_exception=True):
+            instance = serializer.save()
+            if is_bulk:
+                response_serializer = ResponseHoldingSerializer(instance, many=True)
+            else:
+                response_serializer = ResponseHoldingSerializer(instance=instance)
+            return response_serializer.data
+        return None
+
+    def update_holding(self, holding_id, update_params):
+        try:
+            Holding.objects.filter(id=holding_id).update(**update_params)
+        except ValidationError as e:
+            logging.error(f"Validation error: {e}")
+            raise e
 
     def merge_holding(self, update_params):
         try:
             validated_params = CreateHoldingValidator.validate(update_params)
             company = validated_params['company']
-            quantity = validated_params['quantity']
-            purchase_price = validated_params['purchase_price']
             portfolio = validated_params['portfolio']
 
             existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
             if existing_holding:
-                current_price = Decimal(self.get_current_holding_price(company))
-                existing_holding.quantity += quantity
-                existing_holding.total_investment += Decimal(round(quantity * purchase_price, 2))
-                existing_holding.current_price = round(current_price, 2)
-                existing_holding.current_value = round(current_price * existing_holding.quantity, 2)
-                existing_holding.average_price = round(existing_holding.total_investment / existing_holding.quantity, 2)
-                existing_holding.profit_loss = Decimal(
-                    existing_holding.current_value) - existing_holding.total_investment
-                existing_holding.price_updated_at = date.today()
-                existing_holding.save()
-                return ResponseHoldingSerializer(instance=existing_holding).data
+                existing_holding_dict = model_to_dict(existing_holding)
+                update_params = self.update_holding_object(existing_holding_dict, update_params)
+                self.update_holding(existing_holding.id, update_params)
+                updated_holding = Holding.objects.filter(id=existing_holding.id).first()
+                return ResponseHoldingSerializer(updated_holding).data
             else:
-                return self.create_holding(update_params)
+                new_holding = self.create_holding_object(update_params)
+                self.save_holding(new_holding)
         except ValidationError as e:
             logging.error(f"Validation error: {e}")
             raise e
+
+    def merge_bulk_holdings(self, trades):
+        try:
+            current_value_map = {}
+            company_wise_trades = {}
+            for trade in trades:
+                company = trade['company']
+                if company not in current_value_map:
+                    current_value_map[company] = self.get_current_holding_price(company)
+                if company not in company_wise_trades:
+                    company_wise_trades[company] = []
+                company_wise_trades[company].append(trade)
+
+            for company, trade_list in company_wise_trades.items():
+                if not trade_list:
+                    continue
+                portfolio = trade_list[0]['portfolio']
+                existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
+                existing_holding_dict = {}
+                existing_holding_id = None
+                if existing_holding:
+                    existing_holding_id = existing_holding.id
+                    existing_holding_dict = model_to_dict(existing_holding)
+                for trade in trade_list:
+                    if existing_holding_dict:
+                        existing_holding_dict = self.update_holding_object(existing_holding_dict, trade,
+                                                                           current_value_map[company])
+                    else:
+                        trade['current_price'] = current_value_map[company]
+                        existing_holding_dict = self.create_holding_object(trade)
+                if existing_holding_id:
+                    self.update_holding(existing_holding_id, existing_holding_dict)
+                else:
+                    self.save_holding(existing_holding_dict)
+            return True
+        except ValidationError as e:
+            logging.exception(f"Validation error: {e}")
+            return False
 
 
 class MarketApiError(Exception):
