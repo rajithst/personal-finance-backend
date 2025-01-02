@@ -11,9 +11,11 @@ class RequestManager(models.Manager):
         if current_user:
             return super().get_queryset().filter(user_id=current_user.id)
 
+
 class CronManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset()
+
 
 class CompanyIndustry(models.Model):
     id = models.AutoField(primary_key=True)
@@ -43,7 +45,6 @@ class Portfolio(models.Model):
     objects = RequestManager()
 
     cron_objects = CronManager()
-
 
     def save(self, *args, **kwargs):
         if not self.user:
@@ -91,6 +92,7 @@ class StockPurchaseHistory(models.Model):
     objects = RequestManager()
 
     cron_objects = CronManager()
+
     def save(self, *args, **kwargs):
         if not self.user:
             self.user = get_current_user()
@@ -126,6 +128,7 @@ class Holding(models.Model):
     objects = RequestManager()
 
     cron_objects = CronManager()
+
     def save(self, *args, **kwargs):
         if not self.user:
             self.user = get_current_user()
@@ -185,6 +188,7 @@ class DividendPayment(models.Model):
     objects = RequestManager()
 
     cron_objects = CronManager()
+
     def save(self, *args, **kwargs):
         if not self.user:
             self.user = get_current_user()
@@ -203,8 +207,22 @@ class StockDailyPrice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
+    cron_objects = CronManager()
     def __str__(self):
         return f"{self.company.symbol} - {self.date}"
+
+
+class StockSplit(models.Model):
+    id = models.AutoField(primary_key=True)
+    company = models.ForeignKey(Company, on_delete=models.SET_NULL, null=True)
+    split_date = models.DateField()
+    split_ratio = models.CharField(max_length=10)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    cron_objects = CronManager()
+    def __str__(self):
+        return f"{self.company.symbol} - {self.split_date}"
 
 
 class IndexFundDailyPrice(models.Model):
@@ -238,6 +256,20 @@ class IndexFundPurchaseHistory(models.Model):
         if not self.user:
             self.user = get_current_user()
         super().save(*args, **kwargs)
+
+
+class PortfolioDailyGrowth(models.Model):
+    id = models.AutoField(primary_key=True)
+    date = models.DateField()
+    total_investment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    portfolio_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    daily_return = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_profit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    cron_objects = CronManager()
 
 
 class Forex(models.Model):

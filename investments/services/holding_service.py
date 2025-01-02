@@ -1,15 +1,14 @@
 import logging
 import time
-import json
 from datetime import date
 from decimal import Decimal
 
+from django.forms.models import model_to_dict
 from requests import RequestException
 from rest_framework.exceptions import ValidationError
-from django.forms.models import model_to_dict
 
 from investments.connector.market_api import MarketApi
-from investments.models import Holding
+from investments.models import Holding, StockSplit
 from investments.serializers.response_serializers import ResponseHoldingSerializer
 from investments.serializers.serializers import HoldingSerializer
 from investments.validators.holding_validator import CreateHoldingValidator, ListHoldingValidator
@@ -48,19 +47,19 @@ class HoldingService:
             current_price = create_params.get('current_price', None)
 
             if not current_price:
-                current_price = Decimal(round(self.get_current_holding_price(company), 2))
+                current_price = float(self.get_current_holding_price(company))
             else:
-                current_price = Decimal(round(current_price, 2))
-            purchase_price = Decimal(round(purchase_price, 2))
+                current_price = float(current_price)
+            purchase_price = float(purchase_price)
 
             # Build the holding object
             holding_object = {
                 'quantity': quantity,
-                'average_price': Decimal(round(purchase_price, 2)),
-                'current_price': Decimal(round(current_price, 2)),
-                'current_value': Decimal(round(current_price * quantity, 2)),
-                'total_investment': Decimal(round(purchase_price * quantity, 2)),
-                'profit_loss': Decimal(round(quantity * (current_price - purchase_price), 2)),
+                'average_price': Decimal("%.2f" % purchase_price),
+                'current_price': Decimal("%.2f" % current_price),
+                'current_value': Decimal("%.2f" % (current_price * quantity)),
+                'total_investment': Decimal("%.2f" % (purchase_price * quantity)),
+                'profit_loss': Decimal("%.2f" % (quantity * (current_price - purchase_price))),
                 'stock_currency': create_params.get('stock_currency'),
                 'price_updated_at': date.today(),
                 'company': company,
@@ -74,17 +73,19 @@ class HoldingService:
     def update_holding_object(self, existing_holding_dict, trade, current_price):
         trade_purchase_price = trade['purchase_price']
         trade_purchase_quantity = trade['quantity']
+        current_price = float(current_price)
         total_quantity = trade['quantity'] + existing_holding_dict['quantity']
-        total_investment = Decimal(round(trade_purchase_quantity * trade_purchase_price, 2)) + existing_holding_dict[
-            'total_investment']
-        current_value = Decimal(round(current_price * total_quantity, 2))
+        total_investment = round(trade_purchase_quantity * trade_purchase_price, 2) + float(round(existing_holding_dict[
+                                                                                                      'total_investment'],
+                                                                                                  2))
+        current_value = round(current_price * total_quantity, 2)
         updated_holding = {
             'quantity': total_quantity,
-            'average_price': Decimal(round(total_investment / total_quantity, 2)),
-            'current_price': Decimal(round(current_price, 2)),
-            'total_investment': Decimal(total_investment),
-            'current_value': current_value,
-            'profit_loss': Decimal(round(current_value - total_investment, 2)),
+            'average_price': Decimal("%.2f" % (total_investment / total_quantity)),
+            'current_price': Decimal("%.2f" % current_price),
+            'total_investment': Decimal("%.2f" % total_investment),
+            'current_value': Decimal("%.2f" % current_value),
+            'profit_loss': Decimal("%.2f" % (current_value - total_investment)),
             'stock_currency': trade.get('stock_currency'),
             'price_updated_at': date.today(),
             'company': existing_holding_dict['company'],
@@ -125,6 +126,10 @@ class HoldingService:
             portfolio = validated_params['portfolio']
 
             existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
+            stock_splits = self.get_stock_splits(companies=[company])
+            stock_splits_for_company = stock_splits.get(company, [])
+            adjusted_trades = self.apply_stock_splits([update_params], stock_splits_for_company)
+            update_params = adjusted_trades[0]
             if existing_holding:
                 existing_holding_dict = model_to_dict(existing_holding)
                 current_price = Decimal(round(self.get_current_holding_price(company), 2))
@@ -143,21 +148,30 @@ class HoldingService:
         try:
             current_value_map = {}
             company_wise_trades = {}
+            company_list = []
             for trade in trades:
                 company = trade['company']
+                if company not in company_list:
+                    company_list.append(company)
+
                 if company not in current_value_map:
                     current_value_map[company] = self.get_current_holding_price(company)
                 if company not in company_wise_trades:
                     company_wise_trades[company] = []
                 company_wise_trades[company].append(trade)
 
+            stock_splits = self.get_stock_splits(companies=company_list)
+
             for company, trade_list in company_wise_trades.items():
                 if not trade_list:
                     continue
                 portfolio = trade_list[0]['portfolio']
-                existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
+
+                stock_splits_for_company = stock_splits.get(company, [])
+                trade_list = self.apply_stock_splits(trade_list, stock_splits_for_company)
                 existing_holding_dict = {}
                 existing_holding_id = None
+                existing_holding = Holding.objects.filter(company_id=company, portfolio_id=portfolio).first()
                 if existing_holding:
                     existing_holding_id = existing_holding.id
                     existing_holding_dict = model_to_dict(existing_holding)
@@ -176,6 +190,30 @@ class HoldingService:
         except ValidationError as e:
             logging.exception(f"Validation error: {e}")
             return False
+
+    def apply_stock_splits(self, trade_list, stock_splits):
+        adjusted_purchases = []
+        for trade in trade_list:
+            trade_copy = trade.copy()
+            for stock_split in stock_splits:
+                if stock_split.split_date >= trade_copy['purchase_date']:
+                    denominator, numerator = stock_split.split_ratio.split(':')
+                    split_ratio = int(numerator) / int(denominator)
+                    trade_copy['quantity'] = int(trade['quantity']) * split_ratio
+                    trade_copy['purchase_price'] = float(round((trade_copy['purchase_price'] / split_ratio), 2))
+            adjusted_purchases.append(trade_copy)
+        return adjusted_purchases
+
+    def get_stock_splits(self, companies=None):
+        stock_split_history = StockSplit.cron_objects.select_related('company').filter(company_id__in=companies).order_by(
+            'company_id', '-split_date') if companies else StockSplit.objects.select_related('company').all().order_by(
+            'company_id', '-split_date')
+        stock_split_map = {}
+        for stock_split in stock_split_history:
+            if stock_split.company_id not in stock_split_map:
+                stock_split_map[stock_split.company_id] = []
+            stock_split_map[stock_split.company_id].append(stock_split)
+        return stock_split_map
 
 
 class MarketApiError(Exception):

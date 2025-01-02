@@ -7,6 +7,8 @@ COMPANY_NAME_SOURCE = 'company.company_name'
 COMPANY_INDUSTRY_SOURCE = 'company.industry.name'
 COMPANY_SECTOR_SOURCE = 'company.sector.name'
 COMPANY_IMAGE_SOURCE = 'company.image'
+
+
 class ResponseHoldingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Holding

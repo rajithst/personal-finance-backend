@@ -9,6 +9,17 @@ from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_D
     DAILY_SNAPSHOT_REMAP_FIELDS, HISTORICAL_DATA_FIELDS, HISTORICAL_DATA_REMAP_FIELDS
 
 
+class ListTickerValidator:
+
+    @staticmethod
+    def validate(tickers):
+        if not tickers:
+            raise ValueError('Tickers is required')
+        if not isinstance(tickers, list):
+            raise ValueError('Tickers must be a list of symbols')
+        if len(tickers) > 50:
+            raise ValueError('Tickers must not be more than 15 symbols')
+
 class MarketApi:
     def __init__(self):
 
@@ -36,12 +47,7 @@ class MarketApi:
 
     def get_company_data(self, tickers):
         logging.info('Getting company information.')
-        if not tickers or len(tickers) == 0:
-            raise ValueError('Ticker is required')
-        if not isinstance(tickers, list):
-            raise ValueError('Tickers must be a list of symbols')
-        if len(tickers) > 50:
-            raise ValueError('Tickers must not be more than 15 symbols')
+        ListTickerValidator.validate(tickers)
         company_data = []
         for ticker in tickers:
             data = fmpsdk.company_profile(self.API_KEY, ticker)
@@ -53,9 +59,25 @@ class MarketApi:
             company_data.append(company_model)
         return company_data
 
+    def get_stock_splits(self, tickers, from_date=None, to_date=None):
+        fmpsdk.stock_split_calendar(self.API_KEY, tickers)
+
+    def get_historical_stock_splits(self, tickers):
+        ListTickerValidator.validate(tickers)
+        split_results = []
+        for ticker in tickers:
+            historical_split = fmpsdk.historical_stock_split(self.API_KEY, ticker)
+            if historical_split:
+                historical_split = historical_split['historical']
+            else:
+                continue
+            for split in historical_split:
+                split['symbol'] = ticker
+                split_results.append(split)
+        return split_results
+
     def get_day_snapshot(self, tickers):
-        if not tickers or len(tickers) == 0:
-            raise ValueError('Ticker is required')
+        ListTickerValidator.validate(tickers)
         daily_data = []
         for ticker in tickers:
             snapshot = fmpsdk.quote(self.API_KEY, ticker)
@@ -70,8 +92,7 @@ class MarketApi:
         return daily_data
 
     def get_forex_snapshot(self, tickers):
-        if not tickers or len(tickers) == 0:
-            raise ValueError('Tickers is required')
+        ListTickerValidator.validate(tickers)
         forex_data = []
         for ticker in tickers:
             snapshot = fmpsdk.quote(self.API_KEY, ticker)
@@ -83,8 +104,7 @@ class MarketApi:
         return forex_data
 
     def get_dividend_calendar(self, tickers, from_date, to_date=None):
-        if not tickers or len(tickers) == 0:
-            raise ValueError('Tickers is required')
+        ListTickerValidator.validate(tickers)
         dividend_data = []
         dividend_info = fmpsdk.calendar.dividend_calendar(apikey=self.API_KEY, from_date=from_date, to_date=to_date)
         for dv in dividend_info:
@@ -99,8 +119,7 @@ class MarketApi:
         return dividend_data
 
     def get_historical_data(self, tickers, from_date=None, to_date=None):
-        if not tickers or len(tickers) == 0:
-            raise ValueError('Tickers is required')
+        ListTickerValidator.validate(tickers)
         historical_data = []
         for ticker in tickers:
             data = fmpsdk.historical_price_full(self.API_KEY, ticker, from_date, to_date)

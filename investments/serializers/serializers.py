@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from investments.models import StockPurchaseHistory, Company, Holding, \
     StockDailyPrice, Forex, CompanyIndustry, CompanySector, Portfolio, IndexFund, IndexFundDailyPrice, \
-    IndexFundPurchaseHistory, DividendPayment, DividendHistory
+    IndexFundPurchaseHistory, DividendPayment, DividendHistory, PortfolioDailyGrowth
 
 
 class CompanyIndustrySerializer(serializers.ModelSerializer):
@@ -38,6 +38,12 @@ class StockPurchaseHistorySerializer(serializers.ModelSerializer):
 class IndexFundSerializer(serializers.ModelSerializer):
     class Meta:
         model = IndexFund
+        fields = '__all__'
+
+
+class PortfolioDailyGrowthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PortfolioDailyGrowth
         fields = '__all__'
 
 

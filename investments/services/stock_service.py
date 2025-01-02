@@ -2,10 +2,10 @@ import logging
 import time
 from datetime import date
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 
 from investments.connector.market_api import MarketApi
-from investments.models import StockDailyPrice, Company
+from investments.models import StockDailyPrice, Company, StockSplit
 from investments.serializers.serializers import StockDailyPriceSerializer
 from investments.validators.stock_validator import TickerValidator, BulkTickerValidator
 
@@ -47,7 +47,7 @@ class StockService:
                 new_entries.append(price_object)
         if new_entries:
             with transaction.atomic():
-                StockDailyPrice.objects.bulk_create(new_entries)
+                StockDailyPrice.cron_objects.bulk_create(new_entries)
 
     def get_price_history(self, request_data):
         TickerValidator.validate(request_data)
@@ -59,7 +59,7 @@ class StockService:
             start_date = date(today.year, 1, 1)
             end_date = date(today.year, 12, 31)
 
-        queryset = StockDailyPrice.objects.filter(company_id=company, date__range=(start_date, end_date)).order_by(
+        queryset = StockDailyPrice.cron_objects.filter(company_id=company, date__range=(start_date, end_date)).order_by(
             'date')
         serializer = StockDailyPriceSerializer(queryset, many=True)
         return serializer.data
@@ -84,7 +84,7 @@ class StockService:
                     new_entries.append(price_object)
                 if new_entries:
                     with transaction.atomic():
-                        StockDailyPrice.objects.bulk_create(new_entries)
+                        StockDailyPrice.cron_objects.bulk_create(new_entries)
                 time.sleep(10)
             return True
         except Exception as e:
@@ -102,3 +102,30 @@ class StockService:
             day_low_price=data['day_low_price'],
 
         )
+
+    def update_daily_stock_split(self, request_data):
+        try:
+            companies = request_data.get('companies', '')
+            if not companies:
+                companies = list(Company.objects.values_list('symbol', flat=True))
+            else:
+                companies = companies.split(',')
+            splits = self.market_api.get_historical_stock_splits(companies)
+            for split in splits:
+                try:
+                    StockSplit.cron_objects.update_or_create(
+                        company_id=split['symbol'],
+                        split_date=split['date'],
+                        defaults={
+                            'split_ratio': f"{split['denominator']}:{split['numerator']}",
+                        }
+                    )
+                except IntegrityError as e:
+                    logging.exception(f"Error inserting or updating split data: {e}")
+
+            return splits
+
+        except Exception as e:
+            logging.exception(f"Error fetching stock split data: {e}")
+            return None
+
