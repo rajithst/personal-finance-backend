@@ -30,7 +30,7 @@ class ResponseDividendPaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DividendPayment
         fields = ['id', 'company', 'amount', 'quantity', 'payment_date', 'payment_received', 'company_name',
-                  'industry', 'sector', 'image', 'stock_currency', 'year', 'month', 'month_text']
+                  'industry', 'sector', 'ex_dividend_date', 'image', 'stock_currency', 'year', 'month', 'month_text']
 
     company_name = serializers.ReadOnlyField(source=COMPANY_NAME_SOURCE)
     image = serializers.ReadOnlyField(source=COMPANY_IMAGE_SOURCE)

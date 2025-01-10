@@ -21,14 +21,19 @@ class DividendIncomeView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DividendIncomeDaemonView(APIView):
+class DividendHistoryDaemonView(APIView):
     permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
+            task = request.query_params.get('task', None)
             service = DividendService()
-            service.update_dividend_history(request.query_params)
-            response = service.calculate_dividend_payments()
+            if task == 'pull-dividend-data':
+                response = service.update_dividend_history(request.query_params)
+            elif task == 'refresh-dividend-payments':
+                response = service.enqueue_dividend_refresh_tasks()
+            else:
+                response = 'Invalid task'
             return Response({'data': response, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:
             logging.exception('Failed to update dividend payments', exc_info=e)
@@ -36,14 +41,15 @@ class DividendIncomeDaemonView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DividendPaymentDaemonView(APIView):
+class DividendIncomeDaemonView(APIView):
     permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
             service = DividendService()
-            service.enqueue_dividend_refresh_tasks()
-            return Response({'data': None, 'message': 'Enqueue dividend', 'status': True}, status=status.HTTP_200_OK)
+            response = service.calculate_dividend_payments(request.query_params.copy())
+            return Response({'data': response, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:
-            logging.exception('Failed to enqueue dividend refresh tasks', exc_info=e)
-            return Response({'data': None, 'message': str(e), 'status': False}, status=status.HTTP_400_BAD_REQUEST)
+            logging.exception('Failed to update dividend payments', exc_info=e)
+            return Response({'data': None, 'message': str(e), 'status': False},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)

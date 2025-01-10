@@ -1,24 +1,49 @@
 cron:
+# stock cron
 - description: "daily stock value update/insert"
   url: /investments/stocks/cron/value/daily
   schedule: every 6 hours from 00:30 to 23:59
   timezone: Asia/Tokyo
   target: coincraftservice
 
+- description: "stock split value update/insert"
+  url: /investments/stocks/cron/split/daily
+  schedule: everyday 00:15
+  timezone: Asia/Tokyo
+  target: coincraftservice
+
+#portfolio cron
+- description: "enqueue portfolio growth tasks"
+  url: /investments/portfolio/cron/growth/daily/?task=enqueue-portfolio-growth
+  schedule: every 6 hours from 01:00 to 23:59
+  timezone: Asia/Tokyo
+  target: coincraftservice
+
+- description: "update portfolio growth daily"
+  url: /investments/portfolio/cron/growth/daily/?task=update-portfolio-growth
+  schedule: every 6 hours from 01:00 to 23:59
+  timezone: Asia/Tokyo
+  target: coincraftservice
+
+#forex cron
 - description: "daily forex value update/insert"
   url: /investments/forex/cron/value/daily
   schedule: every 6 hours from 00:30 to 23:59
   timezone: Asia/Tokyo
   target: coincraftservice
 
-- description: "daily dividend income calculate update/insert"
-  url: /investments/dividends/cron/income/daily/
-  schedule: everyday 07:00
+# dividend cron
+- description: "pull up-to-date dividend data daily"
+  url: /investments/dividends/cron/payments/daily/?task=pull-dividend-data
+  schedule: everyday 00:30
   timezone: Asia/Tokyo
   target: coincraftservice
 
-- description: "daily dividend payment update/insert"
-  url: /investments/dividends/cron/payments/daily/
-  schedule: everyday 07:00
+- description: "refresh dividend payments daily"
+  url: /investments/dividends/cron/payments/daily/?task=refresh-dividend-payments
+  schedule: everyday 05:00
   timezone: Asia/Tokyo
   target: coincraftservice
+
+
+

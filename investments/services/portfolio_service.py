@@ -32,7 +32,7 @@ class PortfolioService:
 
 
 class PortfolioGrowthService:
-    def __init__(self, portfolio_id):
+    def __init__(self, portfolio_id=None):
         self.portfolio = portfolio_id
 
     def update_portfolio_growth(self, request_data):

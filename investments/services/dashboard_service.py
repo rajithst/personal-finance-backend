@@ -1,13 +1,10 @@
 from collections import defaultdict
-from datetime import timedelta
 from decimal import Decimal
 
-import pandas as pd
 from django.db.models import Sum, F
 from django.db.models.functions import TruncMonth
 
-from investments.models import StockPurchaseHistory, Holding, StockDailyPrice, PortfolioDailyGrowth
-from investments.serializers.response_serializers import ResponseHoldingSerializer
+from investments.models import StockPurchaseHistory, Holding, PortfolioDailyGrowth
 from investments.serializers.serializers import PortfolioDailyGrowthSerializer
 
 
@@ -20,9 +17,10 @@ class DashboardService:
     def get_monthly_invested_amount(self):
         queryset = (StockPurchaseHistory.objects.select_related('company')
                     .filter(portfolio_id=self.portfolio)
-                    .annotate(month=TruncMonth('purchase_date')).values('month', 'purchase_price', 'quantity')
-                    .annotate(
-            total_amount=Sum(F('purchase_price') * F('quantity'))).order_by('month')
+                    .annotate(year=F('purchase_date__year'), month=TruncMonth('purchase_date'))
+                    .values('year', 'month')
+                    .annotate(total_amount=Sum(F('purchase_price') * F('quantity')))
+                    .order_by('year', 'month')
                     )
         results = {}
         for item in queryset:
@@ -104,5 +102,3 @@ class DashboardService:
 
         growth_data = PortfolioDailyGrowth.cron_objects.filter(portfolio_id=self.portfolio).all()
         return PortfolioDailyGrowthSerializer(growth_data, many=True).data
-
-    

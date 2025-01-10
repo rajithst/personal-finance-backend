@@ -4,16 +4,21 @@ from datetime import date
 
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
-from django.db.models import Sum
+from django.db.models import Sum, F
 from django.db.models.functions import TruncMonth
 
 from investments.connector.polygon_api import PolygonAPI
 from investments.models import Holding, Company, DividendHistory, StockPurchaseHistory, DividendPayment, Portfolio
-# from google.appengine.api import taskqueue
-
 from investments.serializers.response_serializers import ResponseDividendPaymentSerializer
-from investments.serializers.serializers import DividendHistorySerializer, DividendPaymentSerializer
+from investments.serializers.serializers import DividendHistorySerializer
 from investments.validators.dividend_validator import DividendValidator, DividendPaymentValidator
+
+is_dev_env = settings.ENV == 'dev'
+if not is_dev_env:
+    try:
+        from google.appengine.api import taskqueue
+    except ImportError:
+        logging.exception('Failed to import taskqueue from google.appengine.api')
 
 DIVIDEND_TAX_RATE = 20.315
 
@@ -36,7 +41,7 @@ class DividendService:
         """
         self.dividend_api = dividend_api or PolygonAPI()
 
-    def calculate_dividend_payments(self):
+    def calculate_dividend_payments(self, request_params):
         """
         Calculates and records dividend payments for holdings.
 
@@ -46,8 +51,15 @@ class DividendService:
         Raises:
             Exception: Logs any error encountered during the calculation process.
         """
-        today = date.today().strftime('%Y-%m-%d')
-        portfolio_users = Portfolio.cron_objects.only('id', 'user_id').distinct()
+        from_date = request_params.get('from_date')
+        portfolio_id = request_params.get('portfolio')
+        if not from_date:
+            from_date = date.today().strftime('%Y-%m-%d')
+
+        portfolio_users = Portfolio.cron_objects.only('id', 'user_id')
+        if portfolio_id:
+            portfolio_users = portfolio_users.filter(id=portfolio_id)
+
         for portfolio_user in portfolio_users:
             user_id = portfolio_user.user_id
             portfolio_id = portfolio_user.id
@@ -56,8 +68,8 @@ class DividendService:
                 'company_id', flat=True).distinct()
             try:
                 for company in holding_companies:
-                    dividend_payer = DividendHistory.objects.filter(company_id=company, payment_date__gte=today).first()
-                    if dividend_payer:
+                    dividend_payments = DividendHistory.objects.filter(company_id=company, payment_date__gte=from_date)
+                    for dividend_payer in dividend_payments:
                         ex_dividend_date = dividend_payer.ex_dividend_date
                         purchased_shares = (StockPurchaseHistory.cron_objects
                                             .filter(company_id=company,
@@ -123,24 +135,23 @@ class DividendService:
         if is_dev_env:
             for company in companies[:5]:
                 self.update_dividend_history({'company': company, 'from_date': from_date, 'to_date': to_date})
-                self.calculate_dividend_payments()
+                self.calculate_dividend_payments({'company': company, 'from_date': from_date})
 
         else:
-            for company in companies[:5]:
-                pass
-                # taskqueue.add(
-                #     name='sync-dividends',
-                #     url='/investments/dividends/sync/daily',
-                #     target='coincraftservice',
-                #     params={'company': company, 'from_date': from_date, 'to_date': to_date})
+            for company in companies:
+                taskqueue.add(
+                    name='sync-dividends',
+                    url='/investments/dividends/cron/income/daily',
+                    target='coincraftservice',
+                    params={'company': company, 'from_date': from_date, 'to_date': to_date})
 
     def get_dividend_income(self, request_params):
         DividendPaymentValidator.validate_request(request_params)
-        dividends_by_month = DividendPayment.objects.annotate(
+        dividends_by_month = DividendPayment.objects.filter(portfolio_id=request_params.get('portfolio')).annotate(
             year_month=TruncMonth('payment_date')
         ).values('year_month').annotate(
-            total_amount=Sum('amount')
-        ).order_by('-year_month')
+            total_amount=Sum(F('quantity') * F('amount'))
+        ).order_by('year_month')
         dividends_by_month_with_records = []
         for month_data in dividends_by_month:
             year_month = month_data['year_month']

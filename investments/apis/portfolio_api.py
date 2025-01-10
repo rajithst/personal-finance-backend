@@ -31,8 +31,10 @@ class PortfolioSettingsView(APIView):
 
 class PortfolioGrowthDaemonView(APIView):
     permission_classes = [AppEngineCronPermission]
+
     def get(self, request):
         try:
+            task = request.query_params.get('task', None)
             portfolio_id = request.query_params.get('portfolio')
             service = PortfolioGrowthService(portfolio_id=portfolio_id)
             response = service.update_portfolio_growth(request.query_params.copy())
