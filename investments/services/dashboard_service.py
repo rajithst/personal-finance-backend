@@ -1,10 +1,11 @@
+import logging
 from collections import defaultdict
 from decimal import Decimal
 
 from django.db.models import Sum, F
 from django.db.models.functions import TruncMonth
 
-from investments.models import StockPurchaseHistory, Holding, PortfolioDailyGrowth
+from investments.models import StockPurchaseHistory, Holding, PortfolioDailyGrowth, DividendPayment
 from investments.serializers.serializers import PortfolioDailyGrowthSerializer
 
 
@@ -102,3 +103,11 @@ class DashboardService:
 
         growth_data = PortfolioDailyGrowth.cron_objects.filter(portfolio_id=self.portfolio).all()
         return PortfolioDailyGrowthSerializer(growth_data, many=True).data
+
+    def get_passive_income(self):
+        try:
+            return DividendPayment.objects.filter(portfolio_id=self.portfolio).aggregate(
+                total_amount=Sum(F('quantity') * F('amount'))
+            ).get('total_amount', 0)
+        except Exception as e:
+            logging.exception('Failed to fetch passive income', exc_info=e)

@@ -147,6 +147,7 @@ class DividendService:
 
     def get_dividend_income(self, request_params):
         DividendPaymentValidator.validate_request(request_params)
+        dividend_portfolio = Portfolio.objects.get(id=request_params.get('portfolio'))
         dividends_by_month = DividendPayment.objects.filter(portfolio_id=request_params.get('portfolio')).annotate(
             year_month=TruncMonth('payment_date')
         ).values('year_month').annotate(
@@ -163,5 +164,6 @@ class DividendService:
             serializer = ResponseDividendPaymentSerializer(records_for_month, many=True)
             dividends_by_month_with_records.append({'year': year_month.year, 'month': year_month.month,
                                                     'month_text': calendar.month_name[year_month.month],
+                                                    'currency': dividend_portfolio.currency,
                                                     'total': total_amount, 'dividends': serializer.data})
         return dividends_by_month_with_records

@@ -17,6 +17,7 @@ class InvestmentPerformanceView(APIView):
             portfolio_performance = dashboard_service.get_performance()
             growth = dashboard_service.get_portfolio_growth_daily()
             sector_performance = dashboard_service.get_sector_wise_performance()
+            passive_income = dashboard_service.get_passive_income()
             return Response({'data': {
                 'total_investment': portfolio_performance.get('total_investment'),
                 'current_portfolio_value': portfolio_performance.get('current_portfolio_value'),
@@ -24,6 +25,7 @@ class InvestmentPerformanceView(APIView):
                 'monthly_investment': monthly_invested_amount,
                 'sector_allocation': allocation.get('sector_allocation'),
                 'industry_allocation': allocation.get('industry_allocation'),
+                'passive_income': passive_income,
                 'growth': growth,
                 'sector_performance': sector_performance
             }, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
