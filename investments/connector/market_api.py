@@ -20,6 +20,7 @@ class ListTickerValidator:
         if len(tickers) > 50:
             raise ValueError('Tickers must not be more than 15 symbols')
 
+
 class MarketApi:
     def __init__(self):
 
@@ -33,8 +34,8 @@ class MarketApi:
             from dev_config import MARKET_API_KEY
             self.API_KEY = MARKET_API_KEY
         else:
-            self.API_KEY = settings.env('MARKET_API_KEY')
-        
+            self.API_KEY = os.environ.get('MARKET_API_KEY')
+
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}
         for field in fields:
@@ -100,7 +101,8 @@ class MarketApi:
                 snapshot = snapshot[0]
             else:
                 continue
-            forex_data.append({'name': snapshot['name'], 'symbol': snapshot['symbol'], 'price': round(snapshot['price'],4)})
+            forex_data.append(
+                {'name': snapshot['name'], 'symbol': snapshot['symbol'], 'price': round(snapshot['price'], 4)})
         return forex_data
 
     def get_dividend_calendar(self, tickers, from_date, to_date=None):
