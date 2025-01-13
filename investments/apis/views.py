@@ -4,14 +4,16 @@ from rest_framework.views import APIView
 
 from investments.services.dashboard_service import DashboardService
 from investments.services.settings_service import SettingsService
-from investments.validators.dashboard_validator import DashboardValidator
+from investments.validators.portfolio_validator import PortfolioValidator
 
 
 class InvestmentPerformanceView(APIView):
     def get(self, request):
         try:
-            DashboardValidator.validate_request(request.query_params.copy())
-            dashboard_service = DashboardService(portfolio_id=request.query_params.get('portfolio'))
+            PortfolioValidator.validate_request(request.query_params.copy())
+            portfolio_id = request.query_params.get('portfolio')
+            dashboard_service = DashboardService(portfolio_id=portfolio_id)
+
             monthly_invested_amount = dashboard_service.get_monthly_invested_amount()
             allocation = dashboard_service.get_portfolio_allocation()
             portfolio_performance = dashboard_service.get_performance()
@@ -45,6 +47,3 @@ class ClientSettingsView(APIView):
             }, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-

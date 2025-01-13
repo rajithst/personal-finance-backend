@@ -37,14 +37,3 @@ class SyncHistoricalDataValidator:
         if errors:
             raise ValidationError(errors)
         return params
-
-
-class PurchaseHistoryValidator:
-    @staticmethod
-    def validate(params):
-        errors = {}
-        if 'portfolio' not in params:
-            errors['portfolio'] = "Portfolio ID is required."
-        if errors:
-            raise ValidationError(errors)
-        return params

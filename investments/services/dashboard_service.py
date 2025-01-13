@@ -111,3 +111,4 @@ class DashboardService:
             ).get('total_amount', 0)
         except Exception as e:
             logging.exception('Failed to fetch passive income', exc_info=e)
+

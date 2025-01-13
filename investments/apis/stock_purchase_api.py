@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from investments.services.holding_service import HoldingService
 from investments.services.stock_purchase_service import StockPurchaseService
+from investments.validators.portfolio_validator import PortfolioValidator
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class StockPurchaseImportView(APIView):
 class StockPurchaseHistoryView(APIView):
     def get(self, request):
         try:
+            PortfolioValidator.validate_request(request.query_params.copy())
             service = StockPurchaseService()
             purchase_history = service.get_purchase_history(request.query_params.copy())
             logger.info("Successfully retrieved purchase history")

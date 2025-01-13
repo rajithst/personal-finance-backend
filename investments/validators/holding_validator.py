@@ -16,14 +16,3 @@ class CreateHoldingValidator:
             raise ValidationError(errors)
         return params
 
-
-class ListHoldingValidator:
-    @staticmethod
-    def validate(params):
-        errors = {}
-        if not params.get('portfolio'):
-            errors['portfolio'] = "Portfolio ID is required."
-
-        if errors:
-            raise ValidationError(errors)
-        return params

@@ -11,7 +11,7 @@ from investments.services.broker_loaders import RakutenBrokerForeignStockLoader,
     RakutenBrokerDomesticStockLoader
 from investments.services.company_service import CompanyService
 from investments.validators.import_validator import ImportParamsValidator
-from investments.validators.stock_validator import PurchaseHistoryValidator
+from investments.validators.portfolio_validator import PortfolioValidator
 from investments.validators.upload_validator import UploadParamsValidator
 from transactions.models import Account
 from workflow.import_workflow import ImportWorkflow, ImportWorkflowContract
@@ -91,7 +91,7 @@ class StockPurchaseService:
         return False, serializer.errors
 
     def get_purchase_history(self, purchase_params):
-        PurchaseHistoryValidator.validate(purchase_params)
+        PortfolioValidator.validate_request(purchase_params)
         filter_params = {'portfolio_id': purchase_params.get('portfolio')}
         if purchase_params.get('company'):
             filter_params['company_id'] = purchase_params.get('company')

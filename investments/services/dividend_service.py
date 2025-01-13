@@ -11,7 +11,8 @@ from investments.connector.polygon_api import PolygonAPI
 from investments.models import Holding, Company, DividendHistory, StockPurchaseHistory, DividendPayment, Portfolio
 from investments.serializers.response_serializers import ResponseDividendPaymentSerializer
 from investments.serializers.serializers import DividendHistorySerializer
-from investments.validators.dividend_validator import DividendValidator, DividendPaymentValidator
+from investments.validators.dividend_validator import DividendValidator
+from investments.validators.portfolio_validator import PortfolioValidator
 
 is_dev_env = settings.ENV == 'dev'
 if not is_dev_env:
@@ -146,7 +147,7 @@ class DividendService:
                     params={'company': company, 'from_date': from_date, 'to_date': to_date})
 
     def get_dividend_income(self, request_params):
-        DividendPaymentValidator.validate_request(request_params)
+        PortfolioValidator.validate_request(request_params)
         dividend_portfolio = Portfolio.objects.get(id=request_params.get('portfolio'))
         dividends_by_month = DividendPayment.objects.filter(portfolio_id=request_params.get('portfolio')).annotate(
             year_month=TruncMonth('payment_date')

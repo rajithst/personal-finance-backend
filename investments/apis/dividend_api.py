@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from investments.services.dividend_service import DividendService
+from investments.validators.portfolio_validator import PortfolioValidator
 from oauth.permissions import AppEngineCronPermission
 
 
@@ -12,6 +13,7 @@ class DividendIncomeView(APIView):
 
     def get(self, request):
         try:
+            PortfolioValidator.validate_request(request.query_params.copy())
             service = DividendService()
             dividend_incomes = service.get_dividend_income(request.query_params.copy())
             return Response({'data': dividend_incomes, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)

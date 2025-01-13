@@ -11,7 +11,7 @@ from investments.connector.market_api import MarketApi
 from investments.models import Holding, StockSplit
 from investments.serializers.response_serializers import ResponseHoldingSerializer
 from investments.serializers.serializers import HoldingSerializer
-from investments.validators.holding_validator import CreateHoldingValidator, ListHoldingValidator
+from investments.validators.holding_validator import CreateHoldingValidator
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ class HoldingService:
         self.market_api = market_api or MarketApi()
 
     def get_current_holdings(self, request_data):
-        ListHoldingValidator().validate(request_data)
         queryset = Holding.objects.select_related('company').filter(portfolio_id=request_data.get('portfolio'))
         return ResponseHoldingSerializer(queryset, many=True).data
 
