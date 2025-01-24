@@ -44,7 +44,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-dev_config.py
+
 coverage_html_report/
 .coverage
 
@@ -72,7 +72,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-
+./dev_env_config.py
 # Translations
 *.mo
 

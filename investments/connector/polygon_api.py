@@ -15,7 +15,7 @@ class PolygonAPI:
         
     def config(self):
         if settings.ENV == 'dev':
-            from dev_config import POLYGON_API_KEY
+            from dev_env_config import POLYGON_API_KEY
             self.API_KEY = POLYGON_API_KEY
         else:
             self.API_KEY = os.environ.get('POLYGON_API_KEY')
