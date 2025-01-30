@@ -4,22 +4,29 @@ from rest_framework import status
 @pytest.fixture
 def mock_dividend_service(mocker):
     return mocker.patch('investments.apis.dividend_api.DividendService')
+
+@pytest.fixture
+def mock_portfolio_validator(mocker):
+    return mocker.patch('investments.apis.dividend_api.PortfolioValidator')
+
 @pytest.mark.django_db
 class TestDividendIncomeView:
-    def test_get_success(self, api_client, mock_dividend_service, authenticate):
+    def test_get_success(self, api_client, mock_portfolio_validator, mock_dividend_service, authenticate):
         authenticate()
+        mock_portfolio_validator.return_value.validate_request.return_value = None
         mock_dividend_service.return_value.get_dividend_income.return_value = {'income': 100}
 
-        response = api_client.get('/investments/dividends/income/')
+        response = api_client.get('/investments/dividends/income/', {'portfolio_id': 1})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] is True
 
-    def test_get_failure(self, api_client, mock_dividend_service, authenticate):
+    def test_get_failure(self, api_client, mock_portfolio_validator, mock_dividend_service, authenticate):
         authenticate()
+        mock_portfolio_validator.return_value.validate_request.return_value = None
         mock_dividend_service.return_value.get_dividend_income.side_effect = Exception('Error')
 
-        response = api_client.get('/investments/dividends/income/')
+        response = api_client.get('/investments/dividends/income/', {'portfolio_id': 1})
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data['status'] is False
