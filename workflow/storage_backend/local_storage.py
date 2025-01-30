@@ -31,14 +31,19 @@ class LocalStorageHandler(StorageBackendContract):
     def delete_file(self, file_name):
         pass
 
-    def read_file(self, file_name, read_config, file_type=None):
+    def read_file(self, file_name, read_config=None):
         file = os.path.join(settings.MEDIA_ROOT, file_name)
-        return pd.read_csv(file.__str__(), **read_config)
+        encoding = read_config.get('encoding') if read_config else None
+        return open(file, 'r', encoding=encoding)
 
-    def read_all_files(self, prefix, read_config, file_type=None):
+    def read_all_files(self, prefix, read_config=None):
         files = self.list_files(prefix)
         all_files = []
         for file in files:
-            df = pd.read_csv(file.__str__(), **read_config)
-            all_files.append(df)
+            file = self.read_file(file, read_config)
+            all_files.append(file)
         return all_files
+
+    def read_csv(self, file_name, read_config=None):
+        file = os.path.join(settings.MEDIA_ROOT, file_name)
+        return pd.read_csv(file, **read_config) if os.path.exists(file) else None

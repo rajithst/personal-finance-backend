@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 
 from common.constants import TRANSACTION_DATA_FOLDER, INVESTMENT_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
@@ -9,8 +11,9 @@ from django.conf import settings
 from workflow.contracts.import_workflow_contract import ImportWorkflowContract
 
 
-class ImportWorkflow:
-    def __init__(self, account, account_processor: ImportWorkflowContract, storage_provider: StorageBackendContract = None,
+class ImportCsvWorkflow:
+    def __init__(self, account, account_processor: ImportWorkflowContract,
+                 storage_provider: StorageBackendContract = None,
                  is_development=False):
         super().__init__()
         self.account = account
@@ -31,13 +34,32 @@ class ImportWorkflow:
         except Exception as e:
             raise ValueError(f"Error processing files: {str(e)}") from e
 
+    def _skip_rows(self, file_object, keywords):
+        skip_count = 0
+        for line in file_object:
+            row = list(item.strip('\'"').lstrip('\ufeff') for item in line.strip().split(","))
+            row = [item.strip('\'"') for item in row]
+            if set(keywords).issubset(row):
+                break
+            skip_count += 1
+        return skip_count
+
     def _process_single_file(self, file_name: str) -> pd.DataFrame:
         try:
             storage = self._get_storage_provider()
-            df = storage.read_file(file_name, read_config=self.account_processor.get_read_config())
+            init_read_config = self.account_processor.get_read_config()
+            if not init_read_config.get('skiprows'):
+                if not self.account_processor.get_expected_columns():
+                    raise ValueError('Expected columns should defined or skiprows should be set in read_config')
+                file_object = storage.read_file(file_name, read_config=init_read_config)
+                skip_rows = self._skip_rows(file_object, self.account_processor.get_expected_columns())
+                init_read_config['skiprows'] = skip_rows
+            df = storage.read_csv(file_name, read_config=init_read_config)
+            df = df.reset_index(drop=True)
             df = self.account_processor.process_data(df, self.account)
             return self.account_processor.validate_dataframe(df)
         except Exception as e:
+            logging.exception('Error processing file %s', file_name)
             raise ValueError(f"Error processing file {file_name}: {str(e)}") from e
 
     def _process_all_files(self, target_path):

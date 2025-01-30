@@ -15,7 +15,7 @@ from transactions.models import Transaction, Account, DestinationMap, Transactio
 from transactions.services.card_loaders import TransactionProcessFactory
 from transactions.validators.import_validator import ImportParamsValidator
 from transactions.validators.upload_validator import UploadParamsValidator
-from workflow.import_workflow import ImportWorkflow
+from workflow.import_workflow import ImportCsvWorkflow
 from workflow.providers.storage_backend_provider import StorageBackendProvider
 from workflow.upload_workflow import UploadWorkflow
 
@@ -27,7 +27,7 @@ class TransactionImportService:
                  upload_workflow=None):
         self.transaction_process_factory = transaction_process_factory or TransactionProcessFactory
         self.storage_factory = storage_factory or StorageBackendProvider
-        self.import_workflow = import_workflow or ImportWorkflow
+        self.import_workflow = import_workflow or ImportCsvWorkflow
         self.upload_workflow = upload_workflow or UploadWorkflow
 
     def import_transactions(self, import_params):

@@ -1,7 +1,6 @@
 import logging
-import numpy as np
 import pandas as pd
-
+import numpy as np
 from common.enums import DataSource, AccountProviders
 from workflow.import_workflow import ImportWorkflowContract
 
@@ -21,9 +20,9 @@ class BaseLoader:
             'account_id': account.id
         }
         df = df.assign(**params_dict)
-        df = df[df.date.isnull() == False]
-        df = df[df.amount.isnull() == False]
-
+        df['amount'] = df['amount'].replace('', np.nan)
+        df['date'] = df['date'].replace('', np.nan)
+        df = df.dropna(subset=['date', 'amount'], how='any')
         return df
 
     def clean_electronic_signatures(self, value, signatures):
@@ -65,10 +64,13 @@ class RakutenCardLoader(BaseLoader, ImportWorkflowContract):
     def get_read_config(self):
         return {}
 
+    def get_expected_columns(self):
+        return ['利用日', '利用店名・商品名', '利用金額']
+
     def process_data(self, df, account):
-        df = df[['利用日', '利用店名・商品名', '利用金額']]
+        df = df[self.get_expected_columns()]
         df.columns = ['date', 'destination', 'amount']
-        df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
+        df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d', errors='coerce').dt.date
         df = self.set_default_props(df, account)
         df = self.clean_destinations(df, self.cleanable_signatures)
         return df
@@ -85,16 +87,17 @@ class EposCardLoader(BaseLoader, ImportWorkflowContract):
     def get_read_config(self):
         return {
             'encoding': 'cp932',
-            'skiprows': 1,
-            'skipfooter': 5,
             'engine': 'python'
         }
 
+    def get_expected_columns(self):
+        return ['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']
+
     def process_data(self, df, account):
         df = df.iloc[:, 1:]
-        df = df[['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']]
+        df = df[self.get_expected_columns()]
         df.columns = ['date', 'destination', 'amount']
-        df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日').dt.date
+        df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日', errors='coerce').dt.date
         df = self.set_default_props(df, account)
         df = self.clean_destinations(df, self.cleanable_signatures)
         return df
@@ -111,16 +114,20 @@ class DocomoCardLoader(BaseLoader, ImportWorkflowContract):
     def get_read_config(self):
         return {
             'encoding': 'cp932',
-            'skiprows': 1,
-            'skipfooter': 3,
-            'engine': 'python'
+            'engine': 'python',
+            'skiprows': 1, #force loading by skipping rows without finding target columns
+            'header': None
         }
 
+    def get_expected_columns(self):
+        return []
+
     def process_data(self, df, account):
+        rows, columns = df.shape
+        df.columns = ['col' + str(i) for i in range(columns)]
         df = df.iloc[:, :3]
         df.columns = ['date', 'destination', 'amount']
-        df = df.loc[df['date'] != 'ＲＡ　ＪＩＴＨ　様']
-        df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d').dt.date
+        df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d', errors='coerce').dt.date
         df = self.set_default_props(df, account)
         df = self.clean_destinations(df, self.cleanable_signatures)
         return df
@@ -137,17 +144,25 @@ class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
     def get_read_config(self):
         return {
             'encoding': 'shift-jis',
-            'skiprows': 9,
             'engine': 'python'
         }
 
+    def _get_income_columns(self):
+        return ['日付', 'お預入金額', 'お取引内容']
+
+    def _get_expense_columns(self):
+        return ['日付', 'お引出金額', 'お取引内容']
+
+    def get_expected_columns(self):
+        return list(set(self._get_income_columns() + self._get_expense_columns()))
+
     def process_data(self, df, account):
-        df_income = df[['日付', 'お預入金額', 'お取引内容']]
-        df_expense = df[['日付', 'お引出金額', 'お取引内容']]
+        df_income = df[self._get_income_columns()]
+        df_expense = df[self._get_expense_columns()]
         df_income.columns = ['date', 'amount', 'destination']
         df_expense.columns = ['date', 'amount', 'destination']
-        df_income['date'] = pd.to_datetime(df_income['date'], format='%Y.%m.%d').dt.date
-        df_expense['date'] = pd.to_datetime(df_expense['date'], format='%Y.%m.%d').dt.date
+        df_income['date'] = pd.to_datetime(df_income['date'], format='%Y.%m.%d', errors='coerce').dt.date
+        df_expense['date'] = pd.to_datetime(df_expense['date'], format='%Y.%m.%d', errors='coerce').dt.date
         df_expense = self.set_default_props(df_expense, account)
         df_income = self.set_default_props(df_income, account)
         df_expense = self.clean_destinations(df_expense, self.cleanable_signatures)

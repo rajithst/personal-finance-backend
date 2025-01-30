@@ -1,13 +1,11 @@
 import logging
-from io import BytesIO
 
 import pandas as pd
+from django.conf import settings
 from google.cloud import storage
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from workflow.contracts.storage_backend_contract import StorageBackendContract
-import pathlib
-from django.conf import settings
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 class GCSHandler(StorageBackendContract):
@@ -72,14 +70,13 @@ class GCSHandler(StorageBackendContract):
         blob = bucket.blob(file_name)
         blob.delete()
 
-    def read_file(self, file_name, read_config, file_format=None):
+    def read_file(self, file_name, read_config=None):
         """
         Reads and processes a file from the GCS bucket.
 
         Args:
             file_name (str): The name of the file in the bucket.
-            read_config (dict): Configuration for reading the file.
-            file_format (str, optional): The file format. Defaults to inferring from the file extension.
+            read_config (dict, optional): The read configuration for the file. Defaults to None.
 
         Returns:
             pd.DataFrame or None: The processed file as a pandas DataFrame, or None if unsupported format.
@@ -87,16 +84,21 @@ class GCSHandler(StorageBackendContract):
         try:
             bucket = self._client.bucket(self._bucket_name)
             blob = bucket.blob(file_name)
-            data = blob.download_as_string()
-            as_byte = BytesIO(data)
-            ext = pathlib.Path(file_name).suffix
-            if ext == '.csv':
-                return self.read_csv_file(as_byte, read_config)
-            return None
+            encoding = read_config.get('encoding') if read_config else None
+            return open(blob.download_as_string(), 'r', encoding=encoding)
         except Exception as e:
             logging.exception(f'Error downloading file from bucket {e}')
 
-    def read_all_files(self, prefix, read_config):
+    def read_all_files(self, prefix, read_config=None):
+        """
+        Reads all files in the GCS bucket with the specified prefix.
+
+        Args:
+            prefix (str): The prefix to filter files.
+            read_config (dict, optional): The read configuration for the files. Defaults to None.
+        Returns:
+            list[pd.DataFrame]: A list of files as TextIOWrapper objects.
+        """
         files = self.list_files(prefix)
         file_list = []
         for file in files:
@@ -104,18 +106,21 @@ class GCSHandler(StorageBackendContract):
             file_list.append(df)
         return file_list
 
-    def read_csv_file(self, as_byte, read_config):
+    def read_csv(self, file_name, read_config=None):
         """
-        Reads a CSV file into a pandas DataFrame.
+        Reads a CSV file from the GCS bucket.
 
         Args:
-            as_byte (BytesIO): The CSV file as a byte stream.
-            read_config (dict): Configuration for pandas read_csv.
+            file_name (str): The name of the file in the bucket.
+            read_config (dict, optional): The read configuration for the file. Defaults to None.
 
         Returns:
-            pd.DataFrame: The CSV file as a DataFrame.
+            pd.DataFrame or None: The CSV file as a pandas DataFrame, or None if unsupported format.
         """
         try:
-            return pd.read_csv(as_byte, **read_config)
+            bucket = self._client.bucket(self._bucket_name)
+            blob = bucket.blob(file_name)
+            return pd.read_csv(blob.download_as_string(), **read_config)
         except Exception as e:
-            logging.exception(f'Error reading file from bucket {e}')
+            logging.exception(f'Error reading CSV file from bucket {e}')
+            return None

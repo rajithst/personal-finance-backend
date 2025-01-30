@@ -4,7 +4,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 _thread_locals = threading.local()
 BYPASS_AUTHENTICATION = ['/', '/auth/jwt/create']
-
+PASSWORD_RESETS = ['/oauth/users/reset_password', '/auth/users/reset_password_confirm/']
 
 def get_current_user():
     return getattr(_thread_locals, 'user', None)
@@ -28,6 +28,9 @@ class ThreadLocalMiddleware:
                     if user:
                         _thread_locals.user = user
                         request.user = user
+            elif request.path in PASSWORD_RESETS:
+                _thread_locals.user = None
+                request.user = None
         except AuthenticationFailed:
             request.user = None
 

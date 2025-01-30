@@ -14,7 +14,7 @@ from investments.validators.import_validator import ImportParamsValidator
 from investments.validators.portfolio_validator import PortfolioValidator
 from investments.validators.upload_validator import UploadParamsValidator
 from transactions.models import Account
-from workflow.import_workflow import ImportWorkflow, ImportWorkflowContract
+from workflow.import_workflow import ImportCsvWorkflow, ImportWorkflowContract
 from workflow.providers.storage_backend_provider import StorageBackendProvider
 from workflow.upload_workflow import UploadWorkflow
 
@@ -26,7 +26,7 @@ class StockPurchaseService:
                  upload_workflow=None):
         self.broker_factory = broker_factory or BrokerProcessFactory
         self.storage_factory = storage_factory or StorageBackendProvider
-        self.import_workflow = import_workflow or ImportWorkflow
+        self.import_workflow = import_workflow or ImportCsvWorkflow
         self.upload_workflow = upload_workflow or UploadWorkflow
 
     def import_purchases(self, import_params):

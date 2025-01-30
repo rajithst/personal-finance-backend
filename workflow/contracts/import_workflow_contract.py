@@ -7,6 +7,9 @@ class ImportWorkflowContract(ABC):
     def get_read_config(self):
         pass
 
+    def get_expected_columns(self):
+        pass
+
     @abstractmethod
     def process_data(self, data, account):
         pass

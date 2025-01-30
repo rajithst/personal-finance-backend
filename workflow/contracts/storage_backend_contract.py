@@ -7,7 +7,7 @@ class StorageBackendContract(ABC):
         pass
 
     @abstractmethod
-    def read_file(self, file_name, read_config, file_type=None):
+    def read_file(self, file_name, read_config=None):
         pass
 
     @abstractmethod
@@ -19,5 +19,9 @@ class StorageBackendContract(ABC):
         pass
 
     @abstractmethod
-    def read_all_files(self, prefix, read_config):
+    def read_all_files(self, prefix, read_config=None):
+        pass
+
+    @abstractmethod
+    def read_csv(self, file_name, read_config=None):
         pass
