@@ -1,3 +1,4 @@
+import io
 import logging
 
 import pandas as pd
@@ -72,20 +73,19 @@ class GCSHandler(StorageBackendContract):
 
     def read_file(self, file_name, read_config=None):
         """
-        Reads and processes a file from the GCS bucket.
-
+        Reads a file from the GCS bucket.
         Args:
             file_name (str): The name of the file in the bucket.
             read_config (dict, optional): The read configuration for the file. Defaults to None.
-
         Returns:
-            pd.DataFrame or None: The processed file as a pandas DataFrame, or None if unsupported format.
+            io.StringIO: The file as a TextIOWrapper object.
         """
         try:
             bucket = self._client.bucket(self._bucket_name)
             blob = bucket.blob(file_name)
-            encoding = read_config.get('encoding') if read_config else None
-            return open(blob.download_as_string(), 'r', encoding=encoding)
+            encoding = read_config.get('encoding') if read_config else 'utf-8'
+            file_content =  blob.download_as_text(encoding=encoding)
+            return io.StringIO(file_content)
         except Exception as e:
             logging.exception(f'Error downloading file from bucket {e}')
 
@@ -120,7 +120,9 @@ class GCSHandler(StorageBackendContract):
         try:
             bucket = self._client.bucket(self._bucket_name)
             blob = bucket.blob(file_name)
-            return pd.read_csv(blob.download_as_string(), **read_config)
+            data = blob.download_as_string()
+            as_byte = io.BytesIO(data)
+            return pd.read_csv(as_byte, **read_config)
         except Exception as e:
             logging.exception(f'Error reading CSV file from bucket {e}')
             return None
