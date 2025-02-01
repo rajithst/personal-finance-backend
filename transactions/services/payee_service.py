@@ -146,7 +146,8 @@ class PayeeService:
                 Transaction.objects.filter(destination__in=target_destinations).update(
                     **update_params)
                 DestinationMap.objects.filter(id__in=merge_ids).delete()
-                return True, serializer.data
+                payee_details = self.get_payee_details({'id': payee_id})
+                return True, payee_details
             except Exception as e:
                 logging.exception("An unexpected error occurred:", e)
                 return False, serializer.errors
