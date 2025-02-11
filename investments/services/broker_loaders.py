@@ -1,7 +1,8 @@
-import numpy as np
 import pandas as pd
 
+from investments.models import Company
 from workflow.import_workflow import ImportWorkflowContract
+
 
 def clean_numeric_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """
@@ -17,11 +18,13 @@ def clean_numeric_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
     df[column_name] = df[column_name].str.replace(',', '').astype(float).round(2)
     return df
 
+
 class BaseLoader(object):
     """
     A base class for data loaders, providing common functionality such as
     setting default properties and validating DataFrames.
     """
+
     def set_default_props(self, df, account):
         """
         Add default properties to the DataFrame.
@@ -63,6 +66,7 @@ class RakutenBrokerForeignStockLoader(BaseLoader, ImportWorkflowContract):
     """
     Loader for processing foreign stock data from Rakuten brokers.
     """
+
     def __init__(self):
         """
         Initialize the loader with specific configurations.
@@ -80,6 +84,15 @@ class RakutenBrokerForeignStockLoader(BaseLoader, ImportWorkflowContract):
         return {
             'encoding': 'shift-jis'
         }
+
+    def get_expected_columns(self):
+        return [
+            "約定日", "受渡日", "ティッカー", "銘柄名", "口座", "取引区分",
+            "売買区分", "信用区分", "弁済期限", "決済通貨", "数量［株］",
+            "単価［USドル］", "約定代金［USドル］", "為替レート",
+            "手数料［USドル］", "税金［USドル］", "受渡金額［USドル］",
+            "受渡金額［円］"
+        ]
 
     def process_data(self, df, account):
         """
@@ -107,6 +120,8 @@ class RakutenBrokerForeignStockLoader(BaseLoader, ImportWorkflowContract):
         df['purchase_date'] = pd.to_datetime(df['purchase_date'], format='%Y/%m/%d').dt.date
         df['exchange_rate'] = df['exchange_rate'].astype(float).round(2)
         df['stock_currency'] = '$'
+        existing_companies = list(Company.objects.values_list('symbol', flat=True))
+        df = df[df['company'].isin(existing_companies)]
         df = clean_numeric_column(df, 'purchase_price')
         df = self.set_default_props(df, account)
         return df
@@ -119,6 +134,7 @@ class RakutenBrokerDomesticStockLoader(BaseLoader, ImportWorkflowContract):
     """
     Loader for processing domestic stock data from Rakuten brokers.
     """
+
     def __init__(self):
         """
         Initialize the loader with specific configurations.

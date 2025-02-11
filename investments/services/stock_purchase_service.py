@@ -70,12 +70,6 @@ class StockPurchaseService:
             raise e
 
     def create_bulk_purchase(self, trade_data):
-        companies = [item.get('company') for item in trade_data]
-        existing_companies = list(Company.objects.values_list('symbol', flat=True))
-        new_companies = [c for c in companies if c not in existing_companies]
-        if new_companies:
-            company_service = CompanyService()
-            company_service.fetch_company_info({'companies': ','.join(new_companies)})
         with transaction.atomic():
             purchase_history_serializer = StockPurchaseHistorySerializer(data=trade_data, many=True)
             if purchase_history_serializer.is_valid(raise_exception=True):

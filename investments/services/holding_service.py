@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime
 from datetime import date
 from decimal import Decimal
 
@@ -73,7 +74,7 @@ class HoldingService:
         trade_purchase_price = trade['purchase_price']
         trade_purchase_quantity = trade['quantity']
         current_price = float(current_price)
-        total_quantity = trade['quantity'] + existing_holding_dict['quantity']
+        total_quantity = int(trade['quantity']) + int(existing_holding_dict['quantity'])
         total_investment = round(trade_purchase_quantity * trade_purchase_price, 2) + float(round(existing_holding_dict[
                                                                                                       'total_investment'],
                                                                                                   2))
@@ -138,7 +139,7 @@ class HoldingService:
                 return ResponseHoldingSerializer(updated_holding).data
             else:
                 new_holding = self.create_holding_object(update_params)
-                self.save_holding(new_holding)
+                return self.save_holding(new_holding)
         except ValidationError as e:
             logging.error(f"Validation error: {e}")
             raise e
@@ -195,7 +196,7 @@ class HoldingService:
         for trade in trade_list:
             trade_copy = trade.copy()
             for stock_split in stock_splits:
-                if stock_split.split_date >= trade_copy['purchase_date']:
+                if stock_split.split_date >= datetime.strptime(trade_copy['purchase_date'], '%Y-%m-%d').date():
                     denominator, numerator = stock_split.split_ratio.split(':')
                     split_ratio = int(numerator) / int(denominator)
                     trade_copy['quantity'] = int(trade['quantity']) * split_ratio
