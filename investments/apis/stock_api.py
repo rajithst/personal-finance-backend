@@ -4,14 +4,14 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from investments.services.stock_service import StockService
-from oauth.permissions import AppEngineCronPermission
+from investments.services.stock_service import StockService, StockDaemonService
+from oauth.permissions import AppEngineCronPermission, AppEngineTaskPermission
 
 logger = logging.getLogger(__name__)
 
-
-class DailyStockValueDaemonView(APIView):
-    permission_classes = [AppEngineCronPermission]
+class StocksValueRefreshView(APIView):
+    """update daily stock value for all companies in the stock daily price table"""
+    permission_classes = [AppEngineTaskPermission]
 
     def get(self, request):
         try:
@@ -29,9 +29,9 @@ class DailyStockValueDaemonView(APIView):
             return Response({
                 'data': None, 'message': str(e), 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class DailyStockSplitDaemonView(APIView):
-    permission_classes = [AppEngineCronPermission]
+class StocksSplitRefreshView(APIView):
+    """ Update daily stock split for all companies in the stock split table"""
+    permission_classes = [AppEngineTaskPermission]
 
     def get(self, request):
         try:
@@ -49,9 +49,8 @@ class DailyStockSplitDaemonView(APIView):
             return Response({
                 'data': None, 'message': str(e), 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class StockPriceHistoryView(APIView):
-
+    """get stock price history for a company"""
     def get(self, request):
         try:
             service = StockService()
@@ -71,8 +70,8 @@ class StockPriceHistoryView(APIView):
             return Response({'data': None, 'message': str(e), 'status': False},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class BulkStockValueUpdaterView(APIView):
+    """update daily stock value for all companies in the stock daily price table"""
     permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
@@ -89,3 +88,35 @@ class BulkStockValueUpdaterView(APIView):
             logger.exception("Error occurred while syncing historical stock data.")
             return Response({'data': None, 'message': str(e), 'status': False},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DailyStockValueDaemonView(APIView):
+    """ Enqueue task to update daily stock value for all companies in the stock daily price table"""
+    permission_classes = [AppEngineCronPermission]
+
+    def get(self, request):
+        try:
+            stock_service = StockDaemonService()
+            response = stock_service.enqueue_stocks_value_refresh_task(request.query_params.copy())
+            return Response({'data': response, 'message': 'success', 'status': True},
+                            status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("Error occurred while importing stock information.")
+            return Response({
+                'data': None, 'message': str(e), 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DailyStockSplitDaemonView(APIView):
+    """ Enqueue task to update daily stock split for all companies in the stock split table"""
+    permission_classes = [AppEngineCronPermission]
+
+    def get(self, request):
+        try:
+            stock_service = StockDaemonService()
+            response = stock_service.enqueue_stocks_split_refresh_task(request.query_params.copy())
+            return Response({'data': response, 'message': 'success', 'status': True},
+                            status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("Error occurred while importing stock information.")
+            return Response({
+                'data': None, 'message': str(e), 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

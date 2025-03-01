@@ -25,32 +25,66 @@ DIVIDEND_TAX_RATE = 20.315
 
 
 class DividendService:
-    """
-    A service class to handle dividend-related operations such as calculations,
-    updates, imports, and income retrieval.
 
-    Attributes:
-        dividend_api (PolygonAPI): The API client for fetching dividend data.
-    """
+    def get_dividend_income(self, request_params):
+        PortfolioValidator.validate_request(request_params)
+        dividend_portfolio = Portfolio.objects.get(id=request_params.get('portfolio'))
+        dividends_by_month = DividendPayment.objects.filter(portfolio_id=request_params.get('portfolio')).annotate(
+            year_month=TruncMonth('payment_date')
+        ).values('year_month').annotate(
+            total_amount=Sum(F('quantity') * F('amount'))
+        ).order_by('year_month')
+        dividends_by_month_with_records = []
+        for month_data in dividends_by_month:
+            year_month = month_data['year_month']
+            total_amount = month_data['total_amount']
+            records_for_month = DividendPayment.objects.filter(
+                payment_date__year=year_month.year,
+                payment_date__month=year_month.month
+            )
+            serializer = ResponseDividendPaymentSerializer(records_for_month, many=True)
+            dividends_by_month_with_records.append({'year': year_month.year, 'month': year_month.month,
+                                                    'month_text': calendar.month_name[year_month.month],
+                                                    'currency': dividend_portfolio.currency,
+                                                    'total': total_amount, 'dividends': serializer.data})
+        return dividends_by_month_with_records
 
+
+class DividendDaemonService:
     def __init__(self, dividend_api=None):
         """
-        Initializes the DividendService.
+        Initializes the DividendDaemonService.
 
         Args:
             dividend_api (PolygonAPI, optional): The API client for fetching dividend data.
         """
         self.dividend_api = dividend_api or PolygonAPI()
 
-    def calculate_dividend_payments(self, request_params):
+    def enqueue_dividend_payment_refresh_tasks(self):
         """
-        Calculates and records dividend payments for holdings.
+        Enqueues tasks to fetch dividend payments for companies.
+        """
+        companies = Company.cron_objects.values_list('symbol', flat=True).distinct()
+        if not companies:
+            raise EnvironmentError('Cannot import dividends from empty company list. Please insert a company list')
+        if settings.ENV == 'dev':
+            for company in companies[:5]:
+                self.update_dividend_history({'company': company})
+        from_date = date.today().strftime('%Y-%m-%d')
+        to_date = (date.today() + relativedelta(days=+5)).strftime('%Y-%m-%d')
+        for company in companies:
+            taskqueue.add(
+                queue_name='sync-dividend-history',
+                method='GET',
+                url='/investments/dividends/payments/refresh/',
+                target='coincraftservice',
+                headers={'Secret': f"{settings.SECRET_KEY}"},
+                params={'company': company, 'from_date': from_date, 'to_date': to_date, 'limit': 1}
+            )
 
-        Iterates through holdings, checks for eligible dividend payments, and
-        records them in the DividendPayment model if not already recorded.
-
-        Raises:
-            Exception: Logs any error encountered during the calculation process.
+    def calculate_dividend_incomes_for_all_portfolios(self, request_params):
+        """
+        Calculates dividend payments for a all portfolios.
         """
         from_date = request_params.get('from_date')
         portfolio_id = request_params.get('portfolio')
@@ -102,9 +136,10 @@ class DividendService:
         DividendValidator.validate_request(request_params)
         from_date = request_params.get('from_date') or date.today().strftime('%Y-%m-%d')
         to_date = request_params.get('to_date') or (date.today() + relativedelta(days=+5)).strftime('%Y-%m-%d')
+        limit = request_params.get('limit', 10)
         company = request_params.get('company')
 
-        dividends = self.dividend_api.get_dividend_calendar(company, from_date, to_date)
+        dividends = self.dividend_api.get_dividend_calendar(company, from_date, to_date, limit)
         dividend_objects = []
         for dividend in dividends:
             dividend, _ = DividendHistory.objects.update_or_create(
@@ -117,54 +152,3 @@ class DividendService:
             )
             dividend_objects.append(dividend)
         return DividendHistorySerializer(dividend_objects, many=True).data
-
-    def enqueue_dividend_refresh_tasks(self):
-        """
-        Imports dividend data for all companies in the database.
-
-        Raises:
-            EnvironmentError: If the method is called in a development environment
-            or if no companies are found in the database.
-        """
-        is_dev_env = settings.ENV == 'dev'
-        companies = Company.objects.values_list('symbol', flat=True).distinct()
-        if not companies:
-            raise EnvironmentError('Cannot import dividends from empty company list. Please insert a company list')
-
-        from_date = date.today().strftime('%Y-%m-%d')
-        to_date = (date.today() + relativedelta(days=+5)).strftime('%Y-%m-%d')
-        if is_dev_env:
-            for company in companies[:5]:
-                self.update_dividend_history({'company': company, 'from_date': from_date, 'to_date': to_date})
-                self.calculate_dividend_payments({'company': company, 'from_date': from_date})
-
-        else:
-            for company in companies:
-                taskqueue.add(
-                    name='sync-dividends',
-                    url='/investments/dividends/cron/income/daily',
-                    target='coincraftservice',
-                    params={'company': company, 'from_date': from_date, 'to_date': to_date})
-
-    def get_dividend_income(self, request_params):
-        PortfolioValidator.validate_request(request_params)
-        dividend_portfolio = Portfolio.objects.get(id=request_params.get('portfolio'))
-        dividends_by_month = DividendPayment.objects.filter(portfolio_id=request_params.get('portfolio')).annotate(
-            year_month=TruncMonth('payment_date')
-        ).values('year_month').annotate(
-            total_amount=Sum(F('quantity') * F('amount'))
-        ).order_by('year_month')
-        dividends_by_month_with_records = []
-        for month_data in dividends_by_month:
-            year_month = month_data['year_month']
-            total_amount = month_data['total_amount']
-            records_for_month = DividendPayment.objects.filter(
-                payment_date__year=year_month.year,
-                payment_date__month=year_month.month
-            )
-            serializer = ResponseDividendPaymentSerializer(records_for_month, many=True)
-            dividends_by_month_with_records.append({'year': year_month.year, 'month': year_month.month,
-                                                    'month_text': calendar.month_name[year_month.month],
-                                                    'currency': dividend_portfolio.currency,
-                                                    'total': total_amount, 'dividends': serializer.data})
-        return dividends_by_month_with_records

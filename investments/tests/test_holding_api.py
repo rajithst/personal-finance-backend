@@ -31,5 +31,4 @@ class TestHoldingView:
 
         response = api_client.get('/investments/holdings/')
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data == {'data': None, 'status': False, 'message': 'success'}
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

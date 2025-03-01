@@ -20,11 +20,11 @@ class PolygonAPI:
         else:
             self.API_KEY = os.environ.get('POLYGON_API_KEY')
 
-    def get_dividend_calendar(self, ticker, from_date, to_date=None):
+    def get_dividend_calendar(self, ticker, from_date, to_date=None, limit=10):
         if not ticker:
             raise ValueError('Ticker is required')
         results = []
-        dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date)
+        dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date, limit=limit)
         if isinstance(dividend_response, Iterator):
             for dv in dividend_response:
                 obj = {

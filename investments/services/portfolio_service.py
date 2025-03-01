@@ -1,13 +1,22 @@
 import logging
+import time
 
 import pandas as pd
+from django.conf import settings
 from django.db import IntegrityError
 
 from investments.models import Portfolio, StockPurchaseHistory, StockDailyPrice, PortfolioDailyGrowth, Holding
 from investments.serializers.response_serializers import ResponsePortfolioSerializer
 from investments.serializers.serializers import PortfolioSerializer
+from investments.services.holding_service import HoldingService
 from oauth.middleware import get_current_user
 
+is_dev_env = settings.ENV == 'dev'
+if not is_dev_env:
+    try:
+        from google.appengine.api import taskqueue
+    except ImportError:
+        logging.exception('Failed to import taskqueue from google.appengine.api')
 
 class PortfolioService:
 
@@ -30,6 +39,30 @@ class PortfolioService:
             return response_serializer.data
         return serializer.errors
 
+class PortfolioGrowthDaemonService:
+
+    def enqueue_portfolio_growth_refresh_tasks(self):
+        try:
+            portfolios = Portfolio.cron_objects.values_list('id', flat=True).distinct()
+            if is_dev_env:
+                for portfolio in portfolios:
+                    service = PortfolioGrowthService(portfolio_id=portfolio)
+                    service.update_portfolio_growth({})
+                    time.sleep(5)
+            else:
+                for portfolio in portfolios:
+                    taskqueue.add(
+                        queue_name='sync-portfolio-growth',
+                        method='GET',
+                        url='/investments/portfolio/growth/refresh/',
+                        target='coincraftservice',
+                        headers={'Secret': f"{settings.SECRET_KEY}"},
+                        params={'portfolio': portfolio}
+                    )
+            return True
+        except Exception as e:
+            logging.exception('Failed to create growth tasks: ')
+            return False
 
 class PortfolioGrowthService:
     def __init__(self, portfolio_id=None):
@@ -116,9 +149,14 @@ class PortfolioGrowthService:
             purchase_history_df['purchase_date'] = pd.to_datetime(purchase_history_df['purchase_date'])
 
             companies = purchase_history_df['company'].unique().tolist()
+            holding_service = HoldingService()
+            stock_splits = holding_service.get_stock_splits(companies)
 
             for company in companies:
                 company_purchase_history = purchase_history_df[purchase_history_df['company'] == company]
+                stock_splits_for_company = stock_splits.get(company, [])
+                adjusted_purchase_history = holding_service.apply_stock_splits(company_purchase_history.to_dict('records'), stock_splits_for_company)
+                company_purchase_history = pd.DataFrame(adjusted_purchase_history)
                 company_purchase_history['total_purchase_amount'] = company_purchase_history['quantity'] * company_purchase_history[
                     'purchase_price']
                 company_purchase_history['cumulative_purchase_amount'] = company_purchase_history[
@@ -175,7 +213,8 @@ class PortfolioGrowthService:
         return merged_df
 
     def get_last_growth_from_date(self, from_date):
-        last_growth = PortfolioDailyGrowth.cron_objects.filter(portfolio_id=self.portfolio, date=from_date)
-        if last_growth.exists():
-            return last_growth.first()
+        if from_date:
+            last_growth = PortfolioDailyGrowth.cron_objects.filter(portfolio_id=self.portfolio, date=from_date)
+            if last_growth.exists():
+                return last_growth.first()
         return None

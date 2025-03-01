@@ -12,7 +12,7 @@ class TestDailyForexValueDaemonView:
         mock_forex_service.return_value.update_daily_price.return_value = {'price': 1.2}
 
         # Act
-        response = api_client.get('/investments/forex/cron/value/daily/')
+        response = api_client.get('/investments/cron/forex/value/')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -23,7 +23,7 @@ class TestDailyForexValueDaemonView:
         mock_forex_service.return_value.update_daily_price.side_effect = Exception('Error')
 
         # Act
-        response = api_client.get('/investments/forex/cron/value/daily/')
+        response = api_client.get('/investments/cron/forex/value/')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

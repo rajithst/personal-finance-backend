@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import date
 
+from django.conf import settings
 from django.db import transaction, IntegrityError
 
 from investments.connector.market_api import MarketApi
@@ -10,6 +11,62 @@ from investments.serializers.serializers import StockDailyPriceSerializer
 from investments.validators.stock_validator import TickerValidator, BulkTickerValidator
 
 logger = logging.getLogger(__name__)
+
+is_dev_env = settings.ENV == 'dev'
+if not is_dev_env:
+    try:
+        from google.appengine.api import taskqueue
+    except ImportError:
+        logging.exception('Failed to import taskqueue from google.appengine.api')
+
+
+def chunk_list(lst, chunk_size):
+    for i in range(0, len(lst), chunk_size):
+        yield lst[i:i + chunk_size]
+
+
+class StockDaemonService:
+    def enqueue_stocks_value_refresh_task(self, request_data):
+        try:
+            companies = request_data.get('companies', '')
+            if not companies:
+                companies = Company.cron_objects.values_list('symbol', flat=True)
+            else:
+                companies = companies.split(',')
+            for batch in chunk_list(companies, 5):
+                taskqueue.add(
+                    queue_name='sync-stock-value',
+                    url='/investments/stocks/value/refresh/',
+                    target='coincraftservice',
+                    method='GET',
+                    headers={'Secret': f"{settings.SECRET_KEY}"},
+                    params={'companies': ','.join(batch)}
+                )
+            return True
+        except Exception as e:
+            logging.error(f"Error enqueuing stock value insert task: {e}")
+            return None
+
+    def enqueue_stocks_split_refresh_task(self, request_data):
+        try:
+            companies = request_data.get('companies', '')
+            if not companies:
+                companies = Company.objects.values_list('symbol', flat=True)
+            else:
+                companies = companies.split(',')
+            for batch in chunk_list(companies, 5):
+                taskqueue.add(
+                    queue_name='sync-stock-value',
+                    url='/investments/splits/value/refresh/',
+                    target='coincraftservice',
+                    method='GET',
+                    headers={'Secret': f"{settings.SECRET_KEY}"},
+                    params={'companies': ','.join(batch)}
+                )
+            return True
+        except Exception as e:
+            logging.error(f"Error enqueuing stock split insert task: {e}")
+            return None
 
 
 class StockService:
@@ -28,7 +85,7 @@ class StockService:
         except Exception as e:
             logging.error(f"Error fetching market data: {e}")
             raise ValueError("Failed to fetch market data.")
-        existing_entries = {entry.company_id: entry for entry in StockDailyPrice.objects.filter(
+        existing_entries = {entry.company_id: entry for entry in StockDailyPrice.cron_objects.filter(
             company_id__in=[data['company_id'] for data in daily_data],
             date__in=[data.get('date') for data in daily_data]
         )}
@@ -72,9 +129,6 @@ class StockService:
         companies = request_data.get('companies')
         companies = companies.split(',')
 
-        def chunk_list(lst, chunk_size):
-            for i in range(0, len(lst), chunk_size):
-                yield lst[i:i + chunk_size]
         try:
             for batch in chunk_list(companies, 10):
                 historical_data = self.market_api.get_historical_data(batch, from_date=from_date, to_date=to_date)
@@ -128,4 +182,3 @@ class StockService:
         except Exception as e:
             logging.exception(f"Error fetching stock split data: {e}")
             return None
-

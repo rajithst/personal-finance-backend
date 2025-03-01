@@ -4,26 +4,80 @@ from datetime import datetime
 from datetime import date
 from decimal import Decimal
 
+from django.conf import settings
 from django.forms.models import model_to_dict
 from requests import RequestException
 from rest_framework.exceptions import ValidationError
 
 from investments.connector.market_api import MarketApi
-from investments.models import Holding, StockSplit
+from investments.models import Holding, StockSplit, Portfolio
 from investments.serializers.response_serializers import ResponseHoldingSerializer
 from investments.serializers.serializers import HoldingSerializer
 from investments.validators.holding_validator import CreateHoldingValidator
 
 logger = logging.getLogger(__name__)
 
+is_dev_env = settings.ENV == 'dev'
+if not is_dev_env:
+    try:
+        from google.appengine.api import taskqueue
+    except ImportError:
+        logging.exception('Failed to import taskqueue from google.appengine.api')
+
+class HoldingDaemonService:
+
+    def enqueue_holding_values_refresh_tasks(self):
+        try:
+            portfolios = Portfolio.cron_objects.values_list('id', flat=True).distinct()
+            if is_dev_env:
+                for portfolio in portfolios:
+                    service = HoldingService()
+                    service.refresh_holdings_with_current_price({'portfolio': portfolio})
+                    time.sleep(5)
+            else:
+                for portfolio in portfolios:
+                    taskqueue.add(
+                        queue_name='sync-holding-values',
+                        method='GET',
+                        url='/investments/portfolio/holdings/refresh/',
+                        target='coincraftservice',
+                        headers={'Secret': f"{settings.SECRET_KEY}"},
+                        params={'portfolio': portfolio}
+                    )
+            return True
+        except Exception as e:
+            logging.exception('Failed to create growth tasks: ')
+            return False
 
 class HoldingService:
     def __init__(self, market_api=None):
         self.market_api = market_api or MarketApi()
 
+    def refresh_holdings_with_current_price(self, request_data):
+        try:
+            queryset = Holding.cron_objects.select_related('company').filter(portfolio_id=request_data.get('portfolio'))
+            for holding in queryset:
+                existing_holding_dict = model_to_dict(holding)
+                company = existing_holding_dict.get('company')
+                current_price = float(round(self.get_current_holding_price(company), 2))
+                total_quantity = int(existing_holding_dict['quantity'])
+                total_investment = float(round(existing_holding_dict['total_investment'], 2))
+
+                current_value = round(current_price * total_quantity, 2)
+                profit_loss = round(current_value - total_investment, 2)
+                Holding.cron_objects.filter(id=holding.id).update(current_price=current_price, current_value=current_value, profit_loss=profit_loss)
+            return True
+        except Exception as e:
+            logging.exception('failed to refresh holdings')
+            return False
+
     def get_current_holdings(self, request_data):
-        queryset = Holding.objects.select_related('company').filter(portfolio_id=request_data.get('portfolio'))
-        return ResponseHoldingSerializer(queryset, many=True).data
+        try:
+            queryset = Holding.objects.select_related('company').filter(portfolio_id=request_data.get('portfolio'))
+            return ResponseHoldingSerializer(queryset, many=True).data
+        except Exception as e:
+            logging.exception('failed to get current holdings')
+            return None
 
     def get_current_holding_price(self, company):
         for attempt in range(3):
@@ -196,11 +250,17 @@ class HoldingService:
         for trade in trade_list:
             trade_copy = trade.copy()
             for stock_split in stock_splits:
-                if stock_split.split_date >= datetime.strptime(trade_copy['purchase_date'], '%Y-%m-%d').date():
+                purchase_date = trade_copy['purchase_date']
+                purchase_price = trade_copy['purchase_price']
+                if not isinstance(purchase_date, datetime) and isinstance(purchase_date, str):
+                    purchase_date = datetime.strptime(purchase_date, '%Y-%m-%d')
+                if isinstance(purchase_price, Decimal):
+                    purchase_price = round(float(purchase_price), 2)
+                if stock_split.split_date >= purchase_date.date():
                     denominator, numerator = stock_split.split_ratio.split(':')
                     split_ratio = int(numerator) / int(denominator)
                     trade_copy['quantity'] = int(trade['quantity']) * split_ratio
-                    trade_copy['purchase_price'] = float(round((trade_copy['purchase_price'] / split_ratio), 2))
+                    trade_copy['purchase_price'] = float(round((purchase_price / split_ratio), 2))
             adjusted_purchases.append(trade_copy)
         return adjusted_purchases
 

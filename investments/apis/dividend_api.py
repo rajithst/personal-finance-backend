@@ -4,9 +4,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from investments.services.dividend_service import DividendService
+from investments.services.dividend_service import DividendService, DividendDaemonService
 from investments.validators.portfolio_validator import PortfolioValidator
-from oauth.permissions import AppEngineCronPermission
+from oauth.permissions import AppEngineCronPermission, AppEngineTaskPermission
 
 
 class DividendIncomeView(APIView):
@@ -23,17 +23,15 @@ class DividendIncomeView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DividendHistoryDaemonView(APIView):
+class DividendCronDaemonView(APIView):
     permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
             task = request.query_params.get('task', None)
-            service = DividendService()
-            if task == 'pull-dividend-data':
-                response = service.update_dividend_history(request.query_params)
-            elif task == 'refresh-dividend-payments':
-                response = service.enqueue_dividend_refresh_tasks()
+            service = DividendDaemonService()
+            if task == 'refresh-dividend-payments':
+                response = service.enqueue_dividend_payment_refresh_tasks()
             else:
                 response = 'Invalid task'
             return Response({'data': response, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
@@ -43,15 +41,30 @@ class DividendHistoryDaemonView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DividendIncomeDaemonView(APIView):
+class DividendIncomeRefreshView(APIView):
     permission_classes = [AppEngineCronPermission]
 
     def get(self, request):
         try:
-            service = DividendService()
-            response = service.calculate_dividend_payments(request.query_params.copy())
+            service = DividendDaemonService()
+            response = service.calculate_dividend_incomes_for_all_portfolios(request.query_params.copy())
             return Response({'data': response, 'message': 'Success', 'status': True}, status=status.HTTP_200_OK)
         except Exception as e:
             logging.exception('Failed to update dividend payments', exc_info=e)
+            return Response({'data': None, 'message': str(e), 'status': False},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DividendPaymentRefreshView(APIView):
+    permission_classes = [AppEngineTaskPermission]
+
+    def get(self, request):
+        try:
+            service = DividendDaemonService()
+            dividend_payments = service.update_dividend_history(request.query_params.copy())
+            return Response({'data': dividend_payments, 'status': True, 'message': 'Success'},
+                            status=status.HTTP_200_OK)
+        except Exception as e:
+            logging.exception('Failed to fetch dividend payments', exc_info=e)
             return Response({'data': None, 'message': str(e), 'status': False},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)

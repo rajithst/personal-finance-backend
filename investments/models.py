@@ -66,6 +66,10 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
+    objects = RequestManager()
+
+    cron_objects = CronManager()
+
     def __str__(self):
         return self.symbol
 
@@ -207,7 +211,10 @@ class StockDailyPrice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
+    objects = RequestManager()
+
     cron_objects = CronManager()
+
     def __str__(self):
         return f"{self.company.symbol} - {self.date}"
 

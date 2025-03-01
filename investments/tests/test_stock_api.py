@@ -9,7 +9,7 @@ class TestDailyStockValueDaemonView:
     def test_get_success(self, api_client, mock_stock_service):
         mock_stock_service.return_value.update_daily_price.return_value = {'price': 100}
 
-        response = api_client.get('/investments/stocks/cron/value/daily/')
+        response = api_client.get('/investments/stocks/value/refresh/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] is True
@@ -17,7 +17,7 @@ class TestDailyStockValueDaemonView:
     def test_get_failure(self, api_client, mock_stock_service):
         mock_stock_service.return_value.update_daily_price.return_value = None
 
-        response = api_client.get('/investments/stocks/cron/value/daily/')
+        response = api_client.get('/investments/stocks/value/refresh/')
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data['status'] is False
