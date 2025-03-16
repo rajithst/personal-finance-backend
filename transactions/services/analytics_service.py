@@ -32,12 +32,22 @@ class AnalyticsService:
             query_params['category_id'] = int(category)
 
         queryset = (self.get_queryset().filter(**query_params)
-                    .values('category_id', 'subcategory__id', 'category__category')
+                    .values('category_id', 'subcategory__id', 'category__category', 'subcategory__name')
                     .annotate(total_amount=Sum('amount'))
                     .order_by('total_amount')
                     )
-        results = []
+        results = {}
         for item in queryset:
-            results.append({'category_id': item['category_id'], 'category': item['category__category'], 'amount': item['total_amount']})
-        return results
+            category = item['category__category']
+            if category is None:
+                category = 'Uncategorized'
+            category_object = {'total': item['total_amount'], 'category': category,'category_id': item['category_id'], 'subcategory_id': item['subcategory__id'], 'subcategory': item['subcategory__name']}
+            if not category in results:
+                results[category] = {'total': 0, 'subcategories': []}
+            results[category]['total'] = results[category]['total'] + category_object['total']
+            results[category]['subcategories'].append(category_object)
+        response = []
+        for k,v in results.items():
+            response.append({'category': k, 'total': v['total'], 'subcategories': v['subcategories']})
+        return response
 
