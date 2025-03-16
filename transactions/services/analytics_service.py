@@ -17,8 +17,8 @@ class AnalyticsService:
         query_params = {}
         if start_date and end_date:
             query_params = {
-                'date__lte': end_date,
-                'date__gte': start_date
+                'date__lte': start_date,
+                'date__gte': end_date
             }
         if transaction_type == 1:
             query_params['is_expense'] = True
