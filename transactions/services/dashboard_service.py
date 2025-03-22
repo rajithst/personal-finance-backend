@@ -34,6 +34,7 @@ class DashboardService:
 
     def get_monthly_payment_payee_summary(self, year=None):
         return self.get_monthly_payment_destination_wise_sum('is_payment', year)
+
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
         """
         Get the monthly payment destination wise sum.
@@ -154,6 +155,8 @@ class DashboardService:
         last_day_of_last_month = first_day_of_last_month.replace(day=1) + timedelta(days=31)
         last_day_of_last_month = last_day_of_last_month.replace(day=1) - timedelta(days=1)
         queryset = (queryset.filter(
+            is_income=False,
+            is_payment=False,
             date__gte=first_day_of_last_month,
             date__lte=last_day_of_last_month
         )).values('destination', 'destination_original', 'amount').order_by('-amount')[:10]

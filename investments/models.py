@@ -66,7 +66,7 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
-    objects = RequestManager()
+    objects = CronManager()
 
     cron_objects = CronManager()
 
