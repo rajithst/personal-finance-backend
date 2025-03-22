@@ -64,5 +64,5 @@ class CompanyService:
         raise RuntimeError("Failed to fetch company data after 3 retries.")
 
     def get_company_list(self):
-        companies = ResponseCompanySerializer(Company.objects.select_related('sector', 'industry').all(), many=True)
+        companies = ResponseCompanySerializer(Company.cron_objects.select_related('sector', 'industry').all(), many=True)
         return companies.data
