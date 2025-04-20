@@ -14,14 +14,14 @@ class DashboardView(APIView):
         try:
             DashboardValidator.validate(request.query_params)
             year = request.query_params.get('year', None)
-            dashboard_service = DashboardService(year)
-            incomes = dashboard_service.get_income()
-            expenses = dashboard_service.get_expense()
-            payments = dashboard_service.get_payment()
-            savings = dashboard_service.get_saving()
-            category_wise_expenses = dashboard_service.get_monthly_expense_category_summary()
-            account_wise_expenses = dashboard_service.get_monthly_payment_account_summary()
-            payment_by_destination = dashboard_service.get_monthly_payment_payee_summary()
+            dashboard_service = DashboardService()
+            incomes = dashboard_service.get_income(year)
+            expenses = dashboard_service.get_expense(year)
+            payments = dashboard_service.get_payment(year)
+            savings = dashboard_service.get_saving(year)
+            category_wise_expenses = dashboard_service.get_monthly_expense_category_summary(year)
+            account_wise_expenses = dashboard_service.get_monthly_payment_account_summary(year)
+            payment_by_destination = dashboard_service.get_monthly_payment_payee_summary(year)
             top_ten_expenses = dashboard_service.get_top_ten_expenses()
             return Response({'data': {"income": incomes, "payment_by_destination": payment_by_destination,
                                       "account_wise_expenses": account_wise_expenses,

@@ -9,30 +9,28 @@ from transactions.validators.dashboard_validator import DashboardValidator
 
 class DashboardService:
 
-    def __init__(self, year):
-        self.year = year
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(is_deleted=False)
 
-    def get_income(self, year=None):
+    def get_income(self, year):
         return self.get_monthly_transaction_summary('is_income', year)
 
-    def get_expense(self, year=None):
+    def get_expense(self, year):
         return self.get_monthly_transaction_summary('is_expense', year)
 
-    def get_payment(self, year=None):
+    def get_payment(self, year):
         return self.get_monthly_transaction_summary('is_payment', year)
 
-    def get_saving(self, year=None):
+    def get_saving(self, year):
         return self.get_monthly_transaction_summary('is_saving', year)
 
-    def get_monthly_expense_category_summary(self, year=None):
+    def get_monthly_expense_category_summary(self, year):
         return self.get_monthly_transaction_category_summary('is_expense', year)
 
-    def get_monthly_payment_account_summary(self, year=None):
+    def get_monthly_payment_account_summary(self, year):
         return self.get_account_wise_sum('is_payment', year)
 
-    def get_monthly_payment_payee_summary(self, year=None):
+    def get_monthly_payment_payee_summary(self, year):
         return self.get_monthly_payment_destination_wise_sum('is_payment', year)
 
     def get_monthly_payment_destination_wise_sum(self, transaction_type, year):
@@ -46,6 +44,10 @@ class DashboardService:
         Returns:
             dict: The monthly payment destination wise sum.
         """
+        results = {}
+        if not year:
+            raise ValueError('Required filter year')
+
         queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year})
                     .annotate(month=TruncMonth('date'))
@@ -53,7 +55,7 @@ class DashboardService:
                     .annotate(total_amount=Sum('amount'))
                     .order_by('month')
                     )
-        results = {}
+
         for item in queryset:
             date_str = item['month'].strftime('%Y-%m-%d')
             if date_str not in results:
@@ -64,7 +66,7 @@ class DashboardService:
         return results
 
 
-    def get_monthly_transaction_summary(self, transaction_type, year=None):
+    def get_monthly_transaction_summary(self, transaction_type, year):
         """
         Get the monthly transaction summary.
 
@@ -75,8 +77,11 @@ class DashboardService:
         Returns:
             list: The monthly transaction summary.
         """
+        if not year:
+            raise ValueError('Required filter year')
+
         queryset = (self.get_queryset().filter(
-            **{transaction_type: True, 'date__year': year or self.year}, is_deleted=False)
+            **{transaction_type: True, 'date__year': year}, is_deleted=False)
                     .annotate(month=TruncMonth('date'))
                     .values('month')
                     .annotate(total_amount=Sum('amount'))
@@ -99,8 +104,11 @@ class DashboardService:
         Returns:
             dict: The monthly transaction category summary.
         """
+        if not year:
+            raise ValueError('Required filter year')
+
         queryset = (self.get_queryset().filter(
-            **{transaction_type: True, 'date__year': year or self.year})
+            **{transaction_type: True, 'date__year': year})
                     .annotate(month=TruncMonth('date'))
                     .values('month', 'category_id')
                     .annotate(total_amount=Sum('amount'))
@@ -125,8 +133,9 @@ class DashboardService:
         Returns:
             dict: The account wise sum.
         """
-        queryset = self.get_queryset()
-        queryset = (queryset.filter(
+        if not year:
+            raise ValueError('Required filter year')
+        queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year})
                     .annotate(month=TruncMonth('date'))
                     .values('month', 'account_id')
@@ -149,12 +158,11 @@ class DashboardService:
         Returns:
             list: The top ten expenses.
         """
-        queryset = self.get_queryset()
         today = datetime.today()
         first_day_of_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
         last_day_of_last_month = first_day_of_last_month.replace(day=1) + timedelta(days=31)
         last_day_of_last_month = last_day_of_last_month.replace(day=1) - timedelta(days=1)
-        queryset = (queryset.filter(
+        queryset = (self.get_queryset().filter(
             is_income=False,
             is_payment=False,
             date__gte=first_day_of_last_month,
