@@ -8,9 +8,20 @@ class TransactionView(APIView):
 
     def get(self, request, *args, **kwargs):
         try:
-            list_service = TransactionListService()
-            transactions = list_service.get_transactions(request.query_params.copy())
-            return Response({'data': transactions, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
+            id = kwargs.get('id')
+            if id:
+                transaction_id = int(id)
+                list_service = TransactionListService()
+                transaction = list_service.get_transaction_by_id(transaction_id)
+                if transaction:
+                    return Response({'data': transaction, 'status': True, 'message': 'Success'},
+                                    status=status.HTTP_200_OK)
+                return Response({'data': None, 'status': False, 'message': 'Transaction not found'},
+                                status=status.HTTP_404_NOT_FOUND)
+            else:
+                list_service = TransactionListService()
+                transactions = list_service.get_transactions(request.query_params.copy())
+                return Response({'data': transactions, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -25,6 +36,7 @@ class TransactionView(APIView):
             if created:
                 return Response({'data': response, 'status': True, 'message': 'Success'},
                                 status=status.HTTP_201_CREATED)
+            return None
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -42,6 +54,7 @@ class TransactionView(APIView):
             updated, response = list_service.update_transaction(data)
             if updated:
                 return Response({'data': response, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
+            return None
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

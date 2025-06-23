@@ -1,3 +1,4 @@
+import copy
 import logging
 from decimal import Decimal
 
@@ -5,7 +6,8 @@ import numpy as np
 import pandas as pd
 from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
-
+from changelog.models import ActionEnum, SectionEnum
+from changelog.signals import log_change
 from oauth.middleware import get_current_user
 from transactions.models import Transaction, DestinationMap
 from transactions.serializers.response_serializers import ResponseTransactionSerializer
@@ -30,6 +32,18 @@ class TransactionListService:
             group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
                                'total': float(vals.amount.sum()), 'transactions': transactions})
         return list(reversed(group_data))
+
+    def get_transaction_by_id(self, transaction_id):
+        try:
+            transaction = self.get_queryset().get(pk=transaction_id)
+            serializer = ResponseTransactionSerializer(transaction)
+            return serializer.data
+        except Transaction.DoesNotExist:
+            logging.error(f"Transaction with id {transaction_id} does not exist.")
+            return None
+        except Exception as e:
+            logging.exception("An unexpected error occurred while fetching transaction:", e)
+            return None
 
     def get_transactions(self, query_params):
 
@@ -67,21 +81,30 @@ class TransactionListService:
             user = get_current_user()
             data['user'] = user.id
         serializer = TransactionSerializer(data=data)
-        return self.handle_serializer(serializer)
+        is_created, data, created_instance = self.handle_serializer(serializer)
+        if is_created:
+            log_change.send_robust(self.__class__, instance=created_instance, section=SectionEnum.TRANSACTION, action=ActionEnum.CREATE)
+            return True, data
+        return False, data
 
     def update_transaction(self, data):
         pk = data.get('id')
         instance = self.get_queryset().get(pk=pk)
+        old_instance = copy.copy(instance)
         serializer = TransactionSerializer(instance, data=data)
-        return self.handle_serializer(serializer)
+        is_updated, data, saved_instance = self.handle_serializer(serializer)
+        if is_updated:
+            log_change.send_robust(self.__class__, instance=saved_instance, section=SectionEnum.TRANSACTION, old_instance=old_instance, action=ActionEnum.UPDATE)
+            return True, data
+        return False, data
 
     def handle_serializer(self, serializer):
         if serializer.is_valid(raise_exception=True):
             item = serializer.save()
             response = Transaction.objects.get(pk=item.pk)
             response_serializer = ResponseTransactionSerializer(response)
-            return True, response_serializer.data
-        return False, serializer.errors
+            return True, response_serializer.data, item
+        return False, serializer.errors, None
 
     def update_similar_transactions(self, request_data):
         destination = request_data.get('destination')
@@ -107,7 +130,11 @@ class TransactionListService:
         merge_ids = request_data.get('merge_ids')
         pk = request_data.get('pk')
         if merge_ids and pk:
-            Transaction.objects.filter(id__in=merge_ids).update(is_deleted=True, merge_id=pk)
+            queryset = Transaction.objects.filter(id__in=merge_ids)
+            merged = queryset.update(is_deleted=True, merge_id=pk)
+            if merged:
+                log_change.send_robust(self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION, action=ActionEnum.MERGE)
+                return True
         else:
             logging.warning("No merge ids provided")
 
@@ -118,7 +145,10 @@ class TransactionBulkService:
         delete_ids = request_data.get('delete_ids')
         if delete_ids:
             try:
-                Transaction.objects.filter(id__in=delete_ids).update(is_deleted=True)
+                queryset = Transaction.objects.filter(id__in=delete_ids)
+                deleted = queryset.update(is_deleted=True, delete_reason=request_data.get('delete_reason', ''))
+                if deleted:
+                    log_change.send_robust(self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION, action=ActionEnum.BULK_DELETE)
                 return True
             except ValidationError as e:
                 logging.exception("Validation error:", e)

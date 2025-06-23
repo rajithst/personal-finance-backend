@@ -25,7 +25,7 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
         model = Transaction
         fields = ['id', 'category', 'category_text', 'subcategory', 'subcategory_text', 'is_payment', 'is_deleted',
                   'is_merge', 'is_saving', 'is_expense', 'is_income', 'merge_id', 'account', 'account_name',
-                  'account_type', 'amount',
+                  'account_type', 'amount', 'source',
                   'date', 'destination_original', 'destination', 'alias', 'year', 'month', 'month_text', 'notes',
                   'delete_reason']
 

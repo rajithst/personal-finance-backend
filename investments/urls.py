@@ -20,7 +20,6 @@ cron_endpoints = [
     path('cron/forex/value/', DailyForexValueDaemonView.as_view()),
 ]
 
-
 refresh_endpoints = [
     path('dividends/payments/refresh/', DividendPaymentRefreshView.as_view()),
     path('portfolio/growth/refresh/', PortfolioGrowthRefreshView.as_view()),

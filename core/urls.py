@@ -28,6 +28,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('finance/', include('transactions.urls')),
     path('investments/', include('investments.urls')),
+    path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),

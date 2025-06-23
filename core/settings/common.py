@@ -67,7 +67,8 @@ INSTALLED_APPS = [
     'djoser',
     "transactions",
     "investments",
-    "oauth"
+    "oauth",
+    "changelog",
 ]
 
 MIDDLEWARE = [

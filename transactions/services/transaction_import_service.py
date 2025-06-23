@@ -48,7 +48,8 @@ class TransactionImportService:
         import_params['last_import_date'] = account.last_import_date
         account_processor = self.transaction_process_factory.get_processor(account.provider)
         service = self.import_workflow(account, account_processor)
-        transactions = service.import_data_from_files(WorkflowContextType.TRANSACTION_FILES, import_params.get('files', None))
+        transactions = service.import_data_from_files(WorkflowContextType.TRANSACTION_FILES,
+                                                      import_params.get('files', None))
         transactions = self.get_applicable_transactions(transactions, import_params)
         if transactions.empty:
             return True
@@ -80,6 +81,7 @@ class TransactionImportService:
             except Exception as e:
                 logging.exception('Error importing Expenses objects: %s', e)
                 return False
+        return None
 
     def upload_transaction_files(self, upload_params):
         """
