@@ -61,7 +61,6 @@ class CategoryService:
         try:
             self.get_subcategory_queryset({'category_id': category_id}).delete()
             self.get_category_queryset({'id': category_id}).delete()
-            #TODO: decouple transactions from category and subcategory
             self.get_transaction_queryset({'category_id': category_id}).update(category=None, subcategory=None)
             return True
         except Exception as e:
@@ -74,7 +73,6 @@ class CategoryService:
         try:
             deleted_sub_category_ids = [obj.get('id') for obj in subcategories]
             self.get_subcategory_queryset({'id__in': deleted_sub_category_ids}).delete()
-            #TODO : decouple transactions from subcategories
             self.get_transaction_queryset({'subcategory_id__in': deleted_sub_category_ids}).update(subcategory=None)
             # set transactions subcategories null
             return True
