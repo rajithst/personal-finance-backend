@@ -23,16 +23,22 @@ from oauth.views import TokenObtainPairView
 
 admin.site.site_header = 'Personal Finance Administration'
 admin.site.index_title = 'Welcome to Personal Finance'
-
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('finance/', include('transactions.urls')),
+    path('accounts/', include('accounts.urls')),
+    path('finance/transaction/', include('finance.transactions.urls')),
+    path('finance/category/', include('finance.categories.urls')),
+    path('finance/payees/', include('finance.payees.urls')),
+    path('finance/analytics/', include('finance.reporting.urls')),
+    path('finance/dashboard/', include('finance.dashboard.urls')),
+    path('finance/settings/', include('finance.settings.urls')),
     path('investments/', include('investments.urls')),
     path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
 ]
+
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

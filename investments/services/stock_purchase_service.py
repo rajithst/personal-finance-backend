@@ -13,7 +13,7 @@ from investments.services.company_service import CompanyService
 from investments.validators.import_validator import ImportParamsValidator
 from investments.validators.portfolio_validator import PortfolioValidator
 from investments.validators.upload_validator import UploadParamsValidator
-from transactions.models import Account
+from accounts.models import Account
 from workflow.import_workflow import ImportCsvWorkflow, ImportWorkflowContract
 from workflow.providers.storage_backend_provider import StorageBackendProvider
 from workflow.upload_workflow import UploadWorkflow
