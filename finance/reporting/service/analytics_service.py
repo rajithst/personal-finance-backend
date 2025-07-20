@@ -7,6 +7,7 @@ from config.assistant_config import FINANCE_ASSISTANT_SYSTEM_MESSAGE
 from finance.transactions.models import Transaction
 from oauth.middleware import get_current_user
 from openai import OpenAI
+from dev_env_config import OPENAI_API_KEY
 
 
 class AnalyticsService:
@@ -66,8 +67,6 @@ class AnalyticsService:
         user = get_current_user()
         if not user or not user.id:
             raise ValueError("User ID is required in the request data.")
-
-        OPENAI_API_KEY = "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"
         openai = OpenAI(api_key=OPENAI_API_KEY)
         system_message = FINANCE_ASSISTANT_SYSTEM_MESSAGE % (', '.join(categories), ', '.join(accounts))
         response = openai.chat.completions.create(
