@@ -1,6 +1,6 @@
 from django.urls import path
 
-from changelog.apis.activity import ActivityView
+from changelog.views import ActivityView
 
 urlpatterns = [
     path('activity/', ActivityView.as_view()),

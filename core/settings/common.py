@@ -65,10 +65,15 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'djoser',
-    "transactions",
+    "finance.transactions",
     "investments",
     "oauth",
     "changelog",
+    "finance.categories",
+    "accounts",
+    "finance.payees",
+    "finance.reporting",
+    "finance.settings"
 ]
 
 MIDDLEWARE = [

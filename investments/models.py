@@ -1,8 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from accounts.models import Account
 from oauth.middleware import get_current_user
-from transactions.models import Account
 
 
 class RequestManager(models.Manager):

@@ -1,8 +1,8 @@
+from accounts.serializers import ResponseAccountSerializer
 from common.constants import ACCOUNT_TYPE_INVESTMENT_ACCOUNT
 from investments.models import Portfolio
 from investments.serializers.response_serializers import ResponsePortfolioSerializer
-from transactions.models import Account
-from transactions.serializers.response_serializers import ResponseAccountSerializer
+from accounts.models import Account
 
 
 class SettingsService:
