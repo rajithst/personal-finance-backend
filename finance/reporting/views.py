@@ -20,6 +20,7 @@ class AnalyticsView(APIView):
 
 class AnalyticsPromptView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request, **kwargs):
         try:
             data = request.data.copy()

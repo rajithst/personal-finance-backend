@@ -4,7 +4,6 @@ import logging
 import pandas as pd
 from django.conf import settings
 from google.cloud import storage
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from workflow.contracts.storage_backend_contract import StorageBackendContract
 
@@ -26,7 +25,6 @@ class GCSHandler(StorageBackendContract):
         self._client = storage.Client()
         self._bucket_name = bucket_name or settings.BUCKET_NAME
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
     def upload_file(self, file, file_name, content_type=None):
         """
         Uploads a file to the GCS bucket with retry logic.
@@ -84,7 +82,7 @@ class GCSHandler(StorageBackendContract):
             bucket = self._client.bucket(self._bucket_name)
             blob = bucket.blob(file_name)
             encoding = read_config.get('encoding') if read_config else 'utf-8'
-            file_content =  blob.download_as_text(encoding=encoding)
+            file_content = blob.download_as_text(encoding=encoding)
             return io.StringIO(file_content)
         except Exception as e:
             logging.exception(f'Error downloading file from bucket {e}')

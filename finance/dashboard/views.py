@@ -27,8 +27,10 @@ class DashboardView(APIView):
                                       "top_ten_expenses": top_ten_expenses,
                                       "payment": payments, "saving": savings}, 'status': True, 'message': 'Success'},
                             status=status.HTTP_200_OK)
-        except Exception as e:
+        except ValidationError as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DashboardValidator:

@@ -4,14 +4,12 @@ env: standard
 entrypoint: gunicorn -b :$PORT core.wsgi:application
 
 handlers:
-- url: /.*
-  script: auto
+  - url: /.*
+    script: auto
 
 env_variables:
-  DJANGO_SETTINGS_MODULE: "core.settings.prod"
-  APPENGINE_URL: https://coincraftservice-dot-personal-finance-425009.uc.r.appspot.com
-  PROJECT_ID: 'personal-finance-425009'
-
+  ENV: "prod"
+  DJANGO_SECRET_NAME: "django_settings"
 
 runtime_config:
   python_version: 3

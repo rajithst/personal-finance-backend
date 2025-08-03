@@ -1,5 +1,6 @@
 from rest_framework.exceptions import ValidationError
 
+
 class UploadParamsValidator:
     @staticmethod
     def validate(params):

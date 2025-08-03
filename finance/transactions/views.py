@@ -28,7 +28,7 @@ class TransactionView(APIView):
                 transactions = list_service.get_transactions(request.query_params.copy())
                 return Response({'data': transactions, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, *args, **kwargs):
         try:
@@ -41,9 +41,9 @@ class TransactionView(APIView):
             if created:
                 return Response({'data': response, 'status': True, 'message': 'Success'},
                                 status=status.HTTP_201_CREATED)
-            return None
+            return Response({'data': None, 'status': False, 'message': 'Transaction not created'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def put(self, request, *args, **kwargs):
         try:
@@ -59,9 +59,9 @@ class TransactionView(APIView):
             updated, response = list_service.update_transaction(data)
             if updated:
                 return Response({'data': response, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
-            return None
+            return Response({'data': None, 'status': False, 'message': 'Transaction not updated'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TransactionBulkView(APIView):
@@ -85,7 +85,7 @@ class TransactionBulkView(APIView):
                 'data': response, 'status': False, 'message': 'Failed'
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TransactionImportView(APIView):
@@ -133,4 +133,4 @@ class TransactionImportView(APIView):
         is_imported = import_service.import_transactions(import_parameters)
         if is_imported:
             return Response({'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
-        return Response({'message': 'Failed to import', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

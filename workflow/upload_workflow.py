@@ -1,11 +1,12 @@
 import time
 
+from django.conf import settings
+
 from common.constants import TRANSACTION_DATA_FOLDER, INVESTMENT_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
 from common.enums import WorkflowContextType
 from oauth.middleware import get_current_user
-from workflow.providers.storage_backend_provider import StorageBackendProvider
 from workflow.contracts.storage_backend_contract import StorageBackendContract
-from django.conf import settings
+from workflow.providers.storage_backend_provider import StorageBackendProvider
 
 
 class UploadWorkflow:

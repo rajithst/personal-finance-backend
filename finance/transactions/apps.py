@@ -6,4 +6,4 @@ class TransactionConfig(AppConfig):
     name = 'finance.transactions'
 
     def ready(self):
-        import changelog.signals.handler
+        pass

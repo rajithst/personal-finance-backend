@@ -1,13 +1,13 @@
 import logging
 
+from decouple import config
 from django.db import connection
 from django.db.models import Sum
+from openai import OpenAI
 
 from config.assistant_config import FINANCE_ASSISTANT_SYSTEM_MESSAGE
 from finance.transactions.models import Transaction
 from oauth.middleware import get_current_user
-from openai import OpenAI
-from dev_env_config import OPENAI_API_KEY
 
 
 class AnalyticsService:
@@ -48,16 +48,16 @@ class AnalyticsService:
             category = item['category__category']
             if category is None:
                 category = 'Uncategorized'
-            category_object = {'total': item['total_amount'], 'category': category,'category_id': item['category_id'], 'subcategory_id': item['subcategory__id'], 'subcategory': item['subcategory__name']}
+            category_object = {'total': item['total_amount'], 'category': category, 'category_id': item['category_id'],
+                               'subcategory_id': item['subcategory__id'], 'subcategory': item['subcategory__name']}
             if not category in results:
                 results[category] = {'total': 0, 'subcategories': []}
             results[category]['total'] = results[category]['total'] + category_object['total']
             results[category]['subcategories'].append(category_object)
         response = []
-        for k,v in results.items():
+        for k, v in results.items():
             response.append({'category': k, 'total': v['total'], 'subcategories': v['subcategories']})
         return response
-
 
     def parse_prompt(self, request_data):
 
@@ -67,7 +67,7 @@ class AnalyticsService:
         user = get_current_user()
         if not user or not user.id:
             raise ValueError("User ID is required in the request data.")
-        openai = OpenAI(api_key=OPENAI_API_KEY)
+        openai = OpenAI(api_key=config('OPENAI_API_KEY'))
         system_message = FINANCE_ASSISTANT_SYSTEM_MESSAGE % (', '.join(categories), ', '.join(accounts))
         response = openai.chat.completions.create(
             model="o4-mini",
@@ -83,11 +83,8 @@ class AnalyticsService:
         logging.info(query)
         return self.run_sql_as_dict(query)
 
-
     def run_sql_as_dict(self, query, params=None):
         with connection.cursor() as cursor:
             cursor.execute(query, params or [])
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-

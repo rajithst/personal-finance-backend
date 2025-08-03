@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+
 from oauth.middleware import get_current_user
 from oauth.util.request_manager import RequestManager
 

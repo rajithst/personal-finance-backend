@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from finance.payees.service.payee_service import PayeeService
 
+
 class PayeeView(APIView):
     def get(self, request, *args, **kwargs):
         try:
@@ -23,7 +24,7 @@ class PayeeView(APIView):
                 return Response({'data': payee_details, 'status': False, 'message': 'Error'},
                                 status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def put(self, request, *args, **kwargs):
         try:
@@ -34,4 +35,4 @@ class PayeeView(APIView):
             return Response({'data': response, 'status': False, 'message': 'Failed to update payee'},
                             status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -14,12 +14,10 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-
-from oauth.views import TokenObtainPairView
+from django.contrib import admin
+from django.urls import path, include
 
 admin.site.site_header = 'Personal Finance Administration'
 admin.site.index_title = 'Welcome to Personal Finance'
@@ -32,13 +30,17 @@ urlpatterns = [
     path('finance/analytics/', include('finance.reporting.urls')),
     path('finance/dashboard/', include('finance.dashboard.urls')),
     path('finance/settings/', include('finance.settings.urls')),
-    path('investments/', include('investments.urls')),
+    path('investments/dashboard/', include('investments.dashboard.urls')),
+    path('investments/company/', include('investments.company.urls')),
+    path('investments/dividends/', include('investments.dividend.urls')),
+    path('investments/portfolio/', include('investments.portfolio.urls')),
+    path('investments/stocks/', include('investments.stock.urls')),
+    path('investments/settings/', include('investments.settings.urls')),
     path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
 ]
-
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -30,7 +30,7 @@ class CategorySettingsView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'data': {'category': None, 'subcategories': None}, 'status': False, 'message': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST)
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, pk):
         try:
@@ -41,7 +41,7 @@ class CategorySettingsView(APIView):
                 return Response({'data': deleted, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
             return Response({'data': deleted, 'status': False, 'message': 'Error'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request):
         try:
@@ -64,4 +64,4 @@ class CategorySettingsView(APIView):
                 'data': {'category': None, 'subcategories': None},
                 'status': False,
                 'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -64,7 +64,6 @@ class DashboardService:
                  'amount': item['total_amount']})
         return results
 
-
     def get_monthly_transaction_summary(self, transaction_type, year):
         """
         Get the monthly transaction summary.
@@ -168,5 +167,6 @@ class DashboardService:
         )).values('destination', 'destination_original', 'amount').order_by('-amount')[:10]
         results = []
         for item in queryset:
-            results.append({'destination': item['destination'], 'destination_original': item['destination_original'], 'amount': item['amount']})
+            results.append({'destination': item['destination'], 'destination_original': item['destination_original'],
+                            'amount': item['amount']})
         return results
