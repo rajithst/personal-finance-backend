@@ -2,9 +2,8 @@ import logging
 import os
 
 import pandas as pd
-from django.core.files.storage import default_storage
-
 from django.conf import settings
+from django.core.files.storage import default_storage
 
 from workflow.contracts.storage_backend_contract import StorageBackendContract
 

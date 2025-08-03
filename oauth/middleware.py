@@ -1,10 +1,12 @@
 import threading
-from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 _thread_locals = threading.local()
 BYPASS_AUTHENTICATION = ['/', '/auth/jwt/create']
 PASSWORD_RESETS = ['/oauth/users/reset_password', '/auth/users/reset_password_confirm/']
+
 
 def get_current_user():
     return getattr(_thread_locals, 'user', None)

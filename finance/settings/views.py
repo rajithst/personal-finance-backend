@@ -24,4 +24,4 @@ class ClientSettings(APIView):
                 'transaction_subcategories': transaction_subcategories
             }, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

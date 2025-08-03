@@ -15,4 +15,3 @@ class CreateHoldingValidator:
         if errors:
             raise ValidationError(errors)
         return params
-

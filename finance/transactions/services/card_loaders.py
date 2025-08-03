@@ -1,6 +1,8 @@
 import logging
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+
 from common.enums import DataSource, AccountProviders
 from workflow.import_workflow import ImportWorkflowContract
 
@@ -34,7 +36,6 @@ class BaseLoader:
                     new_value = new_value.strip()
             return new_value
         return value
-
 
     def validate_dataframe(self, transactions):
         if isinstance(transactions, pd.DataFrame):
@@ -115,7 +116,7 @@ class DocomoCardLoader(BaseLoader, ImportWorkflowContract):
         return {
             'encoding': 'cp932',
             'engine': 'python',
-            'skiprows': 1, #force loading by skipping rows without finding target columns
+            'skiprows': 1,  # force loading by skipping rows without finding target columns
             'header': None
         }
 

@@ -1,22 +1,23 @@
 import os
 from typing import Iterator
+
+from decouple import config
 from django.conf import settings
 from polygon import RESTClient
 
 
 class PolygonAPI:
     def __init__(self):
-        
+
         self.API_KEY = None
         self.config()
         if not self.API_KEY:
             raise EnvironmentError(f"POLYGON_API_KEY not set: {self.API_KEY}")
         self.client = RESTClient(self.API_KEY)
-        
+
     def config(self):
         if settings.ENV == 'dev':
-            from dev_env_config import POLYGON_API_KEY
-            self.API_KEY = POLYGON_API_KEY
+            self.API_KEY = config('POLYGON_API_KEY')
         else:
             self.API_KEY = os.environ.get('POLYGON_API_KEY')
 
@@ -24,7 +25,8 @@ class PolygonAPI:
         if not ticker:
             raise ValueError('Ticker is required')
         results = []
-        dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date, limit=limit)
+        dividend_response = self.client.list_dividends(ticker=ticker, pay_date_gte=from_date, pay_date_lte=to_date,
+                                                       limit=limit)
         if isinstance(dividend_response, Iterator):
             for dv in dividend_response:
                 obj = {

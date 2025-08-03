@@ -1,7 +1,6 @@
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer as BaseTokenObtainPairSerializer
-
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer as BaseTokenObtainPairSerializer
 
 from oauth.models import Profile
 
@@ -27,13 +26,14 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
         token['is_premium'] = profile.is_premium
         token['profile_id'] = profile.id
         return token
+
     def validate(self, attrs):
         data = super().validate(attrs)
         profile = Profile.objects.get(user_id=self.user.id)
         if profile:
             return {'token': data['access'], 'refresh': data['refresh']}
         else:
-            return {'token': None, 'refresh': None,}
+            return {'token': None, 'refresh': None, }
 
 
 class ProfileSerializer(serializers.ModelSerializer):

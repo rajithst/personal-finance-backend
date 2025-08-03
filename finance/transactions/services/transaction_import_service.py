@@ -8,6 +8,8 @@ from rest_framework.exceptions import ValidationError
 
 from accounts.models import Account
 from common.enums import WorkflowContextType
+from common.transaction_const import INCOME_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, \
+    PAYMENT_CATEGORY_TYPE
 from finance.categories.models import TransactionCategory
 from finance.payees.models import DestinationMap
 from finance.transactions.models import Transaction
@@ -15,9 +17,6 @@ from finance.transactions.services.card_loaders import TransactionProcessFactory
 from finance.transactions.validators.import_validator import ImportParamsValidator
 from finance.transactions.validators.upload_validator import UploadParamsValidator
 from oauth.middleware import get_current_user
-
-from common.transaction_const import INCOME_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, \
-    PAYMENT_CATEGORY_TYPE
 from workflow.import_workflow import ImportCsvWorkflow
 from workflow.providers.storage_backend_provider import StorageBackendProvider
 from workflow.upload_workflow import UploadWorkflow
@@ -184,6 +183,7 @@ class TransactionImportService:
         Returns:
             dict: The rewrite rules.
         """
+
         def inverse_dict(d):
             inverted = {}
             for key, values in d.items():

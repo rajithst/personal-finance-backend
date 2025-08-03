@@ -12,6 +12,7 @@ class ActionEnum(models.TextChoices):
     SPLIT = 'split', 'Split'
     BULK_DELETE = 'bulk delete', 'Bulk Deleted'
 
+
 class SectionEnum(models.TextChoices):
     TRANSACTION = 'transaction', 'Transaction'
     CATEGORY = 'category', 'Category'
@@ -20,6 +21,7 @@ class SectionEnum(models.TextChoices):
     ACCOUNT = 'account', 'Account'
     STOCK = 'stock', 'Stock'
     DIVIDEND = 'dividend', 'Dividend'
+
 
 class ChangeLog(models.Model):
     id = models.AutoField(primary_key=True)
@@ -31,4 +33,3 @@ class ChangeLog(models.Model):
     action = models.CharField(choices=ActionEnum, max_length=50)
     changelog = models.JSONField(blank=True, null=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
-

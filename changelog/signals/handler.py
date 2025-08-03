@@ -10,10 +10,12 @@ from oauth.middleware import get_current_user
 
 EXCLUDED_MODELS = {'ChangeLog'}
 
+
 def get_changes(old_instance, new_instance):
     old_data = model_to_dict(old_instance)
     new_data = model_to_dict(new_instance)
     return prepare_json_fields(new_data, old_data)
+
 
 def prepare_json_fields(new_data, old_data):
     return {
@@ -61,7 +63,6 @@ def log_change(sender, **kwargs):
             merged_object.merge_id = merged_to
             changes = get_changes(instance, merged_object)
             save_changes(changes, action, section, instance)
-
 
 
 def save_changes(changes, action, section, instance):

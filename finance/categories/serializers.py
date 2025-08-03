@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
-from finance.categories.models import TransactionSubCategory, TransactionCategory
 from common.transaction_const import EXPENSE_CATEGORY_TYPE, TRANSACTION_CATEGORY_TEXT, INCOME_CATEGORY_TYPE, \
     INCOME_CATEGORY_TEXT, SAVINGS_CATEGORY_TYPE, SAVINGS_CATEGORY_TEXT, PAYMENT_CATEGORY_TYPE, PAYMENT_CATEGORY_TEXT
+from finance.categories.models import TransactionSubCategory, TransactionCategory
 
 
 class TransactionCategorySerializer(serializers.ModelSerializer):

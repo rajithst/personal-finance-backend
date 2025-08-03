@@ -1,8 +1,9 @@
-import os
 import logging
+import os
+from datetime import datetime
 
 import fmpsdk
-from datetime import datetime
+from decouple import config
 from django.conf import settings
 
 from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_DATA_REMAP_FIELDS, DAILY_SNAPSHOT_FIELDS, \
@@ -31,8 +32,7 @@ class MarketApi:
 
     def config(self):
         if settings.ENV == 'dev':
-            from dev_env_config import MARKET_API_KEY
-            self.API_KEY = MARKET_API_KEY
+            self.API_KEY = config.get('MARKET_API_KEY')
         else:
             self.API_KEY = os.environ.get('MARKET_API_KEY')
 
