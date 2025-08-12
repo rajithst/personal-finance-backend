@@ -51,7 +51,7 @@ class CategoryService:
                 new_subcategories.append(item)
         if new_subcategories:
             for subcategory in new_subcategories:
-                saved_item = self.create_new_subcategory(subcategory)
+                saved_item = self.create_subcategory(subcategory)
                 if saved_item:
                     processed_subcategories.append(saved_item)
 
@@ -80,7 +80,7 @@ class CategoryService:
             logging.exception(e)
             return False
 
-    def create_new_subcategory(self, new_subcategories):
+    def create_subcategory(self, new_subcategories):
         subcategory_serializer = TransactionSubCategorySerializer(data=new_subcategories)
         if subcategory_serializer.is_valid(raise_exception=True):
             saved_items = subcategory_serializer.save()
@@ -92,12 +92,11 @@ class CategoryService:
         subcategories = request_data.get('subcategories')
         serializer = TransactionCategorySerializer(data=category_data)
         processed_subcategories = []
-        saved_category = None
         if serializer.is_valid(raise_exception=True):
             saved_category = serializer.save()
             for subcategory in subcategories:
                 subcategory['category'] = saved_category.id
-                saved_subcategory = self.create_new_subcategory(subcategory)
+                saved_subcategory = self.create_subcategory(subcategory)
                 if saved_subcategory:
                     processed_subcategories.append(saved_subcategory)
 
