@@ -1,16 +1,15 @@
 import logging
 
-from decouple import config
 from django.db import connection
 from django.db.models import Sum
-from openai import OpenAI
 
-from config.assistant_config import FINANCE_ASSISTANT_SYSTEM_MESSAGE
+from aiagent.agent import FinancialAgent
 from finance.transactions.models import Transaction
-from oauth.middleware import get_current_user
 
 
 class AnalyticsService:
+    def __init__(self, agent=None):
+        self.agent = agent if agent else FinancialAgent()
 
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(is_deleted=False)
@@ -64,22 +63,9 @@ class AnalyticsService:
         prompt = request_data.get('prompt', '')
         categories = request_data.get('categories', [])
         accounts = request_data.get('accounts', [])
-        user = get_current_user()
-        if not user or not user.id:
-            raise ValueError("User ID is required in the request data.")
-        openai = OpenAI(api_key=config('OPENAI_API_KEY'))
-        system_message = FINANCE_ASSISTANT_SYSTEM_MESSAGE % (', '.join(categories), ', '.join(accounts))
-        response = openai.chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        query = response.choices[0].message.content if response.choices else None
-        if 't.user_id' not in query:
-            raise ValueError("User ID placeholder ':user_id' not found in the query.")
-        query = query % user.id
+        if not prompt:
+            raise ValueError("Prompt is required in the request data.")
+        query = self.agent.get_query_from_prompt(prompt, categories=categories, accounts=accounts)
         logging.info(query)
         return self.run_sql_as_dict(query)
 

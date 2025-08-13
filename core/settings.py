@@ -17,7 +17,7 @@ from pathlib import Path
 from decouple import config, Config, RepositoryEnv
 from google.cloud import secretmanager
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENV = config("ENV", default="dev")
 IS_PROD = ENV == 'prod'
@@ -46,7 +46,7 @@ if IS_PROD:
     CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', cast=list, default=[])
     SECURE_SSL_REDIRECT = True
 else:
-    env = Config(repository=RepositoryEnv(os.path.join(BASE_DIR, 'personalfinance/.env')))
+    env = Config(repository=RepositoryEnv(os.path.join(BASE_DIR, '.env')))
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
     CSRF_TRUSTED_ORIGINS = ['http://localhost:4200']
     SECURE_SSL_REDIRECT = False
@@ -166,6 +166,11 @@ DATABASES = {
     }
 }
 SECRET_KEY = env('SECRET_KEY')
+
+#API Keys
+MARKET_API_KEY = env('MARKET_API_KEY', default=None)
+OPENAI_API_KEY = env('OPENAI_API_KEY', default=None)
+POLYGON_API_KEY = env('POLYGON_API_KEY', default=None)
 
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
