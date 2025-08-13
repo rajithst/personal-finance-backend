@@ -1,7 +1,5 @@
-import os
 from typing import Iterator
 
-from decouple import config
 from django.conf import settings
 from polygon import RESTClient
 
@@ -9,17 +7,10 @@ from polygon import RESTClient
 class PolygonAPI:
     def __init__(self):
 
-        self.API_KEY = None
-        self.config()
+        self.API_KEY = settings.POLYGON_API_KEY
         if not self.API_KEY:
             raise EnvironmentError(f"POLYGON_API_KEY not set: {self.API_KEY}")
         self.client = RESTClient(self.API_KEY)
-
-    def config(self):
-        if settings.ENV == 'dev':
-            self.API_KEY = config('POLYGON_API_KEY')
-        else:
-            self.API_KEY = os.environ.get('POLYGON_API_KEY')
 
     def get_dividend_calendar(self, ticker, from_date, to_date=None, limit=10):
         if not ticker:

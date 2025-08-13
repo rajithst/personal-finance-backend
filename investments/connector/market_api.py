@@ -1,9 +1,7 @@
 import logging
-import os
 from datetime import datetime
 
 import fmpsdk
-from decouple import config
 from django.conf import settings
 
 from investments.connector.connector_const import COMPANY_DATA_FIELDS, COMPANY_DATA_REMAP_FIELDS, DAILY_SNAPSHOT_FIELDS, \
@@ -25,16 +23,9 @@ class ListTickerValidator:
 class MarketApi:
     def __init__(self):
 
-        self.API_KEY = None
-        self.config()
+        self.API_KEY = settings.MARKET_API_KEY
         if not self.API_KEY:
             raise EnvironmentError(f"MARKET_API_KEY not set: {self.API_KEY}")
-
-    def config(self):
-        if settings.ENV == 'dev':
-            self.API_KEY = config.get('MARKET_API_KEY')
-        else:
-            self.API_KEY = os.environ.get('MARKET_API_KEY')
 
     def map_to_model(self, data, fields, remap_fields=None):
         result = {}

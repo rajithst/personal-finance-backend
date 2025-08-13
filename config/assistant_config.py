@@ -18,13 +18,13 @@ FINANCE_ASSISTANT_SYSTEM_MESSAGE = """
         2. TransactionCategory:
            - Fields: id, category, category_type, description, can_rename, can_delete, user_id
            - Related to Transaction via category_id
-           - actual table name is `transactions_transactioncategory`
+           - actual table name is `categories_transaction_category`
 
         3. TransactionSubCategory:
            - Fields: id, name, description, can_rename, can_delete, user_id
            - Related to Transaction via subcategory_id
            - Related to TransactionCategory via category_id
-           - actual table name is `transactions_transactionsubcategory`
+           - actual table name is `categories_transaction_subcategory`
 
         4. Account:
            - Fields: id, account_type, account_name, provider, description, last_import_date, user_id
@@ -33,7 +33,7 @@ FINANCE_ASSISTANT_SYSTEM_MESSAGE = """
         5. DestinationMap:
            - Fields: id, destination_original, destination, destination_eng, keywords, category_id, subcategory_id, user_id
            - destination_original field can be linked to Transaction.destination_original (not enforced by FK)
-           - actual table name is `transactions_destinationmap`
+           - actual table name is `payees_destination_map`
 
         Keyword Matching Instructions:
         - When the user mentions a **transaction category-like keyword**:
