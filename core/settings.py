@@ -41,12 +41,14 @@ if IS_PROD:
 
 
     secret = get_gcp_secret()
-    env = Config(repository=RepositoryEnv(io.StringIO(secret)))
-    ALLOWED_HOSTS = env('ALLOWED_HOSTS', cast=list, default=[])
-    CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', cast=list, default=[])
+    patched_config = Config(repository=RepositoryEnv(io.StringIO(secret)))
+    config.repository = patched_config.repository
+    ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=list, default=[])
+    CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=list, default=[])
     SECURE_SSL_REDIRECT = True
 else:
-    env = Config(repository=RepositoryEnv(os.path.join(BASE_DIR, '.env')))
+    patched_config = Config(repository=RepositoryEnv(os.path.join(BASE_DIR, '.env')))
+    config.repository = patched_config.repository
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
     CSRF_TRUSTED_ORIGINS = ['http://localhost:4200']
     SECURE_SSL_REDIRECT = False
@@ -159,18 +161,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': env('DB_NAME'),
-        'HOST': env('DB_HOST'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
+        'NAME': config('DB_NAME'),
+        'HOST': config('DB_HOST'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
     }
 }
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY')
 
 #API Keys
-MARKET_API_KEY = env('MARKET_API_KEY', default=None)
-OPENAI_API_KEY = env('OPENAI_API_KEY', default=None)
-POLYGON_API_KEY = env('POLYGON_API_KEY', default=None)
+MARKET_API_KEY = config('MARKET_API_KEY', default=None)
+OPENAI_API_KEY = config('OPENAI_API_KEY', default=None)
+POLYGON_API_KEY = config('POLYGON_API_KEY', default=None)
 
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
@@ -187,7 +189,7 @@ AUTH_USER_MODEL = "oauth.User"
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
-    'SIGNING_KEY': env('SECRET_KEY') if ENV == 'prod' else 'mySigningKey',
+    'SIGNING_KEY': SECRET_KEY,
     'TOKEN_OBTAIN_SERIALIZER': "oauth.serializers.TokenObtainPairSerializer",
 }
 
