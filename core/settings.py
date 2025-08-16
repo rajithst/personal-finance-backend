@@ -10,48 +10,49 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import io
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import config, Config, RepositoryEnv
+from decouple import config
 from google.cloud import secretmanager
+from dotenv import dotenv_values
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENV = config("ENV", default="dev")
 IS_PROD = ENV == 'prod'
 DEBUG = config('DEBUG', default=False, cast=bool)
-
 if IS_PROD:
     # google app engine inject GOOGLE_CLOUD_PROJECT and app.yaml environment variable on production
     def get_gcp_secret():
         """
         Fetches a secret from Google Cloud Secret Manager.
         """
-        gcloud_project = config.get('GOOGLE_CLOUD_PROJECT', None)
+        gcloud_project = config('GOOGLE_CLOUD_PROJECT', None)
         if not gcloud_project:
             raise ValueError("PROJECT_ID is not set in the environment variables.")
 
         client = secretmanager.SecretManagerServiceClient()
-        secret_name = config.get('DJANGO_SECRET_NAME', 'django_settings')
+        secret_name = config('DJANGO_SECRET_NAME', 'django_settings')
         name = f'projects/{gcloud_project}/secrets/{secret_name}/versions/latest'
         response = client.access_secret_version(name=name)
         return response.payload.data.decode('UTF-8')
 
-
     secret = get_gcp_secret()
-    patched_config = Config(repository=RepositoryEnv(io.StringIO(secret)))
-    config.repository = patched_config.repository
-    ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=list, default=[])
-    CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=list, default=[])
-    SECURE_SSL_REDIRECT = True
+    env_vars = dotenv_values(stream=io.StringIO(secret))
+    os.environ.update(env_vars)
+
 else:
-    patched_config = Config(repository=RepositoryEnv(os.path.join(BASE_DIR, '.env')))
-    config.repository = patched_config.repository
-    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-    CSRF_TRUSTED_ORIGINS = ['http://localhost:4200']
-    SECURE_SSL_REDIRECT = False
+    local_env = os.path.join(BASE_DIR, '.env')
+    if os.path.exists(local_env):
+        env_vars = dotenv_values(local_env)
+        os.environ.update(env_vars)
+
+ALLOWED_HOSTS = [config('ALLOWED_HOST')]
+CSRF_TRUSTED_ORIGINS = [config('CSRF_TRUSTED_ORIGINS')]
+SECURE_SSL_REDIRECT = IS_PROD
 
 INSTALLED_APPS = [
     'django.contrib.admin',
