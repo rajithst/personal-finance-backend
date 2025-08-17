@@ -5,7 +5,7 @@ from django.dispatch import receiver
 from django.forms import model_to_dict
 
 from changelog.models import ChangeLog, ActionEnum
-from changelog.signals import log_change
+from changelog.signals import log_change_signal
 from oauth.middleware import get_current_user
 
 EXCLUDED_MODELS = {'ChangeLog'}
@@ -25,8 +25,8 @@ def prepare_json_fields(new_data, old_data):
     }
 
 
-@receiver(log_change)
-def log_change(sender, **kwargs):
+@receiver(log_change_signal)
+def log_change_handler(sender, **kwargs):
     if sender.__name__ in EXCLUDED_MODELS:
         return
     action = kwargs.get('action')

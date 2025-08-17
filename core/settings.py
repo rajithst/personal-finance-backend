@@ -174,6 +174,7 @@ SECRET_KEY = config('SECRET_KEY')
 MARKET_API_KEY = config('MARKET_API_KEY', default=None)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default=None)
 POLYGON_API_KEY = config('POLYGON_API_KEY', default=None)
+BUCKET_NAME = config('BUCKET_NAME', default=None)
 
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,

@@ -8,7 +8,7 @@ from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
 
 from changelog.models import ActionEnum, SectionEnum
-from changelog.signals import log_change
+from changelog.signals import log_change_signal
 from finance.payees.models import DestinationMap
 from finance.transactions.models import Transaction
 from finance.transactions.serializers import ResponseTransactionSerializer, TransactionSerializer
@@ -84,7 +84,7 @@ class TransactionListService:
         serializer = TransactionSerializer(data=data)
         is_created, data, created_instance = self.handle_serializer(serializer)
         if is_created:
-            log_change.send_robust(self.__class__, instance=created_instance, section=SectionEnum.TRANSACTION,
+            log_change_signal.send_robust(sender=self.__class__, instance=created_instance, section=SectionEnum.TRANSACTION,
                                    action=ActionEnum.CREATE)
             return True, data
         return False, data
@@ -96,7 +96,7 @@ class TransactionListService:
         serializer = TransactionSerializer(instance, data=data)
         is_updated, data, saved_instance = self.handle_serializer(serializer)
         if is_updated:
-            log_change.send_robust(self.__class__, instance=saved_instance, section=SectionEnum.TRANSACTION,
+            log_change_signal.send_robust(sender=self.__class__, instance=saved_instance, section=SectionEnum.TRANSACTION,
                                    old_instance=old_instance, action=ActionEnum.UPDATE)
             return True, data
         return False, data
@@ -136,9 +136,10 @@ class TransactionListService:
             queryset = Transaction.objects.filter(id__in=merge_ids)
             merged = queryset.update(is_deleted=True, merge_id=pk)
             if merged:
-                log_change.send_robust(self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
+                log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
                                        action=ActionEnum.MERGE)
                 return True
+            return None
         else:
             logging.warning("No merge ids provided")
 
@@ -152,7 +153,7 @@ class TransactionBulkService:
                 queryset = Transaction.objects.filter(id__in=delete_ids)
                 deleted = queryset.update(is_deleted=True, delete_reason=request_data.get('delete_reason', ''))
                 if deleted:
-                    log_change.send_robust(self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
+                    log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
                                            action=ActionEnum.BULK_DELETE)
                 return True
             except ValidationError as e:
