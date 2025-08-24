@@ -12,7 +12,7 @@ def api_client():
 
 @pytest.fixture
 def authenticate(api_client):
-    def do_authenticated_user():
-        return api_client.force_authenticate(user=baker.make(User))
+    def do_authenticated_user(user=None):
+        return api_client.force_authenticate(user=user if user else baker.make(User))
 
     return do_authenticated_user
