@@ -23,6 +23,7 @@ class BaseLoader:
         }
         df = df.assign(**params_dict)
         df['amount'] = df['amount'].replace('', np.nan)
+        df['amount'] = df['amount'].replace('-', np.nan)
         df['date'] = df['date'].replace('', np.nan)
         df = df.dropna(subset=['date', 'amount'], how='any')
         return df
