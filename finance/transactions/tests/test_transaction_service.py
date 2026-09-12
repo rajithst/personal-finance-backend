@@ -52,3 +52,23 @@ class TestTransactionServices:
         # Verified: ResponseTransactionSerializer is called directly with the saved item,
         # without making an extra Transaction.objects.get(pk=101) database query!
         mock_resp_serializer_cls.assert_called_once_with(mock_instance)
+
+    def test_find_new_payees_deduplication_and_blank_filtering(self):
+        import pandas as pd
+        from finance.transactions.services.transaction_import_service import TransactionImportService
+
+        service = TransactionImportService()
+        existing_payees_df = pd.DataFrame({
+            'destination': ['Known Store']
+        })
+
+        transactions_df = pd.DataFrame({
+            'destination': ['New Merchant', 'New Merchant', '  ', None, 'Another Merchant'],
+            'destination_original': ['New Merchant 1', 'New Merchant 2', '  ', None, 'Another Merchant Original'],
+            'is_income': [0, 0, 0, 0, 1]
+        })
+
+        new_payees = service.find_new_payees(existing_payees_df, transactions_df)
+
+        assert len(new_payees) == 2
+        assert set(new_payees['destination']) == {'New Merchant', 'Another Merchant'}

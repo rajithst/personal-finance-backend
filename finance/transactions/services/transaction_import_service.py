@@ -227,11 +227,12 @@ class TransactionImportService:
             DataFrame: The new payees.
         """
 
-        existing_payees = payees['destination'].unique()
+        existing_payees = payees['destination'].dropna().unique()
         current_user = get_current_user()
         user_id = getattr(current_user, 'id', None)
-        new_payees = transactions[~transactions['destination'].isin(existing_payees)]
-        new_payees = new_payees.drop_duplicates(subset='destination_original', keep="first")
+        new_payees = transactions[~transactions['destination'].isin(existing_payees)].copy()
+        new_payees = new_payees[new_payees['destination'].notna() & (new_payees['destination'].astype(str).str.strip() != '')]
+        new_payees = new_payees.drop_duplicates(subset='destination', keep="first")
         new_payees = new_payees[['destination', 'destination_original', 'is_income']]
         income_payees = new_payees[new_payees['is_income'] == 1]
         expense_payees = new_payees[new_payees['is_income'] == 0]

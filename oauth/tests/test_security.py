@@ -70,3 +70,36 @@ class TestPasswordResetSecurity:
         response = view.post(mock_request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert "disabled in production" in response.data["error"]
+
+
+class TestRequestManagerSafety:
+    def test_request_manager_safe_when_no_user(self, mocker):
+        from oauth.util.request_manager import RequestManager
+        from django.db import models
+
+        mocker.patch("oauth.util.request_manager.get_current_user", return_value=None)
+        mgr = RequestManager()
+        mgr.model = MagicMock()
+
+        # Mock super().get_queryset()
+        mock_qs = MagicMock()
+        with mocker.patch.object(models.Manager, "get_queryset", return_value=mock_qs):
+            qs = mgr.get_queryset()
+            assert qs == mock_qs
+
+    def test_request_manager_filters_by_user_when_authenticated(self, mocker):
+        from oauth.util.request_manager import RequestManager
+        from django.db import models
+
+        mock_user = MagicMock(id=42, is_authenticated=True)
+        mocker.patch("oauth.util.request_manager.get_current_user", return_value=mock_user)
+        mgr = RequestManager()
+        mgr.model = MagicMock()
+
+        mock_qs = MagicMock()
+        mock_filtered_qs = MagicMock()
+        mock_qs.filter.return_value = mock_filtered_qs
+        with mocker.patch.object(models.Manager, "get_queryset", return_value=mock_qs):
+            qs = mgr.get_queryset()
+            mock_qs.filter.assert_called_once_with(user_id=42)
+            assert qs == mock_filtered_qs
