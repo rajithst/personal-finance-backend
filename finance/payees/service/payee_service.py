@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from django.db.models import Case, When, IntegerField
 
 from common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
@@ -87,46 +88,48 @@ class PayeeService:
         target_destinations = [exist_settings.destination]
         serializer = ResponseDestinationMapSerializer(exist_settings, data=request_data)
         if serializer.is_valid(raise_exception=True):
-            serializer.save()
-
             if merge_ids:
                 merge_records = DestinationMap.objects.filter(id__in=merge_ids)
                 target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
 
             try:
-                update_params = {
-                    'destination': destination,
-                    'alias': new_alias,
-                    'category_id': category,
-                    'subcategory_id': subcategory,
-                }
-                if category_type == INCOME_CATEGORY_TYPE:
-                    update_params['is_income'] = 1
-                    update_params['is_expense'] = 0
-                    update_params['is_saving'] = 0
-                    update_params['is_payment'] = 0
-                elif category_type == SAVINGS_CATEGORY_TYPE:
-                    update_params['is_income'] = 0
-                    update_params['is_expense'] = 1
-                    update_params['is_saving'] = 1
-                    update_params['is_payment'] = 0
-                elif category_type == EXPENSE_CATEGORY_TYPE:
-                    update_params['is_income'] = 0
-                    update_params['is_expense'] = 1
-                    update_params['is_saving'] = 0
-                    update_params['is_payment'] = 0
-                elif category_type == PAYMENT_CATEGORY_TYPE:
-                    update_params['is_income'] = 0
-                    update_params['is_expense'] = 1
-                    update_params['is_saving'] = 0
-                    update_params['is_payment'] = 1
+                with transaction.atomic():
+                    serializer.save()
+                    update_params = {
+                        'destination': destination,
+                        'alias': new_alias,
+                        'category_id': category,
+                        'subcategory_id': subcategory,
+                    }
+                    if category_type == INCOME_CATEGORY_TYPE:
+                        update_params['is_income'] = 1
+                        update_params['is_expense'] = 0
+                        update_params['is_saving'] = 0
+                        update_params['is_payment'] = 0
+                    elif category_type == SAVINGS_CATEGORY_TYPE:
+                        update_params['is_income'] = 0
+                        update_params['is_expense'] = 1
+                        update_params['is_saving'] = 1
+                        update_params['is_payment'] = 0
+                    elif category_type == EXPENSE_CATEGORY_TYPE:
+                        update_params['is_income'] = 0
+                        update_params['is_expense'] = 1
+                        update_params['is_saving'] = 0
+                        update_params['is_payment'] = 0
+                    elif category_type == PAYMENT_CATEGORY_TYPE:
+                        update_params['is_income'] = 0
+                        update_params['is_expense'] = 1
+                        update_params['is_saving'] = 0
+                        update_params['is_payment'] = 1
 
-                Transaction.objects.filter(destination__in=target_destinations).update(
-                    **update_params)
-                DestinationMap.objects.filter(id__in=merge_ids).delete()
+                    Transaction.objects.filter(destination__in=target_destinations).update(
+                        **update_params)
+                    if merge_ids:
+                        DestinationMap.objects.filter(id__in=merge_ids).delete()
                 payee_details = self.get_payee_by_id_or_name({'id': payee_id})
                 return True, payee_details
             except Exception as e:
                 logging.exception("An unexpected error occurred:", e)
                 return False, serializer.errors
         return None
+

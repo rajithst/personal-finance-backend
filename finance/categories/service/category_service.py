@@ -1,5 +1,7 @@
 import logging
 
+from django.db import transaction
+
 from finance.categories.models import TransactionCategory, TransactionSubCategory
 from finance.categories.serializers import TransactionCategorySerializer, TransactionSubCategorySerializer, \
     ResponseTransactionCategorySerializer, ResponseTransactionSubCategorySerializer
@@ -29,7 +31,8 @@ class CategoryService:
         existing_category = self.get_category_queryset({'id': category_id}).first()
         category_serializer = TransactionCategorySerializer(existing_category, data=category, partial=True)
         if category_serializer.is_valid(raise_exception=True):
-            saved_category = category_serializer.save()
+            with transaction.atomic():
+                saved_category = category_serializer.save()
             if saved_category:
                 return True, category_serializer.data
         return False, category_serializer.errors
@@ -59,9 +62,10 @@ class CategoryService:
 
     def delete_category(self, category_id):
         try:
-            self.get_subcategory_queryset({'category_id': category_id}).delete()
-            self.get_category_queryset({'id': category_id}).delete()
-            self.get_transaction_queryset({'category_id': category_id}).update(category=None, subcategory=None)
+            with transaction.atomic():
+                self.get_transaction_queryset({'category_id': category_id}).update(category=None, subcategory=None)
+                self.get_subcategory_queryset({'category_id': category_id}).delete()
+                self.get_category_queryset({'id': category_id}).delete()
             return True
         except Exception as e:
             logging.exception(e)
@@ -71,10 +75,10 @@ class CategoryService:
         if not isinstance(subcategories, list):
             return False
         try:
-            deleted_sub_category_ids = [obj.get('id') for obj in subcategories]
-            self.get_subcategory_queryset({'id__in': deleted_sub_category_ids}).delete()
-            self.get_transaction_queryset({'subcategory_id__in': deleted_sub_category_ids}).update(subcategory=None)
-            # set transactions subcategories null
+            with transaction.atomic():
+                deleted_sub_category_ids = [obj.get('id') for obj in subcategories]
+                self.get_transaction_queryset({'subcategory_id__in': deleted_sub_category_ids}).update(subcategory=None)
+                self.get_subcategory_queryset({'id__in': deleted_sub_category_ids}).delete()
             return True
         except Exception as e:
             logging.exception(e)
@@ -89,22 +93,24 @@ class CategoryService:
 
     def create_category(self, request_data):
         category_data = request_data.get('category')
-        subcategories = request_data.get('subcategories')
+        subcategories = request_data.get('subcategories', []) or []
         serializer = TransactionCategorySerializer(data=category_data)
         processed_subcategories = []
         if serializer.is_valid(raise_exception=True):
-            saved_category = serializer.save()
-            for subcategory in subcategories:
-                subcategory['category'] = saved_category.id
-                saved_subcategory = self.create_subcategory(subcategory)
-                if saved_subcategory:
-                    processed_subcategories.append(saved_subcategory)
+            with transaction.atomic():
+                saved_category = serializer.save()
+                for subcategory in subcategories:
+                    subcategory['category'] = saved_category.id
+                    saved_subcategory = self.create_subcategory(subcategory)
+                    if saved_subcategory:
+                        processed_subcategories.append(saved_subcategory)
 
             transaction_category_serializer = ResponseTransactionCategorySerializer(saved_category)
             transaction_subcategories_serializer = ResponseTransactionSubCategorySerializer(processed_subcategories,
                                                                                             many=True)
             return transaction_category_serializer.data, transaction_subcategories_serializer.data
         return False, False
+
 
     def get_all_subcategories(self, category_id):
         subcategories = TransactionSubCategory.objects.filter(category__id=category_id)

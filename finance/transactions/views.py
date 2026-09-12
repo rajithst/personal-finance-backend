@@ -99,10 +99,10 @@ class TransactionImportView(APIView):
         start_date = request.data.get('start_date', None)
         end_date = request.data.get('end_date', None)
         if not account_id:
-            return Response({'message': 'Account must be selected', 'status': False},
+            return Response({'data': None, 'message': 'Account must be selected', 'status': False},
                             status=status.HTTP_400_BAD_REQUEST)
         if not upload_files:
-            return Response({'message': 'No files uploaded', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'message': 'No files uploaded', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
         account_id = int(account_id)
         if drop_duplicates is not None:
@@ -116,7 +116,7 @@ class TransactionImportView(APIView):
         import_service = TransactionImportService()
         uploaded_files = import_service.upload_transaction_files(upload_parameters)
         if not uploaded_files:
-            return Response({'message': 'Failed to upload files', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data': None, 'message': 'Failed to upload files', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
         failed_uploads = [file for file in uploaded_files if file not in upload_files]
         if failed_uploads:
@@ -132,5 +132,6 @@ class TransactionImportView(APIView):
 
         is_imported = import_service.import_transactions(import_parameters)
         if is_imported:
-            return Response({'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
-        return Response({'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'data': {'uploaded_files': uploaded_files}, 'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
+        return Response({'data': None, 'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

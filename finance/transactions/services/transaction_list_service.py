@@ -1,10 +1,10 @@
 import copy
 import logging
+from collections import defaultdict
 from decimal import Decimal
 
-import numpy as np
 import pandas as pd
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
 
 from changelog.models import ActionEnum, SectionEnum
@@ -21,17 +21,42 @@ class TransactionListService:
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account', 'user')
 
-    def _group_by(self, data: pd.DataFrame):
-        if data.empty:
+    def _group_by(self, data):
+        if hasattr(data, 'empty') and data.empty:
+            return []
+        if isinstance(data, pd.DataFrame):
+            records = data.to_dict('records')
+        elif isinstance(data, list):
+            records = data
+        else:
             return []
 
+        if not records:
+            return []
+
+        groups = defaultdict(lambda: {'month_text': '', 'total': 0.0, 'transactions': []})
+        for item in records:
+            item_dict = dict(item)
+            try:
+                amt = float(item_dict.get('amount') or 0.0)
+            except (ValueError, TypeError):
+                amt = 0.0
+            item_dict['amount'] = float('{:.2f}'.format(amt))
+            key = (item_dict.get('year'), item_dict.get('month'))
+            group = groups[key]
+            group['month_text'] = item_dict.get('month_text', '')
+            group['total'] += amt
+            group['transactions'].append(item_dict)
+
         group_data = []
-        for group_k, vals in data.groupby(['year', 'month']):
-            vals['amount'] = vals['amount'].apply(lambda x: '{:.2f}'.format(float(x)))
-            vals['amount'] = vals['amount'].astype(float)
-            transactions = vals.to_dict('records')
-            group_data.append({'year': group_k[0], 'month': group_k[1], 'month_text': vals['month_text'].iloc[0],
-                               'total': float(vals.amount.sum()), 'transactions': transactions})
+        for (year, month), val in groups.items():
+            group_data.append({
+                'year': year,
+                'month': month,
+                'month_text': val['month_text'],
+                'total': float('{:.2f}'.format(val['total'])),
+                'transactions': val['transactions']
+            })
         return list(reversed(group_data))
 
     def get_transaction_by_id(self, transaction_id):
@@ -43,7 +68,7 @@ class TransactionListService:
             logging.error(f"Transaction with id {transaction_id} does not exist.")
             return None
         except Exception as e:
-            logging.exception("An unexpected error occurred while fetching transaction:", e)
+            logging.exception("An unexpected error occurred while fetching transaction: %s", e)
             return None
 
     def get_transactions(self, query_params):
@@ -73,14 +98,12 @@ class TransactionListService:
             queryset = queryset.filter(subcategory_id__in=subcategory_ids)
 
         serializer = ResponseTransactionSerializer(queryset, many=True)
-        df = pd.DataFrame(serializer.data)
-        df = df.replace({np.nan: None})
-        return self._group_by(df)
+        return self._group_by(serializer.data)
 
     def create_transaction(self, data):
         if 'user' not in data:
             user = get_current_user()
-            data['user'] = user.id
+            data['user'] = getattr(user, 'id', None)
         serializer = TransactionSerializer(data=data)
         is_created, data, created_instance = self.handle_serializer(serializer)
         if is_created:
@@ -123,22 +146,23 @@ class TransactionListService:
                 subcategory_id=subcategory, is_saving=is_saving,
                 is_payment=is_payment, is_expense=is_expense)
         except ValidationError as e:
-            logging.exception("Validation error:", e)
+            logging.exception("Validation error: %s", e)
         except IntegrityError as e:
-            logging.exception("Integrity error:", e)
+            logging.exception("Integrity error: %s", e)
         except Exception as e:
-            logging.exception("An unexpected error occurred:", e)
+            logging.exception("An unexpected error occurred: %s", e)
 
     def merge_transactions(self, request_data):
         merge_ids = request_data.get('merge_ids')
         pk = request_data.get('pk')
         if merge_ids and pk:
-            queryset = Transaction.objects.filter(id__in=merge_ids)
-            merged = queryset.update(is_deleted=True, merge_id=pk)
-            if merged:
-                log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
-                                       action=ActionEnum.MERGE)
-                return True
+            with transaction.atomic():
+                queryset = Transaction.objects.filter(id__in=merge_ids)
+                merged = queryset.update(is_deleted=True, merge_id=pk)
+                if merged:
+                    log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
+                                           action=ActionEnum.MERGE)
+                    return True
             return None
         else:
             logging.warning("No merge ids provided")
@@ -150,53 +174,57 @@ class TransactionBulkService:
         delete_ids = request_data.get('delete_ids')
         if delete_ids:
             try:
-                queryset = Transaction.objects.filter(id__in=delete_ids)
-                deleted = queryset.update(is_deleted=True, delete_reason=request_data.get('delete_reason', ''))
-                if deleted:
-                    log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
-                                           action=ActionEnum.BULK_DELETE)
-                return True
+                with transaction.atomic():
+                    queryset = Transaction.objects.filter(id__in=delete_ids)
+                    deleted = queryset.update(is_deleted=True, delete_reason=request_data.get('delete_reason', ''))
+                    if deleted:
+                        log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
+                                               action=ActionEnum.BULK_DELETE)
+                    return True
             except ValidationError as e:
-                logging.exception("Validation error:", e)
+                logging.exception("Validation error: %s", e)
                 return False
 
     def split_transactions(self, request_data):
         transaction_data = request_data.get('main')
         splits = request_data.get('splits', [])
         user = get_current_user()
+        user_id = getattr(user, 'id', None)
         total_split_amount = 0
         response_instances = []
         try:
-            if splits:
-                for split in splits:
-                    payee = DestinationMap.objects.get(destination=split.get('destination'))
-                    transaction_split = self.extract_valid_fields(transaction_data)
-                    transaction_split['id'] = None
-                    transaction_split['amount'] = Decimal(split.get('amount'))
-                    transaction_split['category_id'] = payee.category_id
-                    transaction_split['subcategory_id'] = None
-                    transaction_split['account_id'] = transaction_data.get('account')
-                    transaction_split['destination'] = payee.destination
-                    transaction_split['destination_original'] = payee.destination_original
-                    transaction_split['alias'] = None
-                    transaction_split['user_id'] = user.id
-                    total_split_amount += Decimal(split.get('amount'))
-                    instance = Transaction(**transaction_split)
-                    instance.save()
-                    if instance.id:
-                        response_instances.append(instance.id)
+            with transaction.atomic():
+                if splits:
+                    for split in splits:
+                        payee = DestinationMap.objects.get(destination=split.get('destination'))
+                        transaction_split = self.extract_valid_fields(transaction_data)
+                        transaction_split['id'] = None
+                        transaction_split['amount'] = Decimal(split.get('amount'))
+                        transaction_split['category_id'] = payee.category_id
+                        transaction_split['subcategory_id'] = None
+                        transaction_split['account_id'] = transaction_data.get('account')
+                        transaction_split['destination'] = payee.destination
+                        transaction_split['destination_original'] = payee.destination_original
+                        transaction_split['alias'] = None
+                        transaction_split['user_id'] = user_id
+                        total_split_amount += Decimal(split.get('amount'))
+                        instance = Transaction(**transaction_split)
+                        instance.save()
+                        if instance.id:
+                            response_instances.append(instance.id)
+                    if response_instances:
+                        response_instances.append(transaction_data['id'])
+                        remaining = Decimal(transaction_data['amount']) - total_split_amount
+                        Transaction.objects.filter(id=transaction_data['id']).update(amount=remaining)
                 if response_instances:
-                    response_instances.append(transaction_data['id'])
-                    remaining = Decimal(transaction_data['amount']) - total_split_amount
-                    Transaction.objects.filter(id=transaction_data['id']).update(amount=remaining)
-            if response_instances:
-                queryset = Transaction.objects.filter(id__in=response_instances)
-                response_serializer = ResponseTransactionSerializer(queryset, many=True)
-                return True, response_serializer.data
+                    queryset = Transaction.objects.filter(id__in=response_instances)
+                    response_serializer = ResponseTransactionSerializer(queryset, many=True)
+                    return True, response_serializer.data
             return False, None
         except Exception as e:
-            logging.exception("An unexpected error occurred:", e)
+            logging.exception("An unexpected error occurred: %s", e)
             return False, None
+
 
     def extract_valid_fields(self, transaction_data):
         valid_fields = [field.name for field in Transaction._meta.get_fields()]

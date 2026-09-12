@@ -22,11 +22,12 @@ class ProfileViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, Gen
     @action(detail=False, methods=['GET', 'PUT'])
     def me(self, request):
         if request.method == 'GET':
-            profile = Profile.objects.select_related('user').get(user_id=request.user.id)
+            profile, _ = Profile.objects.select_related('user').get_or_create(user_id=request.user.id)
             serializer = ProfileSerializer(profile)
             return Response(serializer.data)
         elif request.method == 'PUT':
-            serializer = ProfileSerializer(Profile, data=request.data)
+            profile, _ = Profile.objects.select_related('user').get_or_create(user_id=request.user.id)
+            serializer = ProfileSerializer(profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response(serializer.data)
@@ -40,6 +41,12 @@ class PasswordResetWithoutEmailView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        from django.conf import settings
+        if not settings.DEBUG and not getattr(request.user, 'is_staff', False):
+            return Response(
+                {"error": "Password reset without email verification is disabled in production."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         identifier = request.data.get('username')
         User = get_user_model()
         try:
@@ -54,3 +61,4 @@ class PasswordResetWithoutEmailView(APIView):
             "uid": uid,
             "token": token
         }, status=status.HTTP_200_OK)
+

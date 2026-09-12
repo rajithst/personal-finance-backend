@@ -27,7 +27,6 @@ urlpatterns = [
     path('finance/transaction/', include('finance.transactions.urls')),
     path('finance/category/', include('finance.categories.urls')),
     path('finance/payees/', include('finance.payees.urls')),
-    path('finance/analytics/', include('finance.reporting.urls')),
     path('finance/dashboard/', include('finance.dashboard.urls')),
     path('finance/settings/', include('finance.settings.urls')),
     path('logs/', include('changelog.urls')),

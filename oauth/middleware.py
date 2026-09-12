@@ -12,9 +12,15 @@ def get_current_user():
     return getattr(_thread_locals, 'user', None)
 
 
+def clear_current_user():
+    if hasattr(_thread_locals, 'user'):
+        _thread_locals.user = None
+
+
 class ThreadLocalMiddleware:
     """
     Middleware to make the current request globally accessible.
+    Guarantees thread-local state is cleared after each request.
     """
 
     def __init__(self, get_response):
@@ -22,19 +28,24 @@ class ThreadLocalMiddleware:
 
     def __call__(self, request):
         try:
-            if request.path not in BYPASS_AUTHENTICATION:
-                jwt_authenticator = JWTAuthentication()
-                result = jwt_authenticator.authenticate(request)
-                if result is not None:
-                    user, _ = result
-                    if user:
-                        _thread_locals.user = user
-                        request.user = user
-            elif request.path in PASSWORD_RESETS:
-                _thread_locals.user = None
+            try:
+                if request.path not in BYPASS_AUTHENTICATION:
+                    jwt_authenticator = JWTAuthentication()
+                    result = jwt_authenticator.authenticate(request)
+                    if result is not None:
+                        user, _ = result
+                        if user:
+                            _thread_locals.user = user
+                            request.user = user
+                elif request.path in PASSWORD_RESETS:
+                    _thread_locals.user = None
+                    request.user = None
+            except AuthenticationFailed:
                 request.user = None
-        except AuthenticationFailed:
-            request.user = None
+                _thread_locals.user = None
 
-        response = self.get_response(request)
-        return response
+            response = self.get_response(request)
+            return response
+        finally:
+            clear_current_user()
+

@@ -9,7 +9,7 @@ from finance.transactions.models import Transaction
 class DashboardService:
 
     def get_queryset(self):
-        return Transaction.objects.select_related('category', 'subcategory', 'account').filter(is_deleted=False)
+        return Transaction.objects.filter(is_deleted=False)
 
     def get_income(self, year):
         return self.get_monthly_transaction_summary('is_income', year)

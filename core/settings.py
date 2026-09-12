@@ -70,7 +70,6 @@ INSTALLED_APPS = [
     "finance.transactions",
     "finance.categories",
     "finance.payees",
-    "finance.reporting",
     "finance.settings",
 ]
 
