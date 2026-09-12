@@ -2,7 +2,7 @@ import time
 
 from django.conf import settings
 
-from common.constants import TRANSACTION_DATA_FOLDER, INVESTMENT_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
+from common.constants import TRANSACTION_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
 from common.enums import WorkflowContextType
 from oauth.middleware import get_current_user
 from workflow.contracts.storage_backend_contract import StorageBackendContract
@@ -41,8 +41,6 @@ class UploadWorkflow:
         match workflow_type:
             case WorkflowContextType.TRANSACTION_FILES:
                 return self._upload_files(file_names, TRANSACTION_DATA_FOLDER)
-            case WorkflowContextType.INVESTMENT_FILES:
-                return self._upload_files(file_names, INVESTMENT_DATA_FOLDER)
             case _:
                 raise ValueError(f"Invalid workflow type: {workflow_type}")
 

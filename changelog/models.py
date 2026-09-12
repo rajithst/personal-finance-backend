@@ -19,8 +19,6 @@ class SectionEnum(models.TextChoices):
     SUBCATEGORY = 'subcategory', 'Subcategory'
     PAYEE = 'payee', 'Payee'
     ACCOUNT = 'account', 'Account'
-    STOCK = 'stock', 'Stock'
-    DIVIDEND = 'dividend', 'Dividend'
 
 
 class ChangeLog(models.Model):

@@ -16,7 +16,6 @@ django-decouple==2.1
 djangorestframework==3.16.0
 djangorestframework_simplejwt==5.5.1
 djoser==2.3.3
-fmpsdk==20250102.0
 frozendict==2.4.6
 google-api-core==2.25.1
 google-auth==2.40.3
@@ -40,12 +39,10 @@ mock==5.2.0
 model-bakery==1.20.5
 numpy==2.3.2
 oauthlib==3.3.1
-openai==1.97.1
 packaging==25.0
 pandas==2.3.1
 pillow==11.3.0
 pluggy==1.6.0
-polygon-api-client==1.15.3
 proto-plus==1.26.1
 protobuf==6.31.1
 pyasn1==0.6.1

@@ -72,13 +72,6 @@ INSTALLED_APPS = [
     "finance.payees",
     "finance.reporting",
     "finance.settings",
-    "investments.company",
-    "investments.dashboard",
-    "investments.dividend",
-    "investments.fund",
-    "investments.portfolio",
-    "investments.stock",
-    "investments.settings",
 ]
 
 MIDDLEWARE = [
@@ -170,10 +163,6 @@ DATABASES = {
 }
 SECRET_KEY = config('SECRET_KEY')
 
-#API Keys
-MARKET_API_KEY = config('MARKET_API_KEY', default=None)
-OPENAI_API_KEY = config('OPENAI_API_KEY', default=None)
-POLYGON_API_KEY = config('POLYGON_API_KEY', default=None)
 BUCKET_NAME = config('BUCKET_NAME', default=None)
 
 REST_FRAMEWORK = {
@@ -208,7 +197,7 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'https://personal-finance-425009.uc.r.appspot.com']
+CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'https://personal-finance-425009.uc.r.appspot.com']
 
 LOGGING = {
     'version': 1,

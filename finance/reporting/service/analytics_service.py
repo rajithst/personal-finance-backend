@@ -1,15 +1,11 @@
 import logging
 
-from django.db import connection
 from django.db.models import Sum
 
-from aiagent.agent import FinancialAgent
 from finance.transactions.models import Transaction
 
 
 class AnalyticsService:
-    def __init__(self, agent=None):
-        self.agent = agent if agent else FinancialAgent()
 
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account').filter(is_deleted=False)
@@ -57,20 +53,3 @@ class AnalyticsService:
         for k, v in results.items():
             response.append({'category': k, 'total': v['total'], 'subcategories': v['subcategories']})
         return response
-
-    def parse_prompt(self, request_data):
-
-        prompt = request_data.get('prompt', '')
-        categories = request_data.get('categories', [])
-        accounts = request_data.get('accounts', [])
-        if not prompt:
-            raise ValueError("Prompt is required in the request data.")
-        query = self.agent.get_query_from_prompt(prompt, categories=categories, accounts=accounts)
-        logging.info(query)
-        return self.run_sql_as_dict(query)
-
-    def run_sql_as_dict(self, query, params=None):
-        with connection.cursor() as cursor:
-            cursor.execute(query, params or [])
-            columns = [col[0] for col in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]

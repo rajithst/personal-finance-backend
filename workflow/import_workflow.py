@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 from django.conf import settings
 
-from common.constants import TRANSACTION_DATA_FOLDER, INVESTMENT_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
+from common.constants import TRANSACTION_DATA_FOLDER, LOCAL_STORAGE, GOOGLE_CLOUD_STORAGE
 from common.enums import WorkflowContextType
 from workflow.contracts.import_workflow_contract import ImportWorkflowContract
 from workflow.contracts.storage_backend_contract import StorageBackendContract
@@ -70,8 +70,6 @@ class ImportCsvWorkflow:
         match workflow_type:
             case WorkflowContextType.TRANSACTION_FILES:
                 return self._load_data(file_names, TRANSACTION_DATA_FOLDER)
-            case WorkflowContextType.INVESTMENT_FILES:
-                return self._load_data(file_names, INVESTMENT_DATA_FOLDER)
             case _:
                 raise ValueError(f"Invalid workflow type: {workflow_type}")
 

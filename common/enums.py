@@ -15,10 +15,6 @@ class AccountProviders(Enum):
     MIZUHO = 'Mizuho'
 
 
-class BrokerProviders(Enum):
-    RAKUTEN = 'Rakuten'
-
-
 class DataSource(Enum):
     IMPORT = 1
     MANUAL_ENTRY = 2
@@ -26,4 +22,3 @@ class DataSource(Enum):
 
 class WorkflowContextType(Enum):
     TRANSACTION_FILES = 'TRANSACTION'
-    INVESTMENT_FILES = 'INVESTMENT'
