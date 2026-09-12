@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,15 +13,19 @@ class CategorySettingsView(APIView):
             category = data.get('category')
             subcategories = data.get('subcategories')
             deleted_subcategories = data.get('deleted_sub_categories')
-            category_id = category.get('id')
+            category_id = category.get('id') if isinstance(category, dict) else None
 
             category_service = CategoryService()
-            is_updated, updated_category = category_service.update_category(data)
-            if deleted_subcategories:
-                category_service.delete_subcategories(deleted_subcategories)
-            if subcategories:
-                category_service.update_subcategories(subcategories)
-            all_subcategories = category_service.get_all_subcategories(category_id)
+            with transaction.atomic():
+                is_updated, updated_category = category_service.update_category(data)
+                if not is_updated:
+                    return Response({'data': {'category': None, 'subcategories': None}, 'status': False, 'message': 'Error'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                if deleted_subcategories:
+                    category_service.delete_subcategories(deleted_subcategories)
+                if subcategories:
+                    category_service.update_subcategories(subcategories)
+                all_subcategories = category_service.get_all_subcategories(category_id)
 
             if updated_category:
                 return Response(

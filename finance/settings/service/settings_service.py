@@ -1,19 +1,31 @@
 from accounts.models import Account
 from accounts.serializers import ResponseAccountSerializer
-from common.constants import ACCOUNT_TYPE_CREDIT_CARD, ACCOUNT_TYPE_BANK_ACCOUNT, ACCOUNT_TYPE_INVESTMENT_ACCOUNT, \
-    CREDIT_CARD_PROVIDER_RAKUTEN, CREDIT_CARD_PROVIDER_EPOS, CREDIT_CARD_PROVIDER_DOCOMO, BANK_ACCOUNT_PROVIDER_MIZUHO, \
-    BANK_ACCOUNT_PROVIDER_JP_POST, INVESTMENT_ACCOUNT_PROVIDER_RAKUTEN
+from common.constants import (
+    ACCOUNT_TYPE_CREDIT_CARD,
+    ACCOUNT_TYPE_BANK_ACCOUNT,
+    CREDIT_CARD_PROVIDER_RAKUTEN,
+    CREDIT_CARD_PROVIDER_EPOS,
+    CREDIT_CARD_PROVIDER_DOCOMO,
+    BANK_ACCOUNT_PROVIDER_MIZUHO,
+    BANK_ACCOUNT_PROVIDER_JP_POST,
+)
 from finance.categories.models import TransactionCategory, TransactionSubCategory
-from finance.categories.serializers import ResponseTransactionCategorySerializer, \
-    ResponseTransactionSubCategorySerializer
+from finance.categories.serializers import (
+    ResponseTransactionCategorySerializer,
+    ResponseTransactionSubCategorySerializer,
+)
 
 
 class SettingsService:
 
-    def get_credit_accounts(self):
+    def get_accounts(self):
         accounts = Account.objects.all()
         serializer = ResponseAccountSerializer(accounts, many=True)
         return serializer.data
+
+    def get_credit_accounts(self):
+        # Kept for backward compatibility with existing views/endpoints
+        return self.get_accounts()
 
     def get_transaction_categories(self):
         transaction_categories = TransactionCategory.objects.all()
@@ -26,7 +38,7 @@ class SettingsService:
         return serializer.data
 
     def get_account_types(self):
-        return [ACCOUNT_TYPE_BANK_ACCOUNT, ACCOUNT_TYPE_CREDIT_CARD, ACCOUNT_TYPE_INVESTMENT_ACCOUNT]
+        return [ACCOUNT_TYPE_BANK_ACCOUNT, ACCOUNT_TYPE_CREDIT_CARD]
 
     def get_account_providers(self):
         return [
@@ -50,8 +62,4 @@ class SettingsService:
                 'provider_type': ACCOUNT_TYPE_BANK_ACCOUNT,
                 'value': BANK_ACCOUNT_PROVIDER_JP_POST,
             },
-            {
-                'provider_type': ACCOUNT_TYPE_INVESTMENT_ACCOUNT,
-                'value': INVESTMENT_ACCOUNT_PROVIDER_RAKUTEN,
-            }
         ]

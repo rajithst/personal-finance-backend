@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models.functions import TruncMonth
+from django.utils import timezone
 
 from finance.transactions.models import Transaction
 
@@ -10,6 +11,40 @@ class DashboardService:
 
     def get_queryset(self):
         return Transaction.objects.filter(is_deleted=False)
+
+    def get_monthly_kpi_summary(self, year):
+        """
+        Calculates income, expense, payment, and savings aggregated by month in a single SQL query.
+        """
+        if not year:
+            raise ValueError('Required filter year')
+
+        queryset = (self.get_queryset().filter(date__year=year, is_deleted=False)
+                    .annotate(month=TruncMonth('date'))
+                    .values('month')
+                    .annotate(
+                        income=Sum('amount', filter=Q(is_income=True)),
+                        expense=Sum('amount', filter=Q(is_expense=True)),
+                        payment=Sum('amount', filter=Q(is_payment=True)),
+                        saving=Sum('amount', filter=Q(is_saving=True)),
+                    )
+                    .order_by('month'))
+
+        incomes, expenses, payments, savings = [], [], [], []
+        for item in queryset:
+            date = item['month']
+            year_num, month_num = date.year, date.month
+            incomes.append({'year': year_num, 'month': month_num, 'amount': item['income'] or 0})
+            expenses.append({'year': year_num, 'month': month_num, 'amount': item['expense'] or 0})
+            payments.append({'year': year_num, 'month': month_num, 'amount': item['payment'] or 0})
+            savings.append({'year': year_num, 'month': month_num, 'amount': item['saving'] or 0})
+
+        return {
+            'income': incomes,
+            'expense': expenses,
+            'payment': payments,
+            'saving': savings,
+        }
 
     def get_income(self, year):
         return self.get_monthly_transaction_summary('is_income', year)
@@ -155,10 +190,11 @@ class DashboardService:
         Returns:
             list: The top ten expenses.
         """
-        today = datetime.today()
-        first_day_of_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-        last_day_of_last_month = first_day_of_last_month.replace(day=1) + timedelta(days=31)
-        last_day_of_last_month = last_day_of_last_month.replace(day=1) - timedelta(days=1)
+        now = timezone.now().date() if hasattr(timezone, 'now') else datetime.today().date()
+        first_day_this_month = now.replace(day=1)
+        last_day_of_last_month = first_day_this_month - timedelta(days=1)
+        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+
         queryset = (self.get_queryset().filter(
             is_income=False,
             is_payment=False,

@@ -25,3 +25,18 @@ class ResponseDestinationMapSerializer(serializers.ModelSerializer):
         elif obj.category_type == PAYMENT_CATEGORY_TYPE:
             return PAYMENT_CATEGORY_TEXT
         return None
+
+
+class DestinationMapSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DestinationMap
+        fields = [
+            'id',
+            'destination_original',
+            'destination',
+            'destination_eng',
+            'keywords',
+            'category',
+            'subcategory',
+            'category_type',
+        ]

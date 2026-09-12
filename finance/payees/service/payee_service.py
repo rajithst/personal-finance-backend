@@ -3,10 +3,14 @@ import logging
 from django.db import transaction
 from django.db.models import Case, When, IntegerField
 
-from common.transaction_const import INCOME_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE, \
-    PAYMENT_CATEGORY_TYPE
+from common.transaction_const import (
+    INCOME_CATEGORY_TYPE,
+    SAVINGS_CATEGORY_TYPE,
+    EXPENSE_CATEGORY_TYPE,
+    PAYMENT_CATEGORY_TYPE,
+)
 from finance.payees.models import DestinationMap
-from finance.payees.serializers import ResponseDestinationMapSerializer
+from finance.payees.serializers import DestinationMapSerializer, ResponseDestinationMapSerializer
 from finance.transactions.models import Transaction
 from finance.transactions.serializers import ResponseTransactionSerializer
 
@@ -32,14 +36,15 @@ class PayeeService:
         return queryset
 
     def get_by_id(self, pk):
-        instance = self.get_custom_queryset().get(pk=pk)
-        return instance
+        try:
+            return self.get_custom_queryset().get(pk=pk)
+        except DestinationMap.DoesNotExist:
+            return None
 
     def get_by_name(self, name):
-        instance = self.get_custom_queryset().get(destination=name)
-        return instance
+        return self.get_custom_queryset().filter(destination=name).first()
 
-    def get_payee_by_id_or_name(self, request_data):
+    def get_payee_by_id_or_name(self, request_data, include_transactions=True, transaction_limit=None):
         payee_id = request_data.get('id', None)
         name = request_data.get('name', None)
         instance = None
@@ -51,12 +56,18 @@ class PayeeService:
         if not instance:
             return {'payee': None, 'transactions': None}
 
-        transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-            destination=instance.destination)
-
         payee_serializer = ResponseDestinationMapSerializer(instance)
-        transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
-        return {'payee': payee_serializer.data, 'transactions': transaction_serializer.data}
+        if include_transactions:
+            transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+                destination=instance.destination)
+            if transaction_limit:
+                transactions = transactions[:transaction_limit]
+            transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
+            transactions_data = transaction_serializer.data
+        else:
+            transactions_data = []
+
+        return {'payee': payee_serializer.data, 'transactions': transactions_data}
 
     def get_payees(self):
         queryset = self.get_custom_queryset()
@@ -81,55 +92,47 @@ class PayeeService:
         subcategory = request_data.get('subcategory')
         category_type = request_data.get('category_type')
 
-        exist_settings = DestinationMap.objects.get(pk=payee_id)
+        exist_settings = DestinationMap.objects.filter(pk=payee_id).first()
+        if not exist_settings:
+            return False, {'id': f'Payee with id {payee_id} not found.'}
 
-        is_payee_renamed = request_data.get('destination') != exist_settings.destination
+        is_payee_renamed = new_destination and (new_destination != exist_settings.destination)
         destination = new_destination if is_payee_renamed else exist_settings.destination
         target_destinations = [exist_settings.destination]
-        serializer = ResponseDestinationMapSerializer(exist_settings, data=request_data)
-        if serializer.is_valid(raise_exception=True):
-            if merge_ids:
-                merge_records = DestinationMap.objects.filter(id__in=merge_ids)
-                target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
 
-            try:
-                with transaction.atomic():
-                    serializer.save()
-                    update_params = {
-                        'destination': destination,
-                        'alias': new_alias,
-                        'category_id': category,
-                        'subcategory_id': subcategory,
-                    }
-                    if category_type == INCOME_CATEGORY_TYPE:
-                        update_params['is_income'] = 1
-                        update_params['is_expense'] = 0
-                        update_params['is_saving'] = 0
-                        update_params['is_payment'] = 0
-                    elif category_type == SAVINGS_CATEGORY_TYPE:
-                        update_params['is_income'] = 0
-                        update_params['is_expense'] = 1
-                        update_params['is_saving'] = 1
-                        update_params['is_payment'] = 0
-                    elif category_type == EXPENSE_CATEGORY_TYPE:
-                        update_params['is_income'] = 0
-                        update_params['is_expense'] = 1
-                        update_params['is_saving'] = 0
-                        update_params['is_payment'] = 0
-                    elif category_type == PAYMENT_CATEGORY_TYPE:
-                        update_params['is_income'] = 0
-                        update_params['is_expense'] = 1
-                        update_params['is_saving'] = 0
-                        update_params['is_payment'] = 1
+        serializer = DestinationMapSerializer(exist_settings, data=request_data, partial=True)
+        if not serializer.is_valid():
+            return False, serializer.errors
 
-                    Transaction.objects.filter(destination__in=target_destinations).update(
-                        **update_params)
-                    if merge_ids:
-                        DestinationMap.objects.filter(id__in=merge_ids).delete()
-                payee_details = self.get_payee_by_id_or_name({'id': payee_id})
-                return True, payee_details
-            except Exception as e:
-                logging.exception("An unexpected error occurred:", e)
-                return False, serializer.errors
-        return None
+        if merge_ids:
+            merge_records = DestinationMap.objects.filter(id__in=merge_ids)
+            target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
+
+        try:
+            with transaction.atomic():
+                serializer.save()
+                update_params = {
+                    'destination': destination,
+                    'alias': new_alias,
+                    'category_id': category,
+                    'subcategory_id': subcategory,
+                }
+                flag_mapping = {
+                    INCOME_CATEGORY_TYPE: {'is_income': True, 'is_expense': False, 'is_saving': False, 'is_payment': False},
+                    SAVINGS_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': True, 'is_payment': False},
+                    EXPENSE_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': False, 'is_payment': False},
+                    PAYMENT_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': False, 'is_payment': True},
+                }
+                if category_type in flag_mapping:
+                    update_params.update(flag_mapping[category_type])
+
+                Transaction.objects.filter(destination__in=target_destinations).update(**update_params)
+                if merge_ids:
+                    DestinationMap.objects.filter(id__in=merge_ids).delete()
+
+            payee_details = self.get_payee_by_id_or_name({'id': payee_id}, include_transactions=False)
+            return True, payee_details
+        except Exception as e:
+            logging.exception("An unexpected error occurred while updating payee: %s", e)
+            return False, {'error': str(e)}
 

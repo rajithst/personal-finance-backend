@@ -31,10 +31,18 @@ class BaseLoader:
     def clean_electronic_signatures(self, value, signatures):
         if isinstance(value, str) and value:
             new_value = value.strip()
-            for i in signatures:
-                if new_value.endswith(i) or new_value.startswith(i):
-                    new_value = new_value.replace(i, '')
-                    new_value = new_value.strip()
+            changed = True
+            while changed:
+                changed = False
+                for sig in signatures:
+                    if not sig:
+                        continue
+                    if new_value.startswith(sig):
+                        new_value = new_value[len(sig):].strip()
+                        changed = True
+                    if new_value.endswith(sig):
+                        new_value = new_value[:-len(sig)].strip()
+                        changed = True
             return new_value
         return value
 

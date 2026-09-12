@@ -127,8 +127,7 @@ class TransactionListService:
     def handle_serializer(self, serializer):
         if serializer.is_valid(raise_exception=True):
             item = serializer.save()
-            response = Transaction.objects.get(pk=item.pk)
-            response_serializer = ResponseTransactionSerializer(response)
+            response_serializer = ResponseTransactionSerializer(item)
             return True, response_serializer.data, item
         return False, serializer.errors, None
 
@@ -160,8 +159,13 @@ class TransactionListService:
                 queryset = Transaction.objects.filter(id__in=merge_ids)
                 merged = queryset.update(is_deleted=True, merge_id=pk)
                 if merged:
-                    log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
-                                           action=ActionEnum.MERGE)
+                    instances_to_log = list(queryset)
+                    transaction.on_commit(
+                        lambda: log_change_signal.send_robust(
+                            sender=self.__class__, instances=instances_to_log,
+                            section=SectionEnum.TRANSACTION, action=ActionEnum.MERGE
+                        )
+                    )
                     return True
             return None
         else:
@@ -178,8 +182,13 @@ class TransactionBulkService:
                     queryset = Transaction.objects.filter(id__in=delete_ids)
                     deleted = queryset.update(is_deleted=True, delete_reason=request_data.get('delete_reason', ''))
                     if deleted:
-                        log_change_signal.send_robust(sender=self.__class__, instances=list(queryset), section=SectionEnum.TRANSACTION,
-                                               action=ActionEnum.BULK_DELETE)
+                        instances_to_log = list(queryset)
+                        transaction.on_commit(
+                            lambda: log_change_signal.send_robust(
+                                sender=self.__class__, instances=instances_to_log,
+                                section=SectionEnum.TRANSACTION, action=ActionEnum.BULK_DELETE
+                            )
+                        )
                     return True
             except ValidationError as e:
                 logging.exception("Validation error: %s", e)
@@ -196,15 +205,15 @@ class TransactionBulkService:
             with transaction.atomic():
                 if splits:
                     for split in splits:
-                        payee = DestinationMap.objects.get(destination=split.get('destination'))
+                        payee = DestinationMap.objects.filter(destination=split.get('destination')).first()
                         transaction_split = self.extract_valid_fields(transaction_data)
                         transaction_split['id'] = None
                         transaction_split['amount'] = Decimal(split.get('amount'))
-                        transaction_split['category_id'] = payee.category_id
+                        transaction_split['category_id'] = payee.category_id if payee else None
                         transaction_split['subcategory_id'] = None
                         transaction_split['account_id'] = transaction_data.get('account')
-                        transaction_split['destination'] = payee.destination
-                        transaction_split['destination_original'] = payee.destination_original
+                        transaction_split['destination'] = payee.destination if payee else split.get('destination')
+                        transaction_split['destination_original'] = payee.destination_original if payee else split.get('destination')
                         transaction_split['alias'] = None
                         transaction_split['user_id'] = user_id
                         total_split_amount += Decimal(split.get('amount'))
@@ -227,16 +236,21 @@ class TransactionBulkService:
 
 
     def extract_valid_fields(self, transaction_data):
-        valid_fields = [field.name for field in Transaction._meta.get_fields()]
+        valid_fields = [field.name for field in Transaction._meta.get_fields() if not field.is_relation or field.concrete]
         override_fields = {'category': 'category_id', 'subcategory': 'subcategory_id', 'account': 'account_id'}
-        for override_field in override_fields.keys():
+        for override_field, mapped_col in override_fields.items():
             if override_field in valid_fields:
                 valid_fields.remove(override_field)
-                valid_fields.append(override_fields[override_field])
+            if mapped_col not in valid_fields:
+                valid_fields.append(mapped_col)
+
         transaction_data_copy = {}
         for field in valid_fields:
             if field in transaction_data:
                 transaction_data_copy[field] = transaction_data[field]
-            else:
-                transaction_data_copy[field] = None
+
+        for input_key, mapped_key in override_fields.items():
+            if input_key in transaction_data and mapped_key not in transaction_data_copy:
+                transaction_data_copy[mapped_key] = transaction_data[input_key]
+
         return transaction_data_copy
