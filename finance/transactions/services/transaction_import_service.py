@@ -4,6 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Account
@@ -71,17 +72,21 @@ class TransactionImportService:
             for new_payee in new_payees.to_dict('records'):
                 payee_objects.append(DestinationMap(**new_payee))
 
+            user = get_current_user()
+            user_id = getattr(user, 'id', None)
             for expense in expense_records:
-                expense['user_id'] = get_current_user().id
+                expense['user_id'] = user_id
                 expense_objects.append(Transaction(**expense))
             try:
-                is_transactions_imported = Transaction.objects.bulk_create(expense_objects)
-                if is_transactions_imported:
-                    Account.objects.filter(id=account.id).update(last_import_date=last_import_date)
-                    DestinationMap.objects.bulk_create(payee_objects)
+                with transaction.atomic():
+                    is_transactions_imported = Transaction.objects.bulk_create(expense_objects)
+                    if is_transactions_imported:
+                        Account.objects.filter(id=account.id).update(last_import_date=last_import_date)
+                        if payee_objects:
+                            DestinationMap.objects.bulk_create(payee_objects)
                 return is_transactions_imported
             except Exception as e:
-                logging.exception('Error importing Expenses objects: %s', e)
+                logger.exception('Error importing Expenses objects: %s', e)
                 return False
         return None
 
@@ -224,6 +229,7 @@ class TransactionImportService:
 
         existing_payees = payees['destination'].unique()
         current_user = get_current_user()
+        user_id = getattr(current_user, 'id', None)
         new_payees = transactions[~transactions['destination'].isin(existing_payees)]
         new_payees = new_payees.drop_duplicates(subset='destination_original', keep="first")
         new_payees = new_payees[['destination', 'destination_original', 'is_income']]
@@ -232,11 +238,11 @@ class TransactionImportService:
 
         income_payees = income_payees.assign(
             **{'destination_eng': None, 'keywords': None, 'category_id': None,
-               'subcategory_id': None, 'user_id': current_user.id,
+               'subcategory_id': None, 'user_id': user_id,
                'category_type': INCOME_CATEGORY_TYPE})
         expense_payees = expense_payees.assign(
             **{'destination_eng': None, 'keywords': None, 'category_id': None,
-               'subcategory_id': None, 'user_id': current_user.id,
+               'subcategory_id': None, 'user_id': user_id,
                'category_type': EXPENSE_CATEGORY_TYPE})
         new_payees = pd.concat([income_payees, expense_payees]).drop(columns=['is_income'])
         return new_payees

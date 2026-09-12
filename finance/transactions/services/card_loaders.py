@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from common.enums import DataSource, AccountProviders
-from workflow.import_workflow import ImportWorkflowContract
+from workflow.contracts.import_workflow_contract import ImportWorkflowContract
 
 
 class BaseLoader:
@@ -29,11 +29,11 @@ class BaseLoader:
         return df
 
     def clean_electronic_signatures(self, value, signatures):
-        if value:
+        if isinstance(value, str) and value:
             new_value = value.strip()
             for i in signatures:
-                if value.endswith(i) or value.startswith(i):
-                    new_value = value.replace(i, '')
+                if new_value.endswith(i) or new_value.startswith(i):
+                    new_value = new_value.replace(i, '')
                     new_value = new_value.strip()
             return new_value
         return value
@@ -49,13 +49,15 @@ class BaseLoader:
 
     def clean_destinations(self, df, cleanable_signatures):
         try:
-            df['destination'] = df['destination'].apply(
-                lambda x: self.clean_electronic_signatures(x, cleanable_signatures))
-            df['destination_original'] = df.apply(
-                lambda x: x['destination'].strip() if x['destination'] else x['destination'], axis=1)
+            if 'destination' in df.columns:
+                df['destination'] = df['destination'].apply(
+                    lambda x: self.clean_electronic_signatures(x, cleanable_signatures))
+                df['destination_original'] = df['destination'].apply(
+                    lambda x: x.strip() if isinstance(x, str) else x)
             return df
         except Exception as e:
-            logging.exception(e)
+            logging.exception("Error cleaning destinations: %s", e)
+            return df
 
 
 class RakutenCardLoader(BaseLoader, ImportWorkflowContract):
@@ -70,7 +72,7 @@ class RakutenCardLoader(BaseLoader, ImportWorkflowContract):
         return ['利用日', '利用店名・商品名', '利用金額']
 
     def process_data(self, df, account):
-        df = df[self.get_expected_columns()]
+        df = df[self.get_expected_columns()].copy()
         df.columns = ['date', 'destination', 'amount']
         df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d', errors='coerce').dt.date
         df = self.set_default_props(df, account)
@@ -96,8 +98,8 @@ class EposCardLoader(BaseLoader, ImportWorkflowContract):
         return ['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']
 
     def process_data(self, df, account):
-        df = df.iloc[:, 1:]
-        df = df[self.get_expected_columns()]
+        df = df.iloc[:, 1:].copy()
+        df = df[self.get_expected_columns()].copy()
         df.columns = ['date', 'destination', 'amount']
         df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日', errors='coerce').dt.date
         df = self.set_default_props(df, account)
@@ -127,7 +129,7 @@ class DocomoCardLoader(BaseLoader, ImportWorkflowContract):
     def process_data(self, df, account):
         rows, columns = df.shape
         df.columns = ['col' + str(i) for i in range(columns)]
-        df = df.iloc[:, :3]
+        df = df.iloc[:, :3].copy()
         df.columns = ['date', 'destination', 'amount']
         df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d', errors='coerce').dt.date
         df = self.set_default_props(df, account)
@@ -159,8 +161,8 @@ class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
         return list(set(self._get_income_columns() + self._get_expense_columns()))
 
     def process_data(self, df, account):
-        df_income = df[self._get_income_columns()]
-        df_expense = df[self._get_expense_columns()]
+        df_income = df[self._get_income_columns()].copy()
+        df_expense = df[self._get_expense_columns()].copy()
         df_income.columns = ['date', 'amount', 'destination']
         df_expense.columns = ['date', 'amount', 'destination']
         df_income['date'] = pd.to_datetime(df_income['date'], format='%Y.%m.%d', errors='coerce').dt.date

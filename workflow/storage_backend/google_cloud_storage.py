@@ -63,11 +63,16 @@ class GCSHandler(StorageBackendContract):
                 file_list.append(blob.name)
         return file_list
 
-    def delete_file(self, file_name):
+    def delete_file(self, file_name: str) -> bool:
         """Deletes a file from the specified bucket."""
-        bucket = self._client.bucket(self._bucket_name)
-        blob = bucket.blob(file_name)
-        blob.delete()
+        try:
+            bucket = self._client.bucket(self._bucket_name)
+            blob = bucket.blob(file_name)
+            blob.delete()
+            return True
+        except Exception as e:
+            logging.exception(f'Failed to delete file {file_name} from GCS: {e}')
+            return False
 
     def read_file(self, file_name, read_config=None):
         """
@@ -95,13 +100,14 @@ class GCSHandler(StorageBackendContract):
             prefix (str): The prefix to filter files.
             read_config (dict, optional): The read configuration for the files. Defaults to None.
         Returns:
-            list[pd.DataFrame]: A list of files as TextIOWrapper objects.
+            list[pd.DataFrame]: A list of files as pandas DataFrames.
         """
         files = self.list_files(prefix)
         file_list = []
         for file in files:
-            df = self.read_file(file, read_config)
-            file_list.append(df)
+            df = self.read_csv(file, read_config)
+            if df is not None:
+                file_list.append(df)
         return file_list
 
     def read_csv(self, file_name, read_config=None):
@@ -124,3 +130,8 @@ class GCSHandler(StorageBackendContract):
         except Exception as e:
             logging.exception(f'Error reading CSV file from bucket {e}')
             return None
+
+
+# Backward-compatible alias
+GoogleCloudStorage = GCSHandler
+
