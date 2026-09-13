@@ -16,7 +16,6 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import config
-from google.cloud import secretmanager
 from dotenv import dotenv_values
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,35 +23,44 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ENV = config("ENV", default="dev")
 IS_PROD = ENV == 'prod'
 DEBUG = config('DEBUG', default=False, cast=bool)
-if IS_PROD:
-    # google app engine inject GOOGLE_CLOUD_PROJECT and app.yaml environment variable on production
-    def get_gcp_secret():
-        """
-        Fetches a secret from Google Cloud Secret Manager.
-        """
-        gcloud_project = config('GOOGLE_CLOUD_PROJECT', None)
-        if not gcloud_project:
-            raise ValueError("PROJECT_ID is not set in the environment variables.")
 
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = config('DJANGO_SECRET_NAME', 'django_settings')
-        name = f'projects/{gcloud_project}/secrets/{secret_name}/versions/latest'
-        response = client.access_secret_version(name=name)
-        return response.payload.data.decode('UTF-8')
-
-    secret = get_gcp_secret()
-    env_vars = dotenv_values(stream=io.StringIO(secret))
-    os.environ.update(env_vars)
-
+# Support direct environment variables (recommended for Cloud Run) with optional Secret Manager
+USE_SECRET_MANAGER = config('USE_SECRET_MANAGER', default=False, cast=bool)
+if USE_SECRET_MANAGER:
+    try:
+        from google.cloud import secretmanager
+        gcloud_project = (
+            config('GOOGLE_CLOUD_PROJECT', default=None)
+            or config('GCP_PROJECT', default=None)
+            or os.environ.get('CLOUDSDK_CORE_PROJECT')
+        )
+        if gcloud_project:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_name = config('DJANGO_SECRET_NAME', default='django_settings')
+            name = f'projects/{gcloud_project}/secrets/{secret_name}/versions/latest'
+            response = client.access_secret_version(name=name)
+            secret = response.payload.data.decode('UTF-8')
+            env_vars = dotenv_values(stream=io.StringIO(secret))
+            os.environ.update(env_vars)
+    except Exception as e:
+        logging.warning("Could not fetch secret from Secret Manager: %s. Using environment variables.", e)
 else:
     local_env = os.path.join(BASE_DIR, '.env')
     if os.path.exists(local_env):
         env_vars = dotenv_values(local_env)
-        os.environ.update(env_vars)
+        for k, v in env_vars.items():
+            if k not in os.environ and v is not None:
+                os.environ[k] = v
 
-ALLOWED_HOSTS = [config('ALLOWED_HOST')]
-CSRF_TRUSTED_ORIGINS = [config('CSRF_TRUSTED_ORIGINS')]
+# Cloud Run / Proxy SSL Configuration
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = IS_PROD
+
+allowed_hosts_str = config('ALLOWED_HOSTS', default=config('ALLOWED_HOST', default='*'))
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_str.split(',') if h.strip()]
+
+csrf_origins_str = config('CSRF_TRUSTED_ORIGINS', default='')
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_origins_str.split(',') if o.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -151,14 +159,19 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'personalfinance/media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+db_config = {
+    'ENGINE': 'django.db.backends.mysql',
+    'NAME': config('DB_NAME', default='personalfinance'),
+    'USER': config('DB_USER', default='root'),
+    'PASSWORD': config('DB_PASSWORD', default=''),
+    'HOST': config('DB_HOST', default='127.0.0.1'),
+}
+db_port = config('DB_PORT', default=None)
+if db_port:
+    db_config['PORT'] = str(db_port)
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': config('DB_NAME'),
-        'HOST': config('DB_HOST'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-    }
+    'default': db_config
 }
 SECRET_KEY = config('SECRET_KEY')
 

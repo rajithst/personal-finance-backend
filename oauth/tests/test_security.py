@@ -103,3 +103,12 @@ class TestRequestManagerSafety:
             qs = mgr.get_queryset()
             mock_qs.filter.assert_called_once_with(user_id=42)
             assert qs == mock_filtered_qs
+
+
+class TestHealthCheckEndpoint:
+    def test_health_check_returns_200_unauthenticated(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        response = client.get("/health/")
+        assert response.status_code == 200
+        assert response.json() == {"status": "healthy", "service": "coincraftservice"}

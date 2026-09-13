@@ -17,11 +17,18 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
+
+
+def health_check(request):
+    return JsonResponse({'status': 'healthy', 'service': 'coincraftservice'})
+
 
 admin.site.site_header = 'Personal Finance Administration'
 admin.site.index_title = 'Welcome to Personal Finance'
 urlpatterns = [
+    path('health/', health_check, name='health_check'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('finance/transaction/', include('finance.transactions.urls')),

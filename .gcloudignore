@@ -27,6 +27,5 @@ venv/
 .venv/
 
 # Ignore IDE files
-.idea/
-
 .env
+env.yaml

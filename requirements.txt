@@ -1,6 +1,5 @@
 annotated-types==0.7.0
 anyio==4.9.0
-appengine-python-standard==1.1.10
 asgiref==3.9.1
 attrs==25.3.0
 cachetools==5.5.2
@@ -34,7 +33,6 @@ httpx==0.28.1
 idna==3.10
 iniconfig==2.1.0
 jiter==0.10.0
-legacy-cgi==2.6.3
 mock==5.2.0
 model-bakery==1.20.5
 numpy==2.3.2
