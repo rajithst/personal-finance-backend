@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Create a non-root system user for security
-RUN groupadd -r appgroup && useradd -r -g appgroup -u 1000 appuser
+RUN groupadd -r appgroup && useradd -r -m -g appgroup -u 1000 appuser
 
 # Copy application source code
 COPY . /app/

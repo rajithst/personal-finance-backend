@@ -159,16 +159,17 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'personalfinance/media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+db_host = config('DB_HOST', default='127.0.0.1')
 db_config = {
     'ENGINE': 'django.db.backends.mysql',
     'NAME': config('DB_NAME', default='personalfinance'),
     'USER': config('DB_USER', default='root'),
     'PASSWORD': config('DB_PASSWORD', default=''),
-    'HOST': config('DB_HOST', default='127.0.0.1'),
+    'HOST': db_host,
 }
 db_port = config('DB_PORT', default=None)
-if db_port:
-    db_config['PORT'] = str(db_port)
+if db_port and str(db_port).strip().lower() not in ('none', '', 'null') and not db_host.startswith('/'):
+    db_config['PORT'] = str(db_port).strip()
 
 DATABASES = {
     'default': db_config
@@ -190,7 +191,8 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = "oauth.User"
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=config('JWT_ACCESS_TOKEN_LIFETIME_DAYS', default=30 if not IS_PROD else 1, cast=int)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default=365, cast=int)),
     'AUTH_HEADER_TYPES': ('Bearer',),
     'SIGNING_KEY': SECRET_KEY,
     'TOKEN_OBTAIN_SERIALIZER': "oauth.serializers.TokenObtainPairSerializer",
@@ -209,33 +211,46 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'https://personal-finance-425009.uc.r.appspot.com']
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'https://personal-finance-425009.uc.r.appspot.com',
+]
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        # 'file': {
-        #     'class': 'logging.FileHandler',
-        #     'filename': 'general.log'
-        # }
-    },
-    'loggers': {
-        'django.db.backends': {
-        }
-    },
     'formatters': {
         'verbose': {
-            'format': '{asctime} - ({levelname}) - {name} - {message}',
-            'style': '{'
+            'format': '{asctime} [{levelname}] {name}: {message}',
+            'style': '{',
         },
         'simple': {
             'format': '{levelname} {message}',
             'style': '{',
         },
-    }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
 }

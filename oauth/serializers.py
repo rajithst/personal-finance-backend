@@ -19,21 +19,17 @@ class TokenObtainPairSerializer(BaseTokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        profile = Profile.objects.get(user_id=user.id)
+        profile = Profile.objects.filter(user_id=user.id).first()
         token['first_name'] = user.first_name
         token['last_name'] = user.last_name
         token['email'] = user.email
-        token['is_premium'] = profile.is_premium
-        token['profile_id'] = profile.id
+        token['is_premium'] = profile.is_premium if profile else False
+        token['profile_id'] = profile.id if profile else None
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        profile = Profile.objects.get(user_id=self.user.id)
-        if profile:
-            return {'token': data['access'], 'refresh': data['refresh']}
-        else:
-            return {'token': None, 'refresh': None, }
+        return {'token': data['access'], 'refresh': data['refresh']}
 
 
 class ProfileSerializer(serializers.ModelSerializer):

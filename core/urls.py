@@ -21,8 +21,19 @@ from django.http import JsonResponse
 from django.urls import path, include
 
 
+from django.db import connection
+
+
 def health_check(request):
-    return JsonResponse({'status': 'healthy', 'service': 'coincraftservice'})
+    data = {'status': 'healthy', 'service': 'coincraftservice'}
+    if request.GET.get('db') == '1':
+        try:
+            connection.ensure_connection()
+            data['database'] = 'connected'
+        except Exception as e:
+            data['database'] = 'error'
+            data['database_error'] = f"{type(e).__name__}: {str(e)}"
+    return JsonResponse(data)
 
 
 admin.site.site_header = 'Personal Finance Administration'
@@ -35,6 +46,7 @@ urlpatterns = [
     path('finance/category/', include('finance.categories.urls')),
     path('finance/payees/', include('finance.payees.urls')),
     path('finance/dashboard/', include('finance.dashboard.urls')),
+    path('finance/analytics/', include('finance.analytics.urls')),
     path('finance/settings/', include('finance.settings.urls')),
     path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),

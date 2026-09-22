@@ -25,6 +25,9 @@ class TestDashboardService:
         call_kwargs = mock_get_qs.return_value.filter.call_args.kwargs
         assert call_kwargs['date__gte'] == datetime.date(2026, 2, 1)
         assert call_kwargs['date__lte'] == datetime.date(2026, 2, 28)
+        assert call_kwargs['is_expense'] is True
+        assert call_kwargs['is_payment'] is False
+        assert call_kwargs['is_saving'] is False
 
     @patch("finance.dashboard.service.dashboard_service.timezone")
     @patch.object(DashboardService, "get_queryset")
@@ -44,6 +47,9 @@ class TestDashboardService:
         call_kwargs = mock_get_qs.return_value.filter.call_args.kwargs
         assert call_kwargs['date__gte'] == datetime.date(2025, 12, 1)
         assert call_kwargs['date__lte'] == datetime.date(2025, 12, 31)
+        assert call_kwargs['is_expense'] is True
+        assert call_kwargs['is_payment'] is False
+        assert call_kwargs['is_saving'] is False
 
     @patch.object(DashboardService, "get_queryset")
     def test_get_monthly_kpi_summary(self, mock_get_qs):
@@ -75,3 +81,26 @@ class TestDashboardService:
         service = DashboardService()
         with pytest.raises(ValueError, match="Required filter year"):
             service.get_monthly_kpi_summary(None)
+
+    @patch.object(DashboardService, "get_queryset")
+    def test_get_expense_filters_out_saving(self, mock_get_qs):
+        mock_qs_chain = MagicMock()
+        mock_qs_chain.annotate.return_value.values.return_value.annotate.return_value.order_by.return_value = []
+        mock_get_qs.return_value.filter.return_value = mock_qs_chain
+
+        service = DashboardService()
+        service.get_expense(2026)
+
+        call_kwargs = mock_get_qs.return_value.filter.call_args.kwargs
+        assert call_kwargs['is_expense'] is True
+        assert call_kwargs['is_saving'] is False
+
+    @patch.object(DashboardService, "get_monthly_transaction_category_summary")
+    def test_get_monthly_expense_category_summary_delegates_correctly(self, mock_summary):
+        mock_summary.return_value = {}
+
+        service = DashboardService()
+        service.get_monthly_expense_category_summary(2026)
+
+        mock_summary.assert_called_once_with('is_expense', 2026)
+

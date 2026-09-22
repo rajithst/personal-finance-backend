@@ -204,7 +204,9 @@ class TransactionImportService:
             keywords = [keyword.strip() for keyword in rule[1].split(',') if keyword.strip()]
             contains_categories[destination].extend(keywords)
         contains_categories = dict(contains_categories)
-        return inverse_dict(contains_categories)
+        inverted = inverse_dict(contains_categories)
+        # Sort by keyword length descending so longer/more specific rules match first
+        return dict(sorted(inverted.items(), key=lambda item: len(item[0]), reverse=True))
 
     def apply_rewrite_rules(self, transactions, rewrite_rules):
         for field in rewrite_rules:
@@ -265,12 +267,16 @@ class TransactionImportService:
         income_category = TransactionCategory.objects.filter(category_type=INCOME_CATEGORY_TYPE).first()
         transactions = pd.merge(transactions, payee_maps, on=['destination'], how='left')
         transactions['category_type'] = pd.to_numeric(transactions['category_type'], errors='coerce')
+        is_payment_existing = transactions['is_payment'].fillna(False).astype(bool)
         transactions.loc[
-            transactions['category_type'] == EXPENSE_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
+            transactions['category_type'] == EXPENSE_CATEGORY_TYPE, ['is_expense', 'is_income',
                                                                      'is_saving']] = [True,
                                                                                       False,
-                                                                                      False,
                                                                                       False]
+        transactions.loc[
+            (transactions['category_type'] == EXPENSE_CATEGORY_TYPE) & (~is_payment_existing),
+            'is_payment'
+        ] = False
         transactions.loc[
             transactions['category_type'] == INCOME_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
                                                                     'is_saving']] = [False,
@@ -279,13 +285,13 @@ class TransactionImportService:
                                                                                      False]
         transactions.loc[
             transactions['category_type'] == SAVINGS_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
-                                                                     'is_saving']] = [True,
+                                                                     'is_saving']] = [False,
                                                                                       False,
                                                                                       False,
                                                                                       True]
         transactions.loc[
             transactions['category_type'] == PAYMENT_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
-                                                                     'is_saving']] = [True,
+                                                                     'is_saving']] = [False,
                                                                                       False,
                                                                                       True,
                                                                                       False]

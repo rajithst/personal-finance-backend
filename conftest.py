@@ -16,3 +16,4 @@ def authenticate(api_client):
         return api_client.force_authenticate(user=user if user else baker.make(User))
 
     return do_authenticated_user
+

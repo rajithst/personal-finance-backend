@@ -112,6 +112,8 @@ class TestCardLoaders:
         assert income_rows['date'].iloc[0] == datetime.date(2026, 4, 1)
         assert expense_rows['destination'].iloc[0] == 'ATM出金'
         assert expense_rows['date'].iloc[0] == datetime.date(2026, 4, 2)
+        assert expense_rows['is_payment'].iloc[0] == True
+        assert income_rows['is_payment'].iloc[0] == False
 
     def test_clean_destinations_robustness(self):
         base = BaseLoader()

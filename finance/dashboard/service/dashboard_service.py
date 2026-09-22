@@ -24,7 +24,7 @@ class DashboardService:
                     .values('month')
                     .annotate(
                         income=Sum('amount', filter=Q(is_income=True)),
-                        expense=Sum('amount', filter=Q(is_expense=True)),
+                        expense=Sum('amount', filter=Q(is_expense=True, is_saving=False)),
                         payment=Sum('amount', filter=Q(is_payment=True)),
                         saving=Sum('amount', filter=Q(is_saving=True)),
                     )
@@ -113,8 +113,11 @@ class DashboardService:
         if not year:
             raise ValueError('Required filter year')
 
-        queryset = (self.get_queryset().filter(
-            **{transaction_type: True, 'date__year': year}, is_deleted=False)
+        filter_kwargs = {transaction_type: True, 'date__year': year, 'is_deleted': False}
+        if transaction_type == 'is_expense':
+            filter_kwargs['is_saving'] = False
+
+        queryset = (self.get_queryset().filter(**filter_kwargs)
                     .annotate(month=TruncMonth('date'))
                     .values('month')
                     .annotate(total_amount=Sum('amount'))
@@ -140,8 +143,11 @@ class DashboardService:
         if not year:
             raise ValueError('Required filter year')
 
-        queryset = (self.get_queryset().filter(
-            **{transaction_type: True, 'date__year': year})
+        filter_kwargs = {transaction_type: True, 'date__year': year, 'is_deleted': False}
+        if transaction_type == 'is_expense':
+            filter_kwargs['is_saving'] = False
+
+        queryset = (self.get_queryset().filter(**filter_kwargs)
                     .annotate(month=TruncMonth('date'))
                     .values('month', 'category_id')
                     .annotate(total_amount=Sum('amount'))
@@ -196,8 +202,10 @@ class DashboardService:
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
 
         queryset = (self.get_queryset().filter(
+            is_expense=True,
             is_income=False,
             is_payment=False,
+            is_saving=False,
             date__gte=first_day_of_last_month,
             date__lte=last_day_of_last_month
         )).values('destination', 'destination_original', 'amount').order_by('-amount')[:10]

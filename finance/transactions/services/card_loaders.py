@@ -178,8 +178,8 @@ class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
         df_expense = self.set_default_props(df_expense, account)
         df_income = self.set_default_props(df_income, account)
         df_expense = self.clean_destinations(df_expense, self.cleanable_signatures)
-        df_income = self.clean_destinations(df_income, self.cleanable_signatures)
-        df_income = df_income.assign(**{'is_expense': False, 'is_income': True})
+        df_income = df_income.assign(**{'is_expense': False, 'is_income': True, 'is_payment': False})
+        df_expense = df_expense.assign(**{'is_expense': True, 'is_income': False, 'is_payment': True})
         df = pd.concat([df_income, df_expense])
         return df
 

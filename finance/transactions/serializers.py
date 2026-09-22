@@ -35,7 +35,13 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
     year = serializers.SerializerMethodField(method_name='get_year')
     month = serializers.SerializerMethodField(method_name='get_month')
     month_text = serializers.SerializerMethodField(method_name='get_month_text')
-    category_text = serializers.ReadOnlyField(source='category.category')
-    subcategory_text = serializers.ReadOnlyField(source='subcategory.name')
+    category_text = serializers.SerializerMethodField()
+    subcategory_text = serializers.SerializerMethodField()
     account_name = serializers.ReadOnlyField(source='account.account_name')
     account_type = serializers.ReadOnlyField(source='account.account_type')
+
+    def get_category_text(self, obj):
+        return obj.category.category if obj.category else None
+
+    def get_subcategory_text(self, obj):
+        return obj.subcategory.name if obj.subcategory else None

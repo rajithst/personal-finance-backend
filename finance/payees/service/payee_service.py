@@ -1,7 +1,7 @@
 import logging
 
 from django.db import transaction
-from django.db.models import Case, When, IntegerField
+from django.db.models import Case, When, IntegerField, Q, Count, Sum, Max
 
 from common.transaction_const import (
     INCOME_CATEGORY_TYPE,
@@ -54,12 +54,34 @@ class PayeeService:
             instance = self.get_by_name(name)
 
         if not instance:
+            if name and include_transactions:
+                clean_name = name.strip()
+                transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
+                    Q(destination__iexact=clean_name) | Q(destination_original__iexact=clean_name),
+                    is_deleted=False
+                ).order_by('-date')
+                if transaction_limit:
+                    transactions = transactions[:transaction_limit]
+                transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
+                return {
+                    'payee': {
+                        'id': 0,
+                        'destination': clean_name,
+                        'keywords': '',
+                        'category': None,
+                        'category_text': None
+                    },
+                    'transactions': transaction_serializer.data
+                }
             return {'payee': None, 'transactions': None}
 
         payee_serializer = ResponseDestinationMapSerializer(instance)
         if include_transactions:
+            clean_dest = instance.destination.strip() if instance.destination else ''
             transactions = Transaction.objects.select_related('category', 'subcategory', 'account').filter(
-                destination=instance.destination)
+                Q(destination__iexact=clean_dest) | Q(destination_original__iexact=clean_dest),
+                is_deleted=False
+            ).order_by('-date')
             if transaction_limit:
                 transactions = transactions[:transaction_limit]
             transaction_serializer = ResponseTransactionSerializer(transactions, many=True)
@@ -72,7 +94,40 @@ class PayeeService:
     def get_payees(self):
         queryset = self.get_custom_queryset()
         serializer = ResponseDestinationMapSerializer(queryset, many=True)
-        return serializer.data
+        payee_data = [dict(item) for item in serializer.data]
+
+        # Aggregate transaction statistics (count, total spend, last transaction date) per destination
+        try:
+            stats_rows = Transaction.objects.filter(is_deleted=False).values('destination').annotate(
+                cnt=Count('id'),
+                tot=Sum('amount'),
+                last=Max('date')
+            )
+            stats_map = {}
+            for r in stats_rows:
+                dest = r.get('destination')
+                if dest:
+                    stats_map[dest.strip().lower()] = {
+                        'transaction_count': r['cnt'],
+                        'total_spend': float(r['tot'] or 0),
+                        'last_transaction_date': str(r['last']) if r['last'] else None,
+                    }
+
+            for item in payee_data:
+                dest = (item.get('destination') or '').strip().lower()
+                dest_orig = (item.get('destination_original') or '').strip().lower()
+                stats = stats_map.get(dest) or stats_map.get(dest_orig) or {
+                    'transaction_count': 0,
+                    'total_spend': 0.0,
+                    'last_transaction_date': None,
+                }
+                item['transaction_count'] = stats['transaction_count']
+                item['total_spend'] = stats['total_spend']
+                item['last_transaction_date'] = stats['last_transaction_date']
+        except Exception as e:
+            logging.warning("Failed to aggregate payee transaction stats: %s", e)
+
+        return payee_data
 
     def update_payee(self, request_data):
         """
@@ -106,7 +161,11 @@ class PayeeService:
 
         if merge_ids:
             merge_records = DestinationMap.objects.filter(id__in=merge_ids)
-            target_destinations.extend(list(merge_records.values_list('destination_original', flat=True)))
+            for rec in merge_records:
+                if rec.destination and rec.destination not in target_destinations:
+                    target_destinations.append(rec.destination)
+                if rec.destination_original and rec.destination_original not in target_destinations:
+                    target_destinations.append(rec.destination_original)
 
         try:
             with transaction.atomic():
@@ -119,14 +178,48 @@ class PayeeService:
                 }
                 flag_mapping = {
                     INCOME_CATEGORY_TYPE: {'is_income': True, 'is_expense': False, 'is_saving': False, 'is_payment': False},
-                    SAVINGS_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': True, 'is_payment': False},
+                    SAVINGS_CATEGORY_TYPE: {'is_income': False, 'is_expense': False, 'is_saving': True, 'is_payment': False},
                     EXPENSE_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': False, 'is_payment': False},
-                    PAYMENT_CATEGORY_TYPE: {'is_income': False, 'is_expense': True, 'is_saving': False, 'is_payment': True},
+                    PAYMENT_CATEGORY_TYPE: {'is_income': False, 'is_expense': False, 'is_saving': False, 'is_payment': True},
                 }
-                if category_type in flag_mapping:
+                has_explicit_flags = any(k in request_data for k in ['is_expense', 'is_payment', 'is_income', 'is_saving'])
+                if has_explicit_flags:
+                    if 'is_income' in request_data and request_data['is_income'] is not None:
+                        update_params['is_income'] = bool(request_data['is_income'])
+                    if 'is_expense' in request_data and request_data['is_expense'] is not None:
+                        update_params['is_expense'] = bool(request_data['is_expense'])
+                    if 'is_saving' in request_data and request_data['is_saving'] is not None:
+                        update_params['is_saving'] = bool(request_data['is_saving'])
+                    if 'is_payment' in request_data and request_data['is_payment'] is not None:
+                        update_params['is_payment'] = bool(request_data['is_payment'])
+                elif category_type == PAYMENT_CATEGORY_TYPE:
+                    # Direct bank expenses (e.g. Rent, Legal Fees, Car Loan):
+                    # If category is an Expense category, it is BOTH a payment AND a living expense.
+                    cat_obj = TransactionCategory.objects.filter(id=category).first() if category else None
+                    is_exp_cat = bool(cat_obj and cat_obj.category_type == EXPENSE_CATEGORY_TYPE)
+                    update_params.update({
+                        'is_income': False,
+                        'is_expense': is_exp_cat,
+                        'is_saving': False,
+                        'is_payment': True,
+                    })
+                elif category_type in flag_mapping:
                     update_params.update(flag_mapping[category_type])
 
-                Transaction.objects.filter(destination__in=target_destinations).update(**update_params)
+                Transaction.objects.filter(
+                    Q(destination__in=target_destinations) | Q(destination_original__in=target_destinations),
+                    is_deleted=False
+                ).update(**update_params)
+
+                # Safeguard: Bank account debits (outflows) must always have is_payment=True
+                Transaction.objects.filter(
+                    Q(destination__in=target_destinations) | Q(destination_original__in=target_destinations),
+                    account__account_type='BANK_ACCOUNT',
+                    is_income=False,
+                    is_saving=False,
+                    is_deleted=False
+                ).update(is_payment=True)
+
                 if merge_ids:
                     DestinationMap.objects.filter(id__in=merge_ids).delete()
 

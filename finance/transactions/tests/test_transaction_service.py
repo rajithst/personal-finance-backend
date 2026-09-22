@@ -72,3 +72,62 @@ class TestTransactionServices:
 
         assert len(new_payees) == 2
         assert set(new_payees['destination']) == {'New Merchant', 'Another Merchant'}
+
+    @pytest.mark.django_db
+    def test_assign_category_ids_preserves_bank_payment_flags(self):
+        import pandas as pd
+        from finance.transactions.services.transaction_import_service import TransactionImportService
+        from common.transaction_const import EXPENSE_CATEGORY_TYPE, PAYMENT_CATEGORY_TYPE
+
+        service = TransactionImportService()
+        payees_df = pd.DataFrame([
+            {
+                'category_id': 1,
+                'subcategory_id': 1,
+                'destination': 'Rent Payment',
+                'alias_map': 'Rent Payment',
+                'category_type': EXPENSE_CATEGORY_TYPE
+            },
+            {
+                'category_id': 14,
+                'subcategory_id': 58,
+                'destination': 'ATM Withdrawal',
+                'alias_map': 'ATM Withdrawal',
+                'category_type': PAYMENT_CATEGORY_TYPE
+            },
+            {
+                'category_id': 3,
+                'subcategory_id': 13,
+                'destination': 'Supermarket (Card)',
+                'alias_map': 'Supermarket',
+                'category_type': EXPENSE_CATEGORY_TYPE
+            }
+        ])
+
+        transactions_df = pd.DataFrame([
+            # Bank expense: already has is_payment=True
+            {'destination': 'Rent Payment', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': True, 'is_saving': False},
+            # Bank payment: ATM withdrawal
+            {'destination': 'ATM Withdrawal', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': True, 'is_saving': False},
+            # Credit card expense: is_payment=False
+            {'destination': 'Supermarket (Card)', 'alias': '', 'is_payment': False, 'is_income': False, 'is_expense': True, 'is_saving': False},
+        ])
+
+        result = service.assign_category_ids(payees_df, transactions_df)
+
+        rent_row = result[result['destination'] == 'Rent Payment'].iloc[0]
+        atm_row = result[result['destination'] == 'ATM Withdrawal'].iloc[0]
+        card_row = result[result['destination'] == 'Supermarket (Card)'].iloc[0]
+
+        # Bank debit with expense category keeps is_payment=True AND is_expense=True
+        assert rent_row['is_payment'] == True
+        assert rent_row['is_expense'] == True
+
+        # Payment category (cash payment / ATM) has is_payment=True, is_expense=False
+        assert atm_row['is_payment'] == True
+        assert atm_row['is_expense'] == False
+
+        # Card expense has is_payment=False, is_expense=True
+        assert card_row['is_payment'] == False
+        assert card_row['is_expense'] == True
+
