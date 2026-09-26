@@ -106,8 +106,14 @@ class EposCardLoader(BaseLoader, ImportWorkflowContract):
         return ['ご利用年月日', 'ご利用場所', 'ご利用金額（キャッシングでは元金になります）']
 
     def process_data(self, df, account):
-        df = df.iloc[:, 1:].copy()
-        df = df[self.get_expected_columns()].copy()
+        expected = self.get_expected_columns()
+        if all(col in df.columns for col in expected):
+            df = df[expected].copy()
+        elif df.shape[1] > 1 and all(col in df.iloc[:, 1:].columns for col in expected):
+            df = df.iloc[:, 1:][expected].copy()
+        else:
+            df = df.iloc[:, 1:].copy()
+            df = df[expected].copy()
         df.columns = ['date', 'destination', 'amount']
         df['date'] = pd.to_datetime(df['date'], format='%Y年%m月%d日', errors='coerce').dt.date
         df = self.set_default_props(df, account)

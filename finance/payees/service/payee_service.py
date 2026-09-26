@@ -193,13 +193,15 @@ class PayeeService:
                     if 'is_payment' in request_data and request_data['is_payment'] is not None:
                         update_params['is_payment'] = bool(request_data['is_payment'])
                 elif category_type == PAYMENT_CATEGORY_TYPE:
-                    # Direct bank expenses (e.g. Rent, Legal Fees, Car Loan):
-                    # If category is an Expense category, it is BOTH a payment AND a living expense.
+                    # Direct bank expenses (e.g. Rent, Legal Fees, Car Loan, ATM Cash Withdrawals):
+                    # If category is an Expense category or payee is ATM withdrawal, it is BOTH a payment AND a living expense.
                     cat_obj = TransactionCategory.objects.filter(id=category).first() if category else None
-                    is_exp_cat = bool(cat_obj and cat_obj.category_type == EXPENSE_CATEGORY_TYPE)
+                    dest_str = (destination or '').lower()
+                    is_atm = 'atm' in dest_str or '出金' in dest_str or '７ｂｋ' in dest_str or 'ゆうちょ' in dest_str
+                    is_exp_cat = bool(cat_obj and (cat_obj.category_type == EXPENSE_CATEGORY_TYPE or cat_obj.category == 'Cash Payments'))
                     update_params.update({
                         'is_income': False,
-                        'is_expense': is_exp_cat,
+                        'is_expense': is_atm or is_exp_cat,
                         'is_saving': False,
                         'is_payment': True,
                     })

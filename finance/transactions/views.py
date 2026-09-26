@@ -93,7 +93,9 @@ class TransactionImportView(APIView):
 
     def post(self, request):
         upload_files = request.FILES.getlist('files')
-        account_id = request.data.get('account_id', None)
+        if not upload_files:
+            upload_files = request.FILES.getlist('file')
+        account_id = request.data.get('account_id', None) or request.data.get('account', None)
         drop_duplicates = request.data.get('drop_duplicates', True)
         import_from_last_date = request.data.get('import_from_last_date', False)
         start_date = request.data.get('start_date', None)
@@ -104,23 +106,28 @@ class TransactionImportView(APIView):
         if not upload_files:
             return Response({'data': None, 'message': 'No files uploaded', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
-        account_id = int(account_id)
+        try:
+            account_id = int(account_id)
+        except (ValueError, TypeError):
+            return Response({'data': None, 'message': 'Invalid Account ID', 'status': False},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         if drop_duplicates is not None:
-            drop_duplicates = drop_duplicates == '1'
+            drop_duplicates = str(drop_duplicates).lower() in ['1', 'true']
         if import_from_last_date is not None:
-            import_from_last_date = import_from_last_date == '1'
+            import_from_last_date = str(import_from_last_date).lower() in ['1', 'true']
+
+        user_id = getattr(request.user, 'id', None)
         upload_parameters = {
             'upload_files': upload_files,
             'account_id': account_id,
+            'user_id': user_id,
         }
         import_service = TransactionImportService()
         uploaded_files = import_service.upload_transaction_files(upload_parameters)
         if not uploaded_files:
             return Response({'data': None, 'message': 'Failed to upload files', 'status': False}, status=status.HTTP_400_BAD_REQUEST)
 
-        failed_uploads = [file for file in uploaded_files if file not in upload_files]
-        if failed_uploads:
-            logging.info(f"These files uploading failed: {failed_uploads}")
         import_parameters = {
             'account_id': account_id,
             'drop_duplicates': drop_duplicates,
@@ -128,10 +135,16 @@ class TransactionImportView(APIView):
             'start_date': start_date,
             'end_date': end_date,
             'files': uploaded_files,
+            'user_id': user_id,
         }
 
         is_imported = import_service.import_transactions(import_parameters)
-        if is_imported:
-            return Response({'data': {'uploaded_files': uploaded_files}, 'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
+        if is_imported is not False and is_imported is not None:
+            res_data = {'uploaded_files': uploaded_files}
+            if isinstance(is_imported, dict):
+                res_data.update(is_imported)
+            elif isinstance(is_imported, list):
+                res_data['imported_count'] = len(is_imported)
+            return Response({'data': res_data, 'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
         return Response({'data': None, 'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

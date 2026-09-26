@@ -360,6 +360,14 @@ class AnalyticsService:
 
         # Collect distinct years
         available_years = sorted(list({y['year'] for y in yoy_raw if y['year']}))
+        current_year = date.today().year
+
+        # Determine the latest month with available data per year
+        latest_month_per_year = {}
+        for yr in available_years:
+            months_with_data = [y['month'] for y in yoy_raw if y['year'] == yr and y['total'] is not None]
+            latest_month_per_year[yr] = max(months_with_data) if months_with_data else 0
+
         yoy_map = {}
         for y in yoy_raw:
             m = y['month']
@@ -375,7 +383,10 @@ class AnalyticsService:
                 'month_name': MONTH_NAMES[m - 1],
             }
             for yr in available_years:
-                entry[f'year_{yr}'] = yoy_map.get(m, {}).get(yr, 0.0)
+                if yr >= current_year and m > latest_month_per_year.get(yr, 0):
+                    entry[f'year_{yr}'] = None
+                else:
+                    entry[f'year_{yr}'] = yoy_map.get(m, {}).get(yr, 0.0)
             yoy_comparison.append(entry)
 
         # 10. Filtered Recent Transactions Sample

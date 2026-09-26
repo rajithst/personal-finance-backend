@@ -64,19 +64,18 @@ class Command(BaseCommand):
                 mizuho_debits.update(is_payment=True)
             self.stdout.write(f"3. Mizuho Bank debits updated to is_payment=True: {miz_debit_count} records")
 
-            # 4. Bank settlements (Card bills, ATM cash): ensure is_expense is False
+            # 4. Bank credit card bill settlements: ensure is_expense is False (transfers only, purchases tracked on card statements)
             settlements = Transaction.objects.filter(
                 account__account_name__icontains='Mizuho',
                 is_expense=True,
             ).filter(
-                Q(category__category='Cash Payments')
-                | Q(destination__icontains='Card Payment')
-                | Q(destination__icontains='ATM')
+                Q(destination__icontains='Card Payment')
+                | Q(destination__in=['Rakuten Card Payment', 'EPOS Card Payment', 'Tokyu Card Payment', 'Docomo Card Payment', 'Direct Debit'])
             )
             settlement_count = settlements.count()
             if not dry_run and settlement_count > 0:
                 settlements.update(is_expense=False)
-            self.stdout.write(f"4. Bank card settlements & ATM withdrawals set to is_expense=False: {settlement_count} records")
+            self.stdout.write(f"4. Bank card settlements set to is_expense=False: {settlement_count} records")
 
             # 5. Bank direct living expenses: ensure is_expense is True
             bank_living = Transaction.objects.filter(
@@ -88,6 +87,27 @@ class Command(BaseCommand):
             if not dry_run and bank_living_count > 0:
                 bank_living.update(is_expense=True)
             self.stdout.write(f"5. Bank direct living expenses (Rent, Car, etc.) set to is_expense=True: {bank_living_count} records")
+
+            # 6. ATM Cash Withdrawals: ensure is_expense=True AND is_payment=True (Knowledge Section Rule)
+            atm_withdrawals = Transaction.objects.filter(
+                account__account_name__icontains='Mizuho',
+                is_deleted=False,
+            ).filter(
+                Q(destination='ATM Withdrawal')
+                | Q(destination__icontains='ATM')
+                | Q(destination_original__icontains='ＡＴＭ')
+                | Q(destination_original__icontains='７ＢＫ')
+                | Q(destination='ゆうちょ銀行ATM提携')
+            ).exclude(
+                destination__icontains='手数料'
+            ).exclude(
+                destination='Cash Advance'
+            )
+            atm_to_update = atm_withdrawals.filter(Q(is_expense=False) | Q(is_payment=False))
+            atm_count = atm_to_update.count()
+            if not dry_run and atm_count > 0:
+                atm_to_update.update(is_expense=True, is_payment=True)
+            self.stdout.write(f"6. ATM Cash Withdrawals updated to is_expense=True & is_payment=True: {atm_count} records")
 
             if dry_run:
                 self.stdout.write(self.style.WARNING("\nDry run complete. Rolling back transaction."))

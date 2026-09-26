@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
@@ -60,6 +60,9 @@ class DashboardService:
 
     def get_monthly_expense_category_summary(self, year):
         return self.get_monthly_transaction_category_summary('is_expense', year)
+
+    def get_monthly_expense_account_summary(self, year):
+        return self.get_account_wise_sum('is_expense', year)
 
     def get_monthly_payment_account_summary(self, year):
         return self.get_account_wise_sum('is_payment', year)
@@ -189,28 +192,96 @@ class DashboardService:
             results[date_str].append({'category_id': item['account_id'], 'amount': item['total_amount']})
         return results
 
-    def get_top_ten_expenses(self):
+    def get_top_ten_expenses(self, year=None):
         """
         Get the top ten expenses.
+        If year is provided, aggregates by destination with Sum and Count for that year.
+        If year is None, preserves legacy last-month individual transaction query for backwards compatibility.
 
         Returns:
             list: The top ten expenses.
         """
-        now = timezone.now().date() if hasattr(timezone, 'now') else datetime.today().date()
-        first_day_this_month = now.replace(day=1)
-        last_day_of_last_month = first_day_this_month - timedelta(days=1)
-        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+        if not year:
+            now = timezone.now().date() if hasattr(timezone, 'now') else datetime.today().date()
+            first_day_this_month = now.replace(day=1)
+            last_day_of_last_month = first_day_this_month - timedelta(days=1)
+            first_day_of_last_month = last_day_of_last_month.replace(day=1)
+
+            queryset = (self.get_queryset().filter(
+                is_expense=True,
+                is_income=False,
+                is_payment=False,
+                is_saving=False,
+                date__gte=first_day_of_last_month,
+                date__lte=last_day_of_last_month
+            )).values('destination', 'destination_original', 'amount').order_by('-amount')[:10]
+            results = []
+            for item in queryset:
+                results.append({'destination': item['destination'], 'destination_original': item['destination_original'],
+                                'amount': item['amount']})
+            return results
 
         queryset = (self.get_queryset().filter(
             is_expense=True,
-            is_income=False,
-            is_payment=False,
             is_saving=False,
-            date__gte=first_day_of_last_month,
-            date__lte=last_day_of_last_month
-        )).values('destination', 'destination_original', 'amount').order_by('-amount')[:10]
+            date__year=year,
+            is_deleted=False
+        ).values('destination')
+         .annotate(amount=Sum('amount'), count=Count('id'))
+         .order_by('-amount')[:10])
+
         results = []
         for item in queryset:
-            results.append({'destination': item['destination'], 'destination_original': item['destination_original'],
-                            'amount': item['amount']})
+            results.append({
+                'destination': item['destination'],
+                'destination_original': item['destination'],
+                'amount': item['amount'],
+                'count': item['count']
+            })
         return results
+
+    def get_top_ten_expenses_latest_month(self, year):
+        """
+        Get top ten aggregated expenses for the latest active month of the given year.
+        """
+        if not year:
+            return {'month': None, 'month_name': '', 'items': []}
+
+        latest_txn = self.get_queryset().filter(
+            is_expense=True,
+            is_saving=False,
+            date__year=year,
+            is_deleted=False
+        ).order_by('-date').first()
+
+        if not latest_txn:
+            return {'month': None, 'month_name': '', 'items': []}
+
+        latest_month = latest_txn.date.month
+        month_name = latest_txn.date.strftime('%B')
+
+        queryset = (self.get_queryset().filter(
+            is_expense=True,
+            is_saving=False,
+            date__year=year,
+            date__month=latest_month,
+            is_deleted=False
+        ).values('destination')
+         .annotate(amount=Sum('amount'), count=Count('id'))
+         .order_by('-amount')[:10])
+
+        results = []
+        for item in queryset:
+            results.append({
+                'destination': item['destination'],
+                'destination_original': item['destination'],
+                'amount': item['amount'],
+                'count': item['count']
+            })
+
+        return {
+            'month': latest_month,
+            'month_name': month_name,
+            'items': results
+        }
+

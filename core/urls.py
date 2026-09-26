@@ -18,9 +18,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path, include
+from django.urls import path, include, re_path
 
-
+from core.views import spa_index_view
 from django.db import connection
 
 
@@ -48,6 +48,7 @@ urlpatterns = [
     path('finance/dashboard/', include('finance.dashboard.urls')),
     path('finance/analytics/', include('finance.analytics.urls')),
     path('finance/settings/', include('finance.settings.urls')),
+    path('finance/career/', include('finance.career.urls')),
     path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
@@ -56,3 +57,10 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Single Page Application (SPA) catch-all route (must be the LAST pattern):
+# Routes root and all client-side navigation (e.g. /, /transactions, /analytics, /settings)
+# to index.html while preserving backend APIs, admin, health, static, media, and assets.
+urlpatterns += [
+    re_path(r'^(?!api/|admin/|health/|finance/|accounts/|logs/|oauth/|auth/|static/|media/|assets/).*$', spa_index_view, name='spa-client'),
+]

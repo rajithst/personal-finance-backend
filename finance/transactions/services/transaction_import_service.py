@@ -1,10 +1,12 @@
 import logging
 from collections import defaultdict
 from datetime import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Account
@@ -53,14 +55,25 @@ class TransactionImportService:
         service = self.import_workflow(account, account_processor)
         transactions = service.import_data_from_files(WorkflowContextType.TRANSACTION_FILES,
                                                       import_params.get('files', None))
-        transactions = self.get_applicable_transactions(transactions, import_params)
+        res = self.get_applicable_transactions(transactions, import_params, account=account)
+        if isinstance(res, tuple):
+            transactions, skipped_duplicates_count = res
+        else:
+            transactions, skipped_duplicates_count = res, 0
+
         if transactions.empty:
-            return True
+            return {
+                'imported_count': 0,
+                'skipped_duplicates_count': skipped_duplicates_count,
+                'new_payees_count': 0,
+            }
 
         payees = self.get_payee_map()
         rewrite_rules = self.get_rewrite_rules(payees)
         transactions = self.apply_rewrite_rules(transactions, rewrite_rules)
-        new_payees = self.find_new_payees(payees, transactions)
+        user = get_current_user()
+        user_id = import_params.get('user_id') or getattr(user, 'id', None)
+        new_payees = self.find_new_payees(payees, transactions, user_id=user_id)
         expenses = self.assign_category_ids(payees, transactions)
 
         if expenses is not None and not expenses.empty:
@@ -73,7 +86,7 @@ class TransactionImportService:
                 payee_objects.append(DestinationMap(**new_payee))
 
             user = get_current_user()
-            user_id = getattr(user, 'id', None)
+            user_id = import_params.get('user_id') or getattr(user, 'id', None)
             for expense in expense_records:
                 expense['user_id'] = user_id
                 expense_objects.append(Transaction(**expense))
@@ -81,10 +94,20 @@ class TransactionImportService:
                 with transaction.atomic():
                     is_transactions_imported = Transaction.objects.bulk_create(expense_objects)
                     if is_transactions_imported:
-                        Account.objects.filter(id=account.id).update(last_import_date=last_import_date)
+                        if hasattr(last_import_date, 'strftime'):
+                            last_dt = datetime.combine(last_import_date, datetime.min.time())
+                            if timezone.is_naive(last_dt):
+                                last_dt = timezone.make_aware(last_dt)
+                        else:
+                            last_dt = last_import_date
+                        Account.objects.filter(id=account.id).update(last_import_date=last_dt)
                         if payee_objects:
                             DestinationMap.objects.bulk_create(payee_objects)
-                return is_transactions_imported
+                return {
+                    'imported_count': len(is_transactions_imported),
+                    'skipped_duplicates_count': skipped_duplicates_count,
+                    'new_payees_count': len(payee_objects),
+                }
             except Exception as e:
                 logger.exception('Error importing Expenses objects: %s', e)
                 return False
@@ -123,34 +146,79 @@ class TransactionImportService:
         account = Account.objects.filter(id=account_id).first()
         return account
 
-    def get_applicable_transactions(self, transaction_data, import_params):
+    def get_applicable_transactions(self, transaction_data, import_params, account=None):
         """
         Gets the applicable transactions.
 
         Args:
             transaction_data (DataFrame): The transaction data.
             import_params (dict): The import parameters.
+            account (Account, optional): Target account.
 
         Returns:
-            DataFrame: The applicable transactions.
+            tuple: (DataFrame of applicable transactions, int count of skipped duplicates)
         """
+        if transaction_data is None or transaction_data.empty:
+            return transaction_data, 0
+
         import_from_last_date = import_params.get('import_from_last_date', None)
         drop_duplicates = import_params.get('drop_duplicates', None)
         start_date = import_params.get('start_date', None)
         end_date = import_params.get('end_date', None)
         last_import_date = import_params.get('last_import_date', None)
+
         if import_from_last_date and last_import_date:
-            transaction_data = transaction_data[transaction_data['date'] > last_import_date.date()]
+            last_date_val = last_import_date.date() if hasattr(last_import_date, 'date') else last_import_date
+            transaction_data = transaction_data[transaction_data['date'] > last_date_val]
         else:
             if start_date:
-                transaction_data = transaction_data[
-                    transaction_data['date'] >= datetime.strptime(start_date, '%Y-%m-%d').date()]
+                start_d = datetime.strptime(start_date, '%Y-%m-%d').date() if isinstance(start_date, str) else start_date
+                transaction_data = transaction_data[transaction_data['date'] >= start_d]
             if end_date:
-                transaction_data = transaction_data[
-                    transaction_data['date'] <= datetime.strptime(end_date, '%Y-%m-%d').date()]
-        if drop_duplicates:
-            transaction_data = transaction_data.drop_duplicates()
-        return transaction_data
+                end_d = datetime.strptime(end_date, '%Y-%m-%d').date() if isinstance(end_date, str) else end_date
+                transaction_data = transaction_data[transaction_data['date'] <= end_d]
+
+        skipped_duplicates = 0
+        if drop_duplicates and not transaction_data.empty:
+            # 1. Drop duplicates within incoming batch
+            before_batch = len(transaction_data)
+            transaction_data = transaction_data.drop_duplicates(subset=['date', 'destination_original', 'amount'])
+            skipped_duplicates += (before_batch - len(transaction_data))
+
+            # 2. Drop duplicates already present in database for this account
+            target_account = account or self.get_account_from_id(import_params.get('account_id'))
+            if target_account and not transaction_data.empty:
+                min_date = transaction_data['date'].min()
+                max_date = transaction_data['date'].max()
+                existing_txns = Transaction.objects.filter(
+                    account_id=target_account.id,
+                    date__gte=min_date,
+                    date__lte=max_date,
+                    is_deleted=False
+                ).values_list('date', 'amount', 'destination_original', 'destination')
+
+                existing_keys = set()
+                for d_date, d_amt, d_orig, d_dest in existing_txns:
+                    amt_str = f"{Decimal(str(d_amt)):.2f}"
+                    if d_orig:
+                        existing_keys.add((d_date, amt_str, str(d_orig).strip()))
+                    if d_dest:
+                        existing_keys.add((d_date, amt_str, str(d_dest).strip()))
+
+                if existing_keys:
+                    def is_existing(row):
+                        amt_str = f"{Decimal(str(row['amount'])):.2f}"
+                        row_date = row['date']
+                        orig = str(row.get('destination_original') or '').strip()
+                        dest = str(row.get('destination') or '').strip()
+                        return (row_date, amt_str, orig) in existing_keys or (row_date, amt_str, dest) in existing_keys
+
+                    mask = ~transaction_data.apply(is_existing, axis=1)
+                    before_db = len(transaction_data)
+                    transaction_data = transaction_data[mask]
+                    skipped_duplicates += (before_db - len(transaction_data))
+
+        return transaction_data, skipped_duplicates
 
     def get_payee_map(self):
         """
@@ -173,7 +241,17 @@ class TransactionImportService:
             payee_maps.destination_original = payee_maps.destination_original.fillna('')
             payee_maps['keywords'] = payee_maps['keywords'].str.cat(payee_maps['destination_original'],
                                                                     sep=",").str.strip(',')
-            return payee_maps
+
+            # Group by destination to prevent duplicate payee joins from inflating rows
+            grouped = payee_maps.groupby('destination', as_index=False).agg({
+                'destination_original': 'first',
+                'alias_map': 'first',
+                'keywords': lambda s: ','.join(set(filter(None, ','.join(s).split(',')))),
+                'category_type': 'first',
+                'category_id': 'first',
+                'subcategory_id': 'first'
+            })
+            return grouped
         return pd.DataFrame(
             columns=['destination', 'destination_original', 'alias_map', 'category_type', 'category_id',
                      'subcategory_id', 'keywords'])
@@ -210,28 +288,27 @@ class TransactionImportService:
 
     def apply_rewrite_rules(self, transactions, rewrite_rules):
         for field in rewrite_rules:
-            transactions.loc[transactions['destination'].str.contains(field, regex=False), 'alias'] = \
-                rewrite_rules[field]
-            transactions.loc[transactions['destination'].str.contains(field, regex=False), 'destination'] = \
-                rewrite_rules[field]
+            mask = transactions['destination'].astype(str).str.contains(field, regex=False, na=False)
+            transactions.loc[mask, 'alias'] = rewrite_rules[field]
+            transactions.loc[mask, 'destination'] = rewrite_rules[field]
         return transactions
 
-    def find_new_payees(self, payees, transactions):
-
+    def find_new_payees(self, payees, transactions, user_id=None):
         """
         Finds the new payees.
 
         Args:
             payees (DataFrame): The payees.
             transactions (DataFrame): The transactions.
+            user_id (int, optional): The user ID.
 
         Returns:
             DataFrame: The new payees.
         """
-
         existing_payees = payees['destination'].dropna().unique()
-        current_user = get_current_user()
-        user_id = getattr(current_user, 'id', None)
+        if user_id is None:
+            current_user = get_current_user()
+            user_id = getattr(current_user, 'id', None)
         new_payees = transactions[~transactions['destination'].isin(existing_payees)].copy()
         new_payees = new_payees[new_payees['destination'].notna() & (new_payees['destination'].astype(str).str.strip() != '')]
         new_payees = new_payees.drop_duplicates(subset='destination', keep="first")
@@ -240,11 +317,15 @@ class TransactionImportService:
         expense_payees = new_payees[new_payees['is_income'] == 0]
 
         income_payees = income_payees.assign(
-            **{'destination_eng': None, 'keywords': None, 'category_id': None,
+            **{'destination_eng': income_payees['destination'],
+               'keywords': income_payees['destination_original'].fillna(income_payees['destination']),
+               'category_id': None,
                'subcategory_id': None, 'user_id': user_id,
                'category_type': INCOME_CATEGORY_TYPE})
         expense_payees = expense_payees.assign(
-            **{'destination_eng': None, 'keywords': None, 'category_id': None,
+            **{'destination_eng': expense_payees['destination'],
+               'keywords': expense_payees['destination_original'].fillna(expense_payees['destination']),
+               'category_id': None,
                'subcategory_id': None, 'user_id': user_id,
                'category_type': EXPENSE_CATEGORY_TYPE})
         new_payees = pd.concat([income_payees, expense_payees]).drop(columns=['is_income'])
@@ -295,6 +376,15 @@ class TransactionImportService:
                                                                                       False,
                                                                                       True,
                                                                                       False]
+
+        # Knowledge Section Rule: ATM Cash Withdrawals are living expenses spent outside tracked card statements (Payment + Expense)
+        atm_mask = (
+            transactions['destination'].astype(str).str.contains('ATM|ゆうちょ銀行ATM提携', case=False, na=False) |
+            transactions['destination_original'].astype(str).str.contains('ＡＴＭ|７ＢＫ|ATM', case=False, na=False)
+        ) & (
+            ~transactions['destination'].astype(str).str.contains('手数料|Cash Advance', case=False, na=False)
+        )
+        transactions.loc[atm_mask, ['is_expense', 'is_payment']] = [True, True]
 
         transactions.loc[transactions['alias_map'].isnull() & transactions['alias'].notnull(), 'alias_map'] = \
             transactions['alias']

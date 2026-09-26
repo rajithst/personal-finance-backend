@@ -50,22 +50,51 @@ class ImportCsvWorkflow:
             skip_count += 1
         return skip_count
 
+    def _read_with_encoding_fallback(self, storage, file_name: str, base_read_config: dict) -> pd.DataFrame:
+        candidate_encodings = []
+        preferred = base_read_config.get('encoding')
+        if preferred:
+            candidate_encodings.append(preferred)
+        for enc in ['cp932', 'shift_jis', 'utf-8-sig', 'utf-8']:
+            if enc not in candidate_encodings:
+                candidate_encodings.append(enc)
+
+        last_error = None
+        for enc in candidate_encodings:
+            cfg = base_read_config.copy()
+            cfg['encoding'] = enc
+            try:
+                if not cfg.get('skiprows'):
+                    expected_columns = self.account_processor.get_expected_columns()
+                    if not expected_columns:
+                        raise ValueError('Expected columns should be defined or skiprows should be set in read_config')
+                    file_object = storage.read_file(file_name, read_config=cfg)
+                    try:
+                        skip_rows = self._skip_rows(file_object, expected_columns)
+                    finally:
+                        if hasattr(file_object, "close"):
+                            file_object.close()
+                    cfg['skiprows'] = skip_rows
+
+                df = storage.read_csv(file_name, read_config=cfg)
+                if df is not None and not df.empty:
+                    return df
+            except (UnicodeDecodeError, UnicodeError) as ue:
+                last_error = ue
+                continue
+            except Exception as e:
+                last_error = e
+                continue
+
+        if last_error:
+            raise last_error
+        raise ValueError(f"Could not read file {file_name} with supported encodings.")
+
     def _process_single_file(self, file_name: str) -> pd.DataFrame:
         try:
             storage = self._get_storage_provider()
             init_read_config = dict(self.account_processor.get_read_config())
-            if not init_read_config.get('skiprows'):
-                expected_columns = self.account_processor.get_expected_columns()
-                if not expected_columns:
-                    raise ValueError('Expected columns should be defined or skiprows should be set in read_config')
-                file_object = storage.read_file(file_name, read_config=init_read_config)
-                try:
-                    skip_rows = self._skip_rows(file_object, expected_columns)
-                finally:
-                    if hasattr(file_object, "close"):
-                        file_object.close()
-                init_read_config['skiprows'] = skip_rows
-            df = storage.read_csv(file_name, read_config=init_read_config)
+            df = self._read_with_encoding_fallback(storage, file_name, init_read_config)
             df = df.reset_index(drop=True)
             df = self.account_processor.process_data(df, self.account)
             return self.account_processor.validate_dataframe(df)

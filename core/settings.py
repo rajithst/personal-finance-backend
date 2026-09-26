@@ -58,8 +58,12 @@ SECURE_SSL_REDIRECT = IS_PROD
 
 allowed_hosts_str = config('ALLOWED_HOSTS', default=config('ALLOWED_HOST', default='*'))
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_str.split(',') if h.strip()]
+if DEBUG and '*' not in ALLOWED_HOSTS:
+    for h in ['localhost', '127.0.0.1', 'testserver']:
+        if h not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(h)
 
-csrf_origins_str = config('CSRF_TRUSTED_ORIGINS', default='')
+csrf_origins_str = config('CSRF_TRUSTED_ORIGINS', default='https://*.run.app,https://*.appspot.com')
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_origins_str.split(',') if o.strip()]
 
 INSTALLED_APPS = [
@@ -79,6 +83,7 @@ INSTALLED_APPS = [
     "finance.categories",
     "finance.payees",
     "finance.settings",
+    "finance.career",
 ]
 
 MIDDLEWARE = [
@@ -100,8 +105,7 @@ ROOT_URLCONF = 'core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates']
-        ,
+        'DIRS': [BASE_DIR / 'templates'] + ([CLIENT_DIST_DIR] if 'CLIENT_DIST_DIR' in locals() and os.path.exists(CLIENT_DIST_DIR) else []),
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -151,15 +155,37 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
+# Single Page Application (React/Vite) client bundle location
+CLIENT_DIST_DIR = os.path.join(BASE_DIR, 'client_dist')
+DEV_CLIENT_DIST = os.path.join(BASE_DIR.parent, 'personalfinance-web', 'dist')
+if not os.path.exists(CLIENT_DIST_DIR) and os.path.exists(DEV_CLIENT_DIST):
+    CLIENT_DIST_DIR = DEV_CLIENT_DIST
+
+# WhiteNoise configuration to serve static frontend files from root / (e.g. /assets/...)
+if os.path.exists(CLIENT_DIST_DIR):
+    WHITENOISE_ROOT = CLIENT_DIST_DIR
+
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'personalfinance/media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-db_host = config('DB_HOST', default='127.0.0.1')
+db_host = config('DB_HOST', default=None)
+if not db_host or db_host in ('127.0.0.1', 'localhost'):
+    # In Cloud Run, Cloud SQL instances are mounted under /cloudsql/<PROJECT:REGION:INSTANCE>
+    cloudsql_dir = Path('/cloudsql')
+    if cloudsql_dir.exists():
+        sockets = [str(p) for p in cloudsql_dir.iterdir() if p.name.count(':') >= 2 or (p.is_dir() and not p.name.startswith('.'))]
+        if sockets:
+            db_host = sockets[0]
+            logging.info("Auto-detected Cloud SQL Unix socket: %s", db_host)
+
+if not db_host:
+    db_host = '127.0.0.1'
+
 db_config = {
     'ENGINE': 'django.db.backends.mysql',
     'NAME': config('DB_NAME', default='personalfinance'),

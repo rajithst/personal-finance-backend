@@ -116,3 +116,61 @@ class TestTransactionImportView:
         import_params = args[0]
         assert import_params['drop_duplicates'] is True
         assert import_params['import_from_last_date'] is True
+
+    def test_post_multi_files_and_date_range_returns_rich_stats(self, api_client, mock_import_service, authenticate):
+        authenticate()
+        file1 = SimpleUploadedFile("statement_jan.csv", b"data1", content_type="text/csv")
+        file2 = SimpleUploadedFile("statement_feb.csv", b"data2", content_type="text/csv")
+        mock_import_service.upload_transaction_files.return_value = ["uploaded/f1.csv", "uploaded/f2.csv"]
+        mock_import_service.import_transactions.return_value = {
+            "imported_count": 45,
+            "skipped_duplicates_count": 5,
+            "new_payees_count": 3,
+        }
+
+        response = api_client.post(
+            IMPORT_ENDPOINT,
+            {
+                "account_id": 2,
+                "files": [file1, file2],
+                "start_date": "2026-01-01",
+                "end_date": "2026-02-28",
+                "drop_duplicates": "true",
+            },
+            format="multipart"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] is True
+        assert response.data['data']['imported_count'] == 45
+        assert response.data['data']['skipped_duplicates_count'] == 5
+        assert response.data['data']['new_payees_count'] == 3
+        assert len(response.data['data']['uploaded_files']) == 2
+
+        args, _ = mock_import_service.import_transactions.call_args
+        params = args[0]
+        assert params['account_id'] == 2
+        assert params['start_date'] == "2026-01-01"
+        assert params['end_date'] == "2026-02-28"
+        assert params['drop_duplicates'] is True
+
+    def test_post_fallback_file_and_account_keys(self, api_client, mock_import_service, authenticate):
+        authenticate()
+        file = SimpleUploadedFile("legacy.csv", b"legacy data", content_type="text/csv")
+        mock_import_service.upload_transaction_files.return_value = ["uploaded/legacy.csv"]
+        mock_import_service.import_transactions.return_value = {"imported_count": 10}
+
+        response = api_client.post(
+            IMPORT_ENDPOINT,
+            {
+                "account": 3,
+                "file": file,
+            },
+            format="multipart"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] is True
+        assert response.data['data']['imported_count'] == 10
+        args, _ = mock_import_service.import_transactions.call_args
+        assert args[0]['account_id'] == 3

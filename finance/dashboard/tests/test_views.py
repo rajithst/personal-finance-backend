@@ -20,9 +20,11 @@ class TestDashboardView:
         mock_dashboard_service.get_payment.return_value = 200
         mock_dashboard_service.get_saving.return_value = 300
         mock_dashboard_service.get_monthly_expense_category_summary.return_value = []
+        mock_dashboard_service.get_monthly_expense_account_summary.return_value = []
         mock_dashboard_service.get_monthly_payment_account_summary.return_value = []
         mock_dashboard_service.get_monthly_payment_payee_summary.return_value = []
         mock_dashboard_service.get_top_ten_expenses.return_value = []
+        mock_dashboard_service.get_top_ten_expenses_latest_month.return_value = {'month': 12, 'month_name': 'December', 'items': []}
 
         params = {"year": "2024"}
         response = api_client.get(DASHBOARD_ENDPOINT, params)

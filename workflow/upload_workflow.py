@@ -26,6 +26,8 @@ class UploadWorkflow:
         uploaded_files = []
         for file_name, file in file_map.items():
             try:
+                if hasattr(file, 'seek'):
+                    file.seek(0)
                 uploaded = storage_provider.upload_file(file, file_name)
                 if uploaded:
                     uploaded_files.append(file_name)

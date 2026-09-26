@@ -126,7 +126,8 @@ class GCSHandler(StorageBackendContract):
             blob = bucket.blob(file_name)
             data = blob.download_as_string()
             as_byte = io.BytesIO(data)
-            return pd.read_csv(as_byte, **read_config)
+            config = read_config.copy() if read_config else {}
+            return pd.read_csv(as_byte, **config)
         except Exception as e:
             logging.exception(f'Error reading CSV file from bucket {e}')
             return None

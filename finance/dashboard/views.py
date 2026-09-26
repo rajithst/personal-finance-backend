@@ -18,13 +18,17 @@ class DashboardView(APIView):
             payments = dashboard_service.get_payment(year)
             savings = dashboard_service.get_saving(year)
             category_wise_expenses = dashboard_service.get_monthly_expense_category_summary(year)
-            account_wise_expenses = dashboard_service.get_monthly_payment_account_summary(year)
+            account_wise_expenses = dashboard_service.get_monthly_expense_account_summary(year)
+            account_wise_payments = dashboard_service.get_monthly_payment_account_summary(year)
             payment_by_destination = dashboard_service.get_monthly_payment_payee_summary(year)
-            top_ten_expenses = dashboard_service.get_top_ten_expenses()
+            top_ten_expenses = dashboard_service.get_top_ten_expenses(year=year)
+            top_ten_expenses_monthly = dashboard_service.get_top_ten_expenses_latest_month(year=year)
             return Response({'data': {"income": incomes, "payment_by_destination": payment_by_destination,
                                       "account_wise_expenses": account_wise_expenses,
+                                      "account_wise_payments": account_wise_payments,
                                       "category_wise_expenses": category_wise_expenses, "expense": expenses,
                                       "top_ten_expenses": top_ten_expenses,
+                                      "top_ten_expenses_monthly": top_ten_expenses_monthly,
                                       "payment": payments, "saving": savings}, 'status': True, 'message': 'Success'},
                             status=status.HTTP_200_OK)
         except ValidationError as e:
