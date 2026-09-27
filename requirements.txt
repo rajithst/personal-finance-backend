@@ -78,4 +78,5 @@ urllib3==1.26.20
 websocket-client==1.8.0
 websockets==14.2
 whitenoise==6.9.0
-gunicorngoogle-genai
+gunicorn
+google-genai

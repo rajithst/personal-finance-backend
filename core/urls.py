@@ -55,7 +55,15 @@ urlpatterns = [
     path('auth/', include('djoser.urls.jwt')),
 ]
 
+def media_local_compat_view(request, path):
+    from django.views.static import serve
+    clean_path = path.lstrip('/')
+    return serve(request, clean_path, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
+    urlpatterns += [
+        re_path(r'^media/local:/?(?P<path>.*)$', media_local_compat_view),
+    ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Single Page Application (SPA) catch-all route (must be the LAST pattern):
