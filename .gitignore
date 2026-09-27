@@ -417,3 +417,10 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/django,pycharm,python,macos
+
+# Graphify Local Caches and Manifests
+graphify-out/cache/
+graphify-out/manifest.json
+.graphify/
+
+finance/transactions/sql/*
