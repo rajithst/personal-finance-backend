@@ -2,6 +2,17 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+import json
+import logging
+from datetime import date
+from django.core.exceptions import ValidationError
+from pydantic import ValidationError as PydanticValidationError
+from django.db import transaction
+
+logger = logging.getLogger(__name__)
+
+from finance.career.services.payslip_extraction_service import extract_payslip_data, _safe_date_or_none
+from finance.career.services.storage_service import upload_payslip_document
 
 from finance.career.models import (
     CompanyProfile,
@@ -511,3 +522,192 @@ class CareerOverviewView(APIView):
             return Response({'data': data, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PayslipExtractView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if file_obj.content_type != 'application/pdf':
+            return Response({"error": "Invalid file type. Only PDF is supported."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            pdf_bytes = file_obj.read()
+            data = extract_payslip_data(pdf_bytes)
+            return Response(data, status=status.HTTP_200_OK)
+        except (ValidationError, PydanticValidationError) as e:
+            logger.warning("Payslip extraction validation error: %s", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("Payslip extraction failed: %s", str(e))
+            return Response({"error": f"Extraction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+def _safe_float(val, default=0.0) -> float:
+    if val is None or val == "":
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+def _safe_float_or_none(val) -> float | None:
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+class PayslipSaveView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        data_str = request.data.get('data')
+        
+        if not file_obj or not data_str:
+            return Response({"error": "Missing file or data."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if file_obj.content_type != 'application/pdf':
+            return Response({"error": "Invalid file type. Only PDF is supported."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            data = json.loads(data_str)
+            employment_id = data.get('employment')
+            year = int(data.get('year') or 0)
+            month = int(data.get('month') or 0)
+            is_bonus = bool(data.get('is_bonus', False))
+
+            if not (1900 <= year <= 2100 and 1 <= month <= 12):
+                return Response({"error": "Valid year (1900-2100) and month (1-12) are required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            employment = Employment.objects.get(id=employment_id, user=request.user)
+            
+            with transaction.atomic():
+                gcs_uri = upload_payslip_document(
+                    file_obj=file_obj,
+                    user_id=request.user.id,
+                    company_slug=employment.company.short_name or employment.company.name,
+                    year=int(year),
+                    month=int(month),
+                    metadata_dict={'filename': file_obj.name}
+                )
+                
+                payment_date_val = _safe_date_or_none(data.get('payment_date'), default_year=int(year), default_month=int(month))
+                pay_period_start_val = _safe_date_or_none(data.get('pay_period_start'), default_year=int(year), default_month=int(month))
+                pay_period_end_val = _safe_date_or_none(data.get('pay_period_end'), default_year=int(year), default_month=int(month))
+
+                doc = CareerDocument.objects.create(
+                    user=request.user,
+                    employment=employment,
+                    document_type='payslip_pdf',
+                    title=f"{int(year)}-{int(month):02d} Salary Statement",
+                    file=gcs_uri,
+                    file_name_original=file_obj.name,
+                    file_size=file_obj.size,
+                    mime_type=file_obj.content_type,
+                    issue_date=payment_date_val or date(int(year), int(month), 1)
+                )
+                
+                payslip_fields = {
+                    # Earnings Breakdown
+                    'base_salary': _safe_float(data.get('base_salary')),
+                    'housing_allowance': _safe_float(data.get('housing_allowance')),
+                    'discretionary_allowance': _safe_float(data.get('discretionary_allowance')),
+                    'remote_work_allowance': _safe_float(data.get('remote_work_allowance')),
+                    'commutation_allowance': _safe_float(data.get('commutation_allowance')),
+                    'overtime_pay': _safe_float(data.get('overtime_pay')),
+                    'late_night_overtime_pay': _safe_float(data.get('late_night_overtime_pay')),
+                    'holiday_work_pay': _safe_float(data.get('holiday_work_pay')),
+                    'special_allowance': _safe_float(data.get('special_allowance')),
+                    'other_allowances': _safe_float(data.get('other_allowances')),
+                    'other_allowances_description': data.get('other_allowances_description') or None,
+                    'gross_pay': _safe_float(data.get('gross_pay')),
+                    # Social Insurance
+                    'health_insurance': _safe_float(data.get('health_insurance')),
+                    'nursing_insurance': _safe_float(data.get('nursing_insurance')),
+                    'pension': _safe_float(data.get('pension')),
+                    'employment_insurance': _safe_float(data.get('employment_insurance')),
+                    'social_insurance_total': _safe_float(data.get('social_insurance_total')),
+                    # Taxes
+                    'taxable_amount': _safe_float_or_none(data.get('taxable_amount')),
+                    'income_tax': _safe_float(data.get('income_tax')),
+                    'resident_tax': _safe_float(data.get('resident_tax')),
+                    'year_end_tax_adjustment': _safe_float(data.get('year_end_tax_adjustment')),
+                    'total_tax': _safe_float(data.get('total_tax')),
+                    # Other Deductions
+                    'union_fee': _safe_float(data.get('union_fee')),
+                    'mutual_aid_fee': _safe_float(data.get('mutual_aid_fee')),
+                    'meal_deduction': _safe_float(data.get('meal_deduction')),
+                    'other_deductions': _safe_float(data.get('other_deductions')),
+                    'other_deductions_description': data.get('other_deductions_description') or None,
+                    'total_deductions': _safe_float(data.get('total_deductions')),
+                    # Net Pay
+                    'net_pay': _safe_float(data.get('net_pay')),
+                    'bank_transfer_amount': _safe_float_or_none(data.get('bank_transfer_amount')),
+                    # Attendance
+                    'working_days': _safe_float_or_none(data.get('working_days')),
+                    'total_work_hours': _safe_float_or_none(data.get('total_work_hours')),
+                    'overtime_hours': _safe_float_or_none(data.get('overtime_hours')),
+                    'late_night_hours': _safe_float_or_none(data.get('late_night_hours')),
+                    'holiday_work_hours': _safe_float_or_none(data.get('holiday_work_hours')),
+                    'absent_days': _safe_float_or_none(data.get('absent_days')),
+                    'loss_of_pay_days': _safe_float_or_none(data.get('loss_of_pay_days')),
+                    'paid_leave_days_used': _safe_float_or_none(data.get('paid_leave_days_used')),
+                    'remaining_paid_leave_days': _safe_float_or_none(data.get('remaining_paid_leave_days')),
+                    # Extra metadata & YTD
+                    'is_bonus': is_bonus,
+                    'payment_date': payment_date_val,
+                    'pay_period_start': pay_period_start_val,
+                    'pay_period_end': pay_period_end_val,
+                    'bank_name': data.get('bank_name') or None,
+                    'bank_account': data.get('bank_account') or None,
+                    'std_remuneration_health': _safe_float_or_none(data.get('std_remuneration_health')),
+                    'std_remuneration_pension': _safe_float_or_none(data.get('std_remuneration_pension')),
+                    'ytd_gross_pay': _safe_float_or_none(data.get('ytd_gross_pay')),
+                    'ytd_social_insurance': _safe_float_or_none(data.get('ytd_social_insurance')),
+                    'ytd_income_tax': _safe_float_or_none(data.get('ytd_income_tax')),
+                    'notes': data.get('notes') or None,
+                }
+
+                # Check if a payslip for this employment/period already exists or editing by id
+                payslip_id = data.get('id')
+                payslip = None
+                if payslip_id:
+                    payslip = MonthlyPayslip.objects.filter(id=payslip_id, user=request.user).first()
+                if not payslip:
+                    payslip = MonthlyPayslip.objects.filter(
+                        employment=employment,
+                        year=year,
+                        month=month,
+                        is_bonus=is_bonus,
+                        user=request.user
+                    ).first()
+
+                if payslip:
+                    payslip.document = doc
+                    payslip.year = year
+                    payslip.month = month
+                    for key, val in payslip_fields.items():
+                        setattr(payslip, key, val)
+                    payslip.save()
+                else:
+                    payslip = MonthlyPayslip.objects.create(
+                        user=request.user,
+                        employment=employment,
+                        document=doc,
+                        year=year,
+                        month=month,
+                        **payslip_fields
+                    )
+                
+            return Response({"message": "Payslip saved successfully.", "payslip_id": payslip.id}, status=status.HTTP_201_CREATED)
+            
+        except Employment.DoesNotExist:
+            return Response({"error": "Employment not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

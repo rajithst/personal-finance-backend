@@ -389,6 +389,33 @@ class CareerDocument(models.Model):
             self.company = self.employment.company
         super().save(*args, **kwargs)
 
+    @property
+    def file_url(self):
+        if not self.file or not self.file.name:
+            return None
+        name = str(self.file.name)
+        if name.startswith('/media/local:/') or name.startswith('/media/local://'):
+            clean_path = name.split('local:', 1)[-1].lstrip('/')
+            media_url = getattr(settings, 'MEDIA_URL', '/media/')
+            return f"{media_url}{clean_path}"
+        if name.startswith('local://') or name.startswith('local:/'):
+            clean_path = name.split('local:', 1)[-1].lstrip('/')
+            media_url = getattr(settings, 'MEDIA_URL', '/media/')
+            return f"{media_url}{clean_path}"
+        if name.startswith('gs://'):
+            try:
+                from finance.career.services.storage_service import generate_signed_url
+                return generate_signed_url(name, self.user_id, self.user)
+            except Exception:
+                return f"https://storage.googleapis.com/{name[5:]}"
+        if name.startswith('http://') or name.startswith('https://'):
+            return name
+        try:
+            return self.file.url
+        except Exception:
+            media_url = getattr(settings, 'MEDIA_URL', '/media/')
+            return f"{media_url}{name.lstrip('/')}"
+
 
 class MonthlyPayslip(models.Model):
     """
@@ -431,6 +458,7 @@ class MonthlyPayslip(models.Model):
     holiday_work_pay = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Holiday work pay")
     special_allowance = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Special / Role allowance")
     other_allowances = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Other miscellaneous allowances")
+    other_allowances_description = models.CharField(max_length=255, blank=True, null=True, help_text="Description or breakdown of other allowances")
     gross_pay = models.DecimalField(max_digits=14, decimal_places=2, help_text="Total Gross Pay")
 
     # 2. Social Insurance Deductions
@@ -452,6 +480,7 @@ class MonthlyPayslip(models.Model):
     mutual_aid_fee = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Mutual aid / benefit society fee")
     meal_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Cafeteria / meal deduction")
     other_deductions = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Other miscellaneous deductions")
+    other_deductions_description = models.CharField(max_length=255, blank=True, null=True, help_text="Description or breakdown of other deductions")
     total_deductions = models.DecimalField(max_digits=14, decimal_places=2, help_text="Total gross deductions")
 
     # 5. Net Take-Home & Bank Transfer

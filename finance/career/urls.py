@@ -8,6 +8,8 @@ from finance.career.views import (
     MonthlyPayslipView,
     TaxWithholdingSlipView,
     CareerOverviewView,
+    PayslipExtractView,
+    PayslipSaveView
 )
 
 urlpatterns = [
@@ -41,4 +43,7 @@ urlpatterns = [
     # Document Vault
     path('documents/', CareerDocumentView.as_view(), name='career-documents-list'),
     path('documents/<int:pk>/', CareerDocumentView.as_view(), name='career-document-detail'),
+    
+    path('payslips/extract/', PayslipExtractView.as_view(), name='career-payslip-extract'),
+    path('payslips/save/', PayslipSaveView.as_view(), name='career-payslip-save'),
 ]

@@ -125,9 +125,7 @@ class CareerDocumentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_file_url(self, obj):
-        if obj.file:
-            return obj.file.url
-        return None
+        return obj.file_url
 
 
 class CompensationHistorySerializer(serializers.ModelSerializer):
@@ -185,6 +183,21 @@ class MonthlyPayslipSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='employment.job_title', read_only=True)
     document_file_url = serializers.SerializerMethodField()
     document_title = serializers.CharField(source='document.title', read_only=True)
+    payment_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+        input_formats=['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d', '%d-%m-%Y', 'iso-8601']
+    )
+    pay_period_start = serializers.DateField(
+        required=False,
+        allow_null=True,
+        input_formats=['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d', '%d-%m-%Y', 'iso-8601']
+    )
+    pay_period_end = serializers.DateField(
+        required=False,
+        allow_null=True,
+        input_formats=['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d', '%d-%m-%Y', 'iso-8601']
+    )
 
     class Meta:
         model = MonthlyPayslip
@@ -213,6 +226,7 @@ class MonthlyPayslipSerializer(serializers.ModelSerializer):
             'holiday_work_pay',
             'special_allowance',
             'other_allowances',
+            'other_allowances_description',
             'gross_pay',
             # Social Insurance
             'health_insurance',
@@ -231,6 +245,7 @@ class MonthlyPayslipSerializer(serializers.ModelSerializer):
             'mutual_aid_fee',
             'meal_deduction',
             'other_deductions',
+            'other_deductions_description',
             'total_deductions',
             # Net & Bank Transfer
             'net_pay',
@@ -263,8 +278,8 @@ class MonthlyPayslipSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_document_file_url(self, obj):
-        if obj.document and obj.document.file:
-            return obj.document.file.url
+        if obj.document:
+            return obj.document.file_url
         return None
 
 
@@ -305,8 +320,8 @@ class TaxWithholdingSlipSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_document_file_url(self, obj):
-        if obj.document and obj.document.file:
-            return obj.document.file.url
+        if obj.document:
+            return obj.document.file_url
         return None
 
 
