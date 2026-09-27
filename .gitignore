@@ -424,3 +424,6 @@ graphify-out/manifest.json
 .graphify/
 
 finance/transactions/sql/*
+
+# Git worktrees
+.worktrees/
