@@ -361,7 +361,7 @@ class CareerDocument(models.Model):
 
     document_type = models.CharField(max_length=40, choices=DOCUMENT_TYPES, default='other')
     title = models.CharField(max_length=255, help_text="e.g. 2024-05 Salary Statement, Offer Letter")
-    file = models.FileField(upload_to='career_docs/%Y/%m/')
+    file = models.FileField(max_length=500, upload_to='career_docs/%Y/%m/')
     file_name_original = models.CharField(max_length=255, blank=True, null=True)
     file_size = models.BigIntegerField(blank=True, null=True, help_text="File size in bytes")
     mime_type = models.CharField(max_length=100, blank=True, null=True)
