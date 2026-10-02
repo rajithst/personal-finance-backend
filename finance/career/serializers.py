@@ -99,6 +99,7 @@ class DispatchAssignmentSerializer(serializers.ModelSerializer):
 class CareerDocumentSerializer(serializers.ModelSerializer):
     document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
     company_name = serializers.CharField(source='company.name', read_only=True)
+    file = serializers.CharField(required=False, max_length=500, allow_blank=True)
     file_url = serializers.SerializerMethodField()
 
     class Meta:

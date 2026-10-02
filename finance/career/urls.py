@@ -5,6 +5,7 @@ from finance.career.views import (
     DispatchAssignmentView,
     CompensationHistoryView,
     CareerDocumentView,
+    CareerDocumentDownloadView,
     MonthlyPayslipView,
     TaxWithholdingSlipView,
     CareerOverviewView,
@@ -43,6 +44,7 @@ urlpatterns = [
     # Document Vault
     path('documents/', CareerDocumentView.as_view(), name='career-documents-list'),
     path('documents/<int:pk>/', CareerDocumentView.as_view(), name='career-document-detail'),
+    path('documents/<int:pk>/download/', CareerDocumentDownloadView.as_view(), name='career-document-download'),
     
     path('payslips/extract/', PayslipExtractView.as_view(), name='career-payslip-extract'),
     path('payslips/save/', PayslipSaveView.as_view(), name='career-payslip-save'),

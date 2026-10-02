@@ -1,10 +1,13 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import json
 import logging
+import os
 from datetime import date
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from pydantic import ValidationError as PydanticValidationError
 from django.db import transaction
@@ -12,7 +15,12 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 from finance.career.services.payslip_extraction_service import extract_payslip_data, _safe_date_or_none
-from finance.career.services.storage_service import upload_payslip_document
+from finance.career.services.storage_service import (
+    upload_payslip_document,
+    upload_career_document,
+    verify_download_signature,
+    open_document_stream,
+)
 
 from finance.career.models import (
     CompanyProfile,
@@ -255,13 +263,38 @@ class CareerDocumentView(APIView):
             data = request.data.copy()
 
             if file_obj:
+                company_slug = 'general'
+                employment_id = data.get('employment')
+                company_id = data.get('company')
+                if employment_id:
+                    emp = Employment.objects.filter(id=employment_id, user=request.user).select_related('company').first()
+                    if emp and emp.company:
+                        company_slug = emp.company.short_name or emp.company.name
+                elif company_id:
+                    comp = CompanyProfile.objects.filter(id=company_id, user=request.user).first()
+                    if comp:
+                        company_slug = comp.short_name or comp.name
+
+                doc_type = data.get('document_type', 'other')
+                file_uri = upload_career_document(
+                    file_obj=file_obj,
+                    user_id=request.user.id,
+                    company_slug=company_slug,
+                    doc_type=doc_type,
+                    original_filename=file_obj.name,
+                    metadata_dict={'filename': file_obj.name, 'user_id': str(request.user.id)}
+                )
+
+                data['file'] = file_uri
                 data['file_name_original'] = file_obj.name
                 data['file_size'] = file_obj.size
-                data['mime_type'] = getattr(file_obj, 'content_type', '')
+                data['mime_type'] = getattr(file_obj, 'content_type', '') or 'application/pdf'
+                if not data.get('title'):
+                    data['title'] = file_obj.name
 
             serializer = CareerDocumentSerializer(data=data)
             if serializer.is_valid():
-                doc = serializer.save()
+                doc = serializer.save(user=request.user)
                 return Response({'data': CareerDocumentSerializer(doc).data, 'status': True, 'message': 'Document uploaded successfully'}, status=status.HTTP_201_CREATED)
             return Response({'data': serializer.errors, 'status': False, 'message': 'Validation error'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -272,10 +305,77 @@ class CareerDocumentView(APIView):
             doc = CareerDocument.objects.filter(pk=pk).first()
             if not doc:
                 return Response({'data': None, 'status': False, 'message': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
-            if doc.file:
-                doc.file.delete(save=False)
+            if doc.user and request.user.is_authenticated and doc.user != request.user:
+                return Response({'data': None, 'status': False, 'message': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+            raw_path = str(doc.file.name if hasattr(doc.file, 'name') else doc.file)
+            if raw_path.startswith('gs://'):
+                try:
+                    from google.cloud import storage
+                    parts = raw_path.replace('gs://', '').split('/', 1)
+                    client = storage.Client()
+                    client.bucket(parts[0]).blob(parts[1]).delete()
+                except Exception:
+                    pass
+            elif raw_path.startswith('local://') or raw_path.startswith('local:/'):
+                try:
+                    clean_path = raw_path.split('local:', 1)[-1].lstrip('/')
+                    local_full = os.path.join(settings.MEDIA_ROOT, clean_path)
+                    if os.path.exists(local_full):
+                        os.remove(local_full)
+                except Exception:
+                    pass
+            elif doc.file:
+                try:
+                    doc.file.delete(save=False)
+                except Exception:
+                    pass
             doc.delete()
             return Response({'data': None, 'status': True, 'message': 'Document deleted successfully'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CareerDocumentDownloadView(APIView):
+    """
+    Streams/downloads career documents from GCS or Local Storage.
+    Supports authenticated requests and signed query params (?sig=...).
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk=None):
+        try:
+            doc = CareerDocument.objects.filter(pk=pk).first()
+            if not doc:
+                return Response({'data': None, 'status': False, 'message': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            sig = request.query_params.get('sig')
+            authorized = False
+            if request.user.is_authenticated and doc.user_id == request.user.id:
+                authorized = True
+            elif sig and verify_download_signature(sig, doc.pk, doc.user_id):
+                authorized = True
+
+            if not authorized:
+                return Response({'data': None, 'status': False, 'message': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+            stream_info = open_document_stream(doc)
+            if not stream_info:
+                return Response({
+                    'data': None,
+                    'status': False,
+                    'message': 'Document file not found on storage. Please re-upload this document.'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            stream, content_type, filename, size = stream_info
+            as_attachment = request.query_params.get('download') == 'true'
+            disposition = 'attachment' if as_attachment else 'inline'
+
+            from django.http import FileResponse
+            response = FileResponse(stream, content_type=content_type)
+            response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+            if size:
+                response['Content-Length'] = str(size)
+            return response
         except Exception as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

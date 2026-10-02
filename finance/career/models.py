@@ -394,20 +394,27 @@ class CareerDocument(models.Model):
         if not self.file or not self.file.name:
             return None
         name = str(self.file.name)
-        if name.startswith('/media/local:/') or name.startswith('/media/local://'):
-            clean_path = name.split('local:', 1)[-1].lstrip('/')
-            media_url = getattr(settings, 'MEDIA_URL', '/media/')
-            return f"{media_url}{clean_path}"
-        if name.startswith('local://') or name.startswith('local:/'):
-            clean_path = name.split('local:', 1)[-1].lstrip('/')
-            media_url = getattr(settings, 'MEDIA_URL', '/media/')
-            return f"{media_url}{clean_path}"
+        if getattr(settings, 'DEBUG', False):
+            if name.startswith('/media/local:/') or name.startswith('/media/local://'):
+                clean_path = name.split('local:', 1)[-1].lstrip('/')
+                media_url = getattr(settings, 'MEDIA_URL', '/media/')
+                return f"{media_url}{clean_path}"
+            if name.startswith('local://') or name.startswith('local:/'):
+                clean_path = name.split('local:', 1)[-1].lstrip('/')
+                media_url = getattr(settings, 'MEDIA_URL', '/media/')
+                return f"{media_url}{clean_path}"
+
+        if self.pk:
+            from finance.career.services.storage_service import generate_document_download_url
+            return generate_document_download_url(self)
+
         if name.startswith('gs://'):
             try:
                 from finance.career.services.storage_service import generate_signed_url
                 return generate_signed_url(name, self.user_id, self.user)
             except Exception:
-                return f"https://storage.googleapis.com/{name[5:]}"
+                from finance.career.services.storage_service import generate_document_download_url
+                return generate_document_download_url(self)
         if name.startswith('http://') or name.startswith('https://'):
             return name
         try:

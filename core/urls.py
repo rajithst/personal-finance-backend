@@ -60,6 +60,46 @@ def media_local_compat_view(request, path):
     clean_path = path.lstrip('/')
     return serve(request, clean_path, document_root=settings.MEDIA_ROOT)
 
+def media_career_docs_fallback_view(request, path):
+    """
+    Fallback view for /media/career_docs/<path> in production.
+    If the file exists locally, serve it.
+    If the file is recorded in CareerDocument, stream it via open_document_stream.
+    """
+    import os
+    from django.http import FileResponse, JsonResponse
+    clean_path = path.lstrip('/')
+    local_path = os.path.join(settings.MEDIA_ROOT, 'career_docs', clean_path)
+    if os.path.exists(local_path):
+        import mimetypes
+        content_type = mimetypes.guess_type(local_path)[0] or 'application/pdf'
+        return FileResponse(open(local_path, 'rb'), content_type=content_type)
+
+    try:
+        from finance.career.models import CareerDocument
+        from finance.career.services.storage_service import open_document_stream
+        doc = CareerDocument.objects.filter(file__endswith=clean_path).first()
+        if not doc:
+            filename = os.path.basename(clean_path)
+            doc = CareerDocument.objects.filter(file_name_original=filename).first()
+        if doc:
+            stream_info = open_document_stream(doc)
+            if stream_info:
+                stream, content_type, orig_filename, size = stream_info
+                resp = FileResponse(stream, content_type=content_type)
+                resp['Content-Disposition'] = f'inline; filename="{orig_filename}"'
+                if size:
+                    resp['Content-Length'] = str(size)
+                return resp
+    except Exception:
+        pass
+
+    return JsonResponse({'status': False, 'message': 'Document not found on storage. Please re-upload this document.'}, status=404)
+
+urlpatterns += [
+    re_path(r'^media/career_docs/(?P<path>.*)$', media_career_docs_fallback_view, name='media-career-docs-fallback'),
+]
+
 if settings.DEBUG:
     urlpatterns += [
         re_path(r'^media/local:/?(?P<path>.*)$', media_local_compat_view),
