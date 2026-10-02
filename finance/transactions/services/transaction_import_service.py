@@ -378,9 +378,14 @@ class TransactionImportService:
                                                                                       False]
 
         # Knowledge Section Rule: ATM Cash Withdrawals are living expenses spent outside tracked card statements (Payment + Expense)
+        dest_orig_match = (
+            transactions['destination_original'].astype(str).str.contains('ＡＴＭ|７ＢＫ|ATM', case=False, na=False)
+            if 'destination_original' in transactions.columns
+            else False
+        )
         atm_mask = (
             transactions['destination'].astype(str).str.contains('ATM|ゆうちょ銀行ATM提携', case=False, na=False) |
-            transactions['destination_original'].astype(str).str.contains('ＡＴＭ|７ＢＫ|ATM', case=False, na=False)
+            dest_orig_match
         ) & (
             ~transactions['destination'].astype(str).str.contains('手数料|Cash Advance', case=False, na=False)
         )

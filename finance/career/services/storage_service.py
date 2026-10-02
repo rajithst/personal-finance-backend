@@ -18,7 +18,7 @@ def upload_payslip_document(file_obj, user_id, company_slug, year, month, metada
             f.write(file_obj.read())
         return f"local://{blob_path}"
 
-    bucket_name = getattr(settings, 'GCP_STORAGE_BUCKET', 'personal-finance-dev')
+    bucket_name = getattr(settings, 'GCP_STORAGE_BUCKET', None) or getattr(settings, 'BUCKET_NAME', None) or 'personal-finance-dev'
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     

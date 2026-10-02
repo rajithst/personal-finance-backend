@@ -91,6 +91,13 @@ class TestTransactionServices:
             {
                 'category_id': 14,
                 'subcategory_id': 58,
+                'destination': 'Card Bill Payment',
+                'alias_map': 'Card Bill Payment',
+                'category_type': PAYMENT_CATEGORY_TYPE
+            },
+            {
+                'category_id': 14,
+                'subcategory_id': 59,
                 'destination': 'ATM Withdrawal',
                 'alias_map': 'ATM Withdrawal',
                 'category_type': PAYMENT_CATEGORY_TYPE
@@ -107,8 +114,10 @@ class TestTransactionServices:
         transactions_df = pd.DataFrame([
             # Bank expense: already has is_payment=True
             {'destination': 'Rent Payment', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': True, 'is_saving': False},
-            # Bank payment: ATM withdrawal
-            {'destination': 'ATM Withdrawal', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': True, 'is_saving': False},
+            # Bank payment: Card bill repayment
+            {'destination': 'Card Bill Payment', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': False, 'is_saving': False},
+            # Bank payment: ATM withdrawal (living expense rule)
+            {'destination': 'ATM Withdrawal', 'alias': '', 'is_payment': True, 'is_income': False, 'is_expense': False, 'is_saving': False},
             # Credit card expense: is_payment=False
             {'destination': 'Supermarket (Card)', 'alias': '', 'is_payment': False, 'is_income': False, 'is_expense': True, 'is_saving': False},
         ])
@@ -116,6 +125,7 @@ class TestTransactionServices:
         result = service.assign_category_ids(payees_df, transactions_df)
 
         rent_row = result[result['destination'] == 'Rent Payment'].iloc[0]
+        bill_row = result[result['destination'] == 'Card Bill Payment'].iloc[0]
         atm_row = result[result['destination'] == 'ATM Withdrawal'].iloc[0]
         card_row = result[result['destination'] == 'Supermarket (Card)'].iloc[0]
 
@@ -123,9 +133,13 @@ class TestTransactionServices:
         assert rent_row['is_payment'] == True
         assert rent_row['is_expense'] == True
 
-        # Payment category (cash payment / ATM) has is_payment=True, is_expense=False
+        # Payment category (card bill repayment) has is_payment=True, is_expense=False
+        assert bill_row['is_payment'] == True
+        assert bill_row['is_expense'] == False
+
+        # ATM cash withdrawal gets marked as is_payment=True, is_expense=True (living expense rule)
         assert atm_row['is_payment'] == True
-        assert atm_row['is_expense'] == False
+        assert atm_row['is_expense'] == True
 
         # Card expense has is_payment=False, is_expense=True
         assert card_row['is_payment'] == False
