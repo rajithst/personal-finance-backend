@@ -811,3 +811,188 @@ class PayslipSaveView(APIView):
             return Response({"error": "Employment not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PayslipAnalyticsView(APIView):
+    """
+    Dedicated analytical aggregation endpoint for MonthlyPayslip records.
+    Provides multi-year summary metrics, YoY comparisons, monthly Recharts points,
+    and deduction friction composition.
+    """
+    def get(self, request):
+        try:
+            user = request.user
+            queryset = MonthlyPayslip.objects.filter(user=user).select_related('employment__company')
+
+            # Optional query filters
+            company_id = request.query_params.get('company_id')
+            if company_id:
+                try:
+                    queryset = queryset.filter(employment__company_id=int(company_id))
+                except (ValueError, TypeError):
+                    pass
+
+            year = request.query_params.get('year')
+            if year:
+                try:
+                    queryset = queryset.filter(year=int(year))
+                except (ValueError, TypeError):
+                    pass
+
+            include_bonus = request.query_params.get('include_bonus')
+            if include_bonus is not None and include_bonus.lower() in ('false', '0', 'no'):
+                queryset = queryset.filter(is_bonus=False)
+
+            payslips = list(queryset.order_by('year', 'month', 'is_bonus', 'id'))
+
+            total_gross = sum(float(p.gross_pay or 0) for p in payslips)
+            total_net = sum(float(p.net_pay or 0) for p in payslips)
+            total_pension_employee = sum(float(p.pension or 0) for p in payslips)
+            total_pension_system = total_pension_employee * 2.0  # Japan 50/50 statutory match
+            total_health = sum(float(p.health_insurance or 0) for p in payslips)
+            total_emp_ins = sum(float(p.employment_insurance or 0) for p in payslips)
+            total_social = sum(float(p.social_insurance_total or 0) for p in payslips)
+            total_income_tax = sum(float(p.income_tax or 0) for p in payslips)
+            total_resident_tax = sum(float(p.resident_tax or 0) for p in payslips)
+            total_tax = sum(float(p.total_tax or 0) for p in payslips)
+            total_year_end_adj = sum(float(p.year_end_tax_adjustment or 0) for p in payslips)
+            total_other_ded = sum(float(p.other_deductions or 0) for p in payslips)
+            total_deductions = sum(float(p.total_deductions or 0) for p in payslips)
+            count = len(payslips)
+
+            take_home_ratio = round((total_net / total_gross * 100), 1) if total_gross > 0 else 0.0
+            tax_ratio = round((total_tax / total_gross * 100), 1) if total_gross > 0 else 0.0
+            social_ratio = round((total_social / total_gross * 100), 1) if total_gross > 0 else 0.0
+            deduction_ratio = round((total_deductions / total_gross * 100), 1) if total_gross > 0 else 0.0
+
+            summary = {
+                'total_gross_pay': total_gross,
+                'total_net_pay': total_net,
+                'total_social_insurance': total_social,
+                'total_pension_employee': total_pension_employee,
+                'total_pension_system_contribution': total_pension_system,
+                'total_health_insurance': total_health,
+                'total_employment_insurance': total_emp_ins,
+                'total_income_tax': total_income_tax,
+                'total_resident_tax': total_resident_tax,
+                'total_taxes': total_tax,
+                'total_year_end_adjustment': total_year_end_adj,
+                'total_other_deductions': total_other_ded,
+                'total_deductions': total_deductions,
+                'overall_take_home_ratio': take_home_ratio,
+                'overall_tax_ratio': tax_ratio,
+                'overall_social_ratio': social_ratio,
+                'overall_deduction_ratio': deduction_ratio,
+                'payslips_count': count,
+            }
+
+            # Monthly timeline
+            monthly_timeline = []
+            for p in payslips:
+                gross = float(p.gross_pay or 0)
+                net = float(p.net_pay or 0)
+                co_id = p.employment.company_id if p.employment else None
+                co_name = p.employment.company.name if (p.employment and p.employment.company) else "Unknown"
+                monthly_timeline.append({
+                    'year_month': f"{p.year}-{p.month:02d}" + (" (Bonus)" if p.is_bonus else ""),
+                    'year': p.year,
+                    'month': p.month,
+                    'is_bonus': p.is_bonus,
+                    'company_id': co_id,
+                    'company_name': co_name,
+                    'gross_pay': gross,
+                    'net_pay': net,
+                    'pension': float(p.pension or 0),
+                    'health_insurance': float(p.health_insurance or 0),
+                    'employment_insurance': float(p.employment_insurance or 0),
+                    'social_insurance_total': float(p.social_insurance_total or 0),
+                    'income_tax': float(p.income_tax or 0),
+                    'resident_tax': float(p.resident_tax or 0),
+                    'total_tax': float(p.total_tax or 0),
+                    'total_deductions': float(p.total_deductions or 0),
+                    'take_home_ratio': round((net / gross * 100), 1) if gross > 0 else 0.0,
+                    'std_remuneration_pension': float(p.std_remuneration_pension) if p.std_remuneration_pension is not None else None,
+                    'std_remuneration_health': float(p.std_remuneration_health) if p.std_remuneration_health is not None else None,
+                })
+
+            # Yearly comparisons
+            years_dict = {}
+            for p in payslips:
+                yr = p.year
+                if yr not in years_dict:
+                    years_dict[yr] = []
+                years_dict[yr].append(p)
+
+            sorted_years = sorted(years_dict.keys())
+            yearly_comparisons = []
+            prev_gross = None
+            prev_net = None
+
+            for yr in sorted_years:
+                yr_slips = years_dict[yr]
+                y_gross = sum(float(x.gross_pay or 0) for x in yr_slips)
+                y_net = sum(float(x.net_pay or 0) for x in yr_slips)
+                y_pension = sum(float(x.pension or 0) for x in yr_slips)
+                y_health = sum(float(x.health_insurance or 0) for x in yr_slips)
+                y_social = sum(float(x.social_insurance_total or 0) for x in yr_slips)
+                y_income_tax = sum(float(x.income_tax or 0) for x in yr_slips)
+                y_resident_tax = sum(float(x.resident_tax or 0) for x in yr_slips)
+                y_total_tax = sum(float(x.total_tax or 0) for x in yr_slips)
+                y_deductions = sum(float(x.total_deductions or 0) for x in yr_slips)
+                y_take_home_ratio = round((y_net / y_gross * 100), 1) if y_gross > 0 else 0.0
+
+                yoy_gross = round(((y_gross - prev_gross) / prev_gross * 100), 1) if (prev_gross is not None and prev_gross > 0) else None
+                yoy_net = round(((y_net - prev_net) / prev_net * 100), 1) if (prev_net is not None and prev_net > 0) else None
+
+                prev_gross = y_gross
+                prev_net = y_net
+
+                yearly_comparisons.append({
+                    'year': yr,
+                    'gross_pay': y_gross,
+                    'net_pay': y_net,
+                    'pension': y_pension,
+                    'health_insurance': y_health,
+                    'social_insurance_total': y_social,
+                    'income_tax': y_income_tax,
+                    'resident_tax': y_resident_tax,
+                    'total_tax': y_total_tax,
+                    'total_deductions': y_deductions,
+                    'take_home_ratio': y_take_home_ratio,
+                    'yoy_gross_growth_pct': yoy_gross,
+                    'yoy_net_growth_pct': yoy_net,
+                })
+
+            # Deduction composition
+            deduction_composition = []
+            if total_deductions > 0:
+                raw_items = [
+                    ('Welfare Pension (厚生年金)', total_pension_employee, '#6366f1'),
+                    ('Health Insurance (健康保険)', total_health, '#06b6d4'),
+                    ('Employment Insurance (雇用保険)', total_emp_ins, '#3b82f6'),
+                    ('National Income Tax (所得税)', total_income_tax, '#ef4444'),
+                    ('Resident Tax (住民税)', total_resident_tax, '#f59e0b'),
+                    ('Other / Mutual Aid Deductions', total_other_ded, '#8b5cf6'),
+                ]
+                for name, amount, color in raw_items:
+                    if amount > 0:
+                        pct = round((amount / total_deductions * 100), 1)
+                        deduction_composition.append({
+                            'name': name,
+                            'amount': amount,
+                            'percentage': pct,
+                            'color': color,
+                        })
+
+            data = {
+                'summary': summary,
+                'yearly_comparisons': yearly_comparisons,
+                'monthly_timeline': monthly_timeline,
+                'deduction_composition': deduction_composition,
+            }
+            return Response({'data': data, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.exception("Failed to compute payslip analytics")
+            return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

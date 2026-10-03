@@ -10,7 +10,8 @@ from finance.career.views import (
     TaxWithholdingSlipView,
     CareerOverviewView,
     PayslipExtractView,
-    PayslipSaveView
+    PayslipSaveView,
+    PayslipAnalyticsView
 )
 
 urlpatterns = [
@@ -34,6 +35,7 @@ urlpatterns = [
     path('compensations/<int:pk>/', CompensationHistoryView.as_view(), name='career-compensation-detail'),
 
     # Monthly Payslips (給与明細)
+    path('payslips/analytics/', PayslipAnalyticsView.as_view(), name='career-payslips-analytics'),
     path('payslips/', MonthlyPayslipView.as_view(), name='career-payslips-list'),
     path('payslips/<int:pk>/', MonthlyPayslipView.as_view(), name='career-payslip-detail'),
 
