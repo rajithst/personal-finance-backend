@@ -319,7 +319,9 @@ class CareerDocument(models.Model):
     """
     DOCUMENT_TYPES = (
         ('offer_letter', 'Offer Letter (内定通知書 / 採用通知書)'),
+        ('offer_acceptance', 'Offer Acceptance Document (内定承諾書 / 入社承諾書)'),
         ('employment_contract', 'Employment Contract / Terms (雇用契約書 / 労働条件通知書)'),
+        ('employment_insurance', 'Employment Insurance Certificate (雇用保険被保険者証)'),
         ('leaving_certificate', 'Leaving Certificate / Separation (離職票 / 退職証明書)'),
         ('resignation_acceptance', 'Resignation Acceptance (退職届控 / 退職合意書)'),
         ('nda', 'NDA / Non-Disclosure Agreement (秘密保持誓約書)'),

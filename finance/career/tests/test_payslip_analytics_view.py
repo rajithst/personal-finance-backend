@@ -92,6 +92,7 @@ class TestPayslipAnalyticsView:
         resp = client_authenticated.get(f"{url}?year=2024")
         assert resp.status_code == 200
         assert resp.json()['data']['summary']['total_gross_pay'] == 600000.0
+        assert resp.json()['data']['available_years'] == [2024, 2023]
 
         # Filter bonus excluded
         resp = client_authenticated.get(f"{url}?include_bonus=false")

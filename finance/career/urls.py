@@ -11,7 +11,9 @@ from finance.career.views import (
     CareerOverviewView,
     PayslipExtractView,
     PayslipSaveView,
-    PayslipAnalyticsView
+    PayslipAnalyticsView,
+    TaxSlipExtractView,
+    TaxSlipSaveView,
 )
 
 urlpatterns = [
@@ -50,4 +52,6 @@ urlpatterns = [
     
     path('payslips/extract/', PayslipExtractView.as_view(), name='career-payslip-extract'),
     path('payslips/save/', PayslipSaveView.as_view(), name='career-payslip-save'),
+    path('tax-slips/extract/', TaxSlipExtractView.as_view(), name='career-tax-slip-extract'),
+    path('tax-slips/save/', TaxSlipSaveView.as_view(), name='career-tax-slip-save'),
 ]

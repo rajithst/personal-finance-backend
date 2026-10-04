@@ -15,6 +15,7 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 from finance.career.services.payslip_extraction_service import extract_payslip_data, _safe_date_or_none
+from finance.career.services.tax_slip_extraction_service import extract_tax_slip_data
 from finance.career.services.storage_service import (
     upload_payslip_document,
     upload_career_document,
@@ -813,6 +814,116 @@ class PayslipSaveView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class TaxSlipExtractView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if file_obj.content_type != 'application/pdf':
+            return Response({"error": "Invalid file type. Only PDF is supported."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if file_obj.size > 10 * 1024 * 1024:
+            return Response({"error": "File size exceeds 10MB limit."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            pdf_bytes = file_obj.read()
+            data = extract_tax_slip_data(pdf_bytes)
+            return Response(data, status=status.HTTP_200_OK)
+        except (ValidationError, PydanticValidationError) as e:
+            logger.warning("Tax slip extraction validation error: %s", str(e))
+            return Response({"error": f"Validation error: {str(e)}"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        except Exception as e:
+            logger.exception("Tax slip extraction failed: %s", str(e))
+            return Response({"error": f"Extraction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TaxSlipSaveView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        data_str = request.data.get('data')
+
+        if not file_obj or not data_str:
+            return Response({"error": "Missing file or data."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if file_obj.content_type != 'application/pdf':
+            return Response({"error": "Invalid file type. Only PDF is supported."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            data = json.loads(data_str)
+            employment_id = data.get('employment')
+            tax_year = int(data.get('tax_year') or 0)
+
+            if not (1900 <= tax_year <= 2100):
+                return Response({"error": "Valid tax year (1900-2100) is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            employment = Employment.objects.get(id=employment_id, user=request.user)
+
+            with transaction.atomic():
+                gcs_uri = upload_career_document(
+                    file_obj=file_obj,
+                    user_id=request.user.id,
+                    company_slug=employment.company.short_name or employment.company.name,
+                    doc_type='tax_withholding_slip',
+                    original_filename=file_obj.name,
+                    metadata_dict={'filename': file_obj.name, 'tax_year': str(tax_year)}
+                )
+
+                issue_date_val = _safe_date_or_none(data.get('issue_date'), default_year=tax_year)
+
+                doc = CareerDocument.objects.create(
+                    user=request.user,
+                    employment=employment,
+                    company=employment.company,
+                    document_type='tax_withholding_slip',
+                    title=f"{tax_year} Withholding Tax Certificate",
+                    file=gcs_uri,
+                    file_name_original=file_obj.name,
+                    file_size=file_obj.size,
+                    mime_type=file_obj.content_type,
+                    issue_date=issue_date_val or date(tax_year, 12, 25)
+                )
+
+                slip_defaults = {
+                    'user': request.user,
+                    'document': doc,
+                    'issue_date': issue_date_val or date(tax_year, 12, 25),
+                    'total_payment': _safe_float(data.get('total_payment')),
+                    'income_after_deduction': _safe_float_or_none(data.get('income_after_deduction')),
+                    'total_income_deductions': _safe_float_or_none(data.get('total_income_deductions')),
+                    'withholding_tax': _safe_float(data.get('withholding_tax')),
+                    'social_insurance_deduction': _safe_float_or_none(data.get('social_insurance_deduction')),
+                    'life_insurance_deduction': _safe_float_or_none(data.get('life_insurance_deduction')),
+                    'earthquake_insurance_deduction': _safe_float_or_none(data.get('earthquake_insurance_deduction')),
+                    'housing_loan_deduction': _safe_float_or_none(data.get('housing_loan_deduction')),
+                    'basic_deduction': _safe_float_or_none(data.get('basic_deduction')),
+                    'spouse_deduction': _safe_float_or_none(data.get('spouse_deduction')),
+                    'dependents_count': int(data.get('dependents_count') or 0),
+                    'currency': data.get('currency') or 'JPY',
+                    'notes': data.get('notes') or '',
+                }
+
+                tax_slip, created = TaxWithholdingSlip.objects.update_or_create(
+                    employment=employment,
+                    tax_year=tax_year,
+                    defaults=slip_defaults
+                )
+
+            return Response({
+                "message": "Tax slip and vault document saved successfully.",
+                "tax_slip_id": tax_slip.id
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+        except Employment.DoesNotExist:
+            return Response({"error": "Employment not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class PayslipAnalyticsView(APIView):
     """
     Dedicated analytical aggregation endpoint for MonthlyPayslip records.
@@ -984,11 +1095,21 @@ class PayslipAnalyticsView(APIView):
                             'color': color,
                         })
 
+            # All available years for user (unfiltered by year, scoped to company if specified)
+            years_qs = MonthlyPayslip.objects.filter(user=user)
+            if company_id:
+                try:
+                    years_qs = years_qs.filter(employment__company_id=int(company_id))
+                except (ValueError, TypeError):
+                    pass
+            available_years = list(years_qs.values_list('year', flat=True).distinct().order_by('-year'))
+
             data = {
                 'summary': summary,
                 'yearly_comparisons': yearly_comparisons,
                 'monthly_timeline': monthly_timeline,
                 'deduction_composition': deduction_composition,
+                'available_years': available_years,
             }
             return Response({'data': data, 'status': True, 'message': 'Success'}, status=status.HTTP_200_OK)
 
