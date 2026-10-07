@@ -74,6 +74,7 @@ class TestAnalyticsServiceDirect:
         assert 'capital_allocation' in result
         assert 'fixed_vs_variable' in result
         assert 'cumulative_month_pacing' in result
+        assert 'weekday_vs_weekend' in result
         assert len(result['ticket_size_distribution']['brackets']) == 5
         assert 'benchmark' in result['capital_allocation']
         assert 'flexibility_score' in result['fixed_vs_variable']

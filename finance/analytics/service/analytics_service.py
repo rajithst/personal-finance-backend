@@ -269,6 +269,11 @@ class AnalyticsService:
         # Order Monday (2) through Sunday (1)
         ordered_dow = [2, 3, 4, 5, 6, 7, 1]
         behavior_day_of_week = []
+        weekday_total = 0.0
+        weekday_count = 0
+        weekend_total = 0.0
+        weekend_count = 0
+
         for d in ordered_dow:
             record = dow_dict.get(d, {})
             tot = float(record.get('total') or 0)
@@ -281,6 +286,37 @@ class AnalyticsService:
                 'count': cnt,
                 'avg': avg_val,
             })
+            if d in (7, 1):  # Sat, Sun
+                weekend_total += tot
+                weekend_count += cnt
+            else:  # Mon, Tue, Wed, Thu, Fri
+                weekday_total += tot
+                weekday_count += cnt
+
+        weekday_daily_avg = round(weekday_total / 5.0, 2)
+        weekend_daily_avg = round(weekend_total / 2.0, 2)
+        total_behavior_amount = weekday_total + weekend_total
+
+        weekday_share_pct = round((weekday_total / total_behavior_amount * 100), 1) if total_behavior_amount > 0 else 0.0
+        weekend_share_pct = round((weekend_total / total_behavior_amount * 100), 1) if total_behavior_amount > 0 else 0.0
+
+        impulse_ratio = round(weekend_daily_avg / weekday_daily_avg, 2) if weekday_daily_avg > 0 else (1.0 if weekend_daily_avg == 0 else 2.0)
+        impulse_pct_diff = round(((weekend_daily_avg - weekday_daily_avg) / weekday_daily_avg * 100), 1) if weekday_daily_avg > 0 else 0.0
+
+        weekday_vs_weekend = {
+            'weekday_total': round(weekday_total, 2),
+            'weekday_count': weekday_count,
+            'weekday_daily_avg': weekday_daily_avg,
+            'weekday_ticket_avg': round(weekday_total / weekday_count, 2) if weekday_count > 0 else 0.0,
+            'weekday_share_pct': weekday_share_pct,
+            'weekend_total': round(weekend_total, 2),
+            'weekend_count': weekend_count,
+            'weekend_daily_avg': weekend_daily_avg,
+            'weekend_ticket_avg': round(weekend_total / weekend_count, 2) if weekend_count > 0 else 0.0,
+            'weekend_share_pct': weekend_share_pct,
+            'impulse_surge_ratio': impulse_ratio,
+            'impulse_surge_pct': impulse_pct_diff,
+        }
 
         # 6. Day-of-Month Velocity Curve (1 to 31)
         dom_raw = (
@@ -641,6 +677,7 @@ class AnalyticsService:
             'capital_allocation': capital_allocation,
             'fixed_vs_variable': fixed_vs_variable,
             'cumulative_month_pacing': cumulative_month_pacing,
+            'weekday_vs_weekend': weekday_vs_weekend,
             'filter_echo': {
                 'start_date': start_date,
                 'end_date': end_date,
