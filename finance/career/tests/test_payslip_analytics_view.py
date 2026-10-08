@@ -23,7 +23,7 @@ def client_authenticated(auth_user):
 @pytest.mark.django_db
 class TestPayslipAnalyticsView:
     def test_analytics_aggregations_and_ratios(self, client_authenticated, auth_user):
-        company = CompanyProfile.objects.create(user=auth_user, name="Astellas Pharma")
+        company = CompanyProfile.objects.create(user=auth_user, name="Acme Corp")
         employment = Employment.objects.create(
             user=auth_user, company=company, job_title="Engineer",
             start_date="2024-01-01", is_current=True

@@ -112,21 +112,21 @@ def test_upload_career_document_constructs_correct_path_in_prod(mocker, settings
     mock_bucket.blob.return_value = mock_blob
 
     file_obj = MagicMock()
-    file_obj.name = "Employment_Conditions_Astellas_Pharma.pdf"
+    file_obj.name = "Employment_Conditions_Acme_Corp.pdf"
     file_obj.content_type = "application/pdf"
 
     uri = upload_career_document(
         file_obj=file_obj,
         user_id=1,
-        company_slug="astellas-pharma",
+        company_slug="acme-corp",
         doc_type="employment_conditions",
         original_filename=file_obj.name,
         metadata_dict={"tag": "contract"}
     )
 
     assert uri.startswith("gs://")
-    assert "career_vault/users/user_1/companies/astellas-pharma/documents/employment_conditions/" in uri
-    assert "Employment_Conditions_Astellas_Pharma.pdf" in uri
+    assert "career_vault/users/user_1/companies/acme-corp/documents/employment_conditions/" in uri
+    assert "Employment_Conditions_Acme_Corp.pdf" in uri
     mock_blob.upload_from_file.assert_called_once_with(file_obj, content_type="application/pdf")
 
 

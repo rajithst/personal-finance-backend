@@ -98,6 +98,24 @@ class Employment(models.Model):
     is_current = models.BooleanField(default=False)
     work_location = models.CharField(max_length=255, blank=True, null=True, help_text="e.g. Tokyo, Japan / Hybrid")
 
+    employee_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Employee ID / Badge number assigned by employer (e.g. EMP-10294)"
+    )
+    work_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        null=True,
+        help_text="Corporate / work email address assigned for this employment"
+    )
+    employment_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional structured metadata (e.g. manager name, cost center, portal URL, etc.)"
+    )
+
     responsibilities = models.TextField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
 
@@ -496,7 +514,7 @@ class MonthlyPayslip(models.Model):
     net_pay = models.DecimalField(max_digits=14, decimal_places=2, help_text="Net take-home pay")
     bank_transfer_amount = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True, help_text="Actual deposit into bank account")
     bank_name = models.CharField(max_length=100, blank=True, null=True, help_text="Deposit bank name e.g. Mizuho")
-    bank_account = models.CharField(max_length=50, blank=True, null=True, help_text="Deposit bank account number e.g. 3016702")
+    bank_account = models.CharField(max_length=50, blank=True, null=True, help_text="Deposit bank account number e.g. 1234567")
     currency = models.CharField(max_length=10, default='JPY')
 
     # 6. Attendance & Hours

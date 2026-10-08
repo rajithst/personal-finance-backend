@@ -8,28 +8,28 @@ def test_extract_tax_slip_data_converts_era_and_fields(mocker):
     mock_response = MagicMock()
     
     mock_response.parsed = TaxSlipSchema(
-        company_name="ロバート・ウォルターズ・ジャパン株式会社",
+        company_name="グローバルテクノロジー株式会社",
         tax_year=2023,
         issue_date="2023-12-11",
-        total_payment=8014644.0,
-        income_after_deduction=6113179.0,
-        total_income_deductions=1619338.0,
-        withholding_tax=480900.0,
-        social_insurance_deduction=1139338.0,
+        total_payment=6000000.0,
+        income_after_deduction=4500000.0,
+        total_income_deductions=1280000.0,
+        withholding_tax=300000.0,
+        social_insurance_deduction=800000.0,
         basic_deduction=480000.0,
         notes="年調済み",
     )
     mock_client.return_value.models.generate_content.return_value = mock_response
     
     result = extract_tax_slip_data(b"pdf_bytes")
-    assert result['company_name'] == "ロバート・ウォルターズ・ジャパン株式会社"
+    assert result['company_name'] == "グローバルテクノロジー株式会社"
     assert result['tax_year'] == 2023
     assert result['issue_date'] == "2023-12-11"
-    assert result['total_payment'] == 8014644.0
-    assert result['income_after_deduction'] == 6113179.0
-    assert result['total_income_deductions'] == 1619338.0
-    assert result['withholding_tax'] == 480900.0
-    assert result['social_insurance_deduction'] == 1139338.0
+    assert result['total_payment'] == 6000000.0
+    assert result['income_after_deduction'] == 4500000.0
+    assert result['total_income_deductions'] == 1280000.0
+    assert result['withholding_tax'] == 300000.0
+    assert result['social_insurance_deduction'] == 800000.0
     assert result['basic_deduction'] == 480000.0
     assert result['notes'] == "年調済み"
 

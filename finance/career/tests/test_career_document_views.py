@@ -23,7 +23,7 @@ def client_authenticated(auth_user):
 
 @pytest.fixture
 def employment(auth_user):
-    company = CompanyProfile.objects.create(name='Astellas Pharma', short_name='Astellas', user=auth_user)
+    company = CompanyProfile.objects.create(name='Acme Corp', short_name='Acme', user=auth_user)
     return Employment.objects.create(user=auth_user, company=company, job_title='Manager', start_date='2022-01-01')
 
 
@@ -32,17 +32,17 @@ def test_career_document_upload_endpoint_saves_persistent_uri(client_authenticat
     settings.DEBUG = False
     mock_upload = mocker.patch(
         'finance.career.views.upload_career_document',
-        return_value='gs://personal-finance-425009.appspot.com/career_vault/users/user_1/companies/Astellas/documents/employment_conditions/test.pdf'
+        return_value='gs://personal-finance-425009.appspot.com/career_vault/users/user_1/companies/Acme/documents/employment_conditions/test.pdf'
     )
 
-    pdf_file = SimpleUploadedFile("Employment_Conditions_Astellas_Pharma.pdf", b"%PDF-1.4 test document content", content_type="application/pdf")
+    pdf_file = SimpleUploadedFile("Employment_Conditions_Acme_Corp.pdf", b"%PDF-1.4 test document content", content_type="application/pdf")
 
     response = client_authenticated.post(
         '/finance/career/documents/',
         {
             'employment': employment.id,
             'document_type': 'employment_contract',
-            'title': 'Employment Conditions Astellas',
+            'title': 'Employment Conditions Acme',
             'file': pdf_file,
         },
         format='multipart'
@@ -53,7 +53,7 @@ def test_career_document_upload_endpoint_saves_persistent_uri(client_authenticat
     doc = CareerDocument.objects.get(id=response.data['data']['id'])
     assert doc.user == auth_user
     assert str(doc.file).startswith('gs://')
-    assert doc.file_name_original == "Employment_Conditions_Astellas_Pharma.pdf"
+    assert doc.file_name_original == "Employment_Conditions_Acme_Corp.pdf"
 
 
 @pytest.mark.django_db

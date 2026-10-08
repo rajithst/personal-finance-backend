@@ -85,7 +85,7 @@ def test_extract_payslip_data_year_month_inference(mocker):
         year=0,
         month=0,
         payment_date="2024-05-25",
-        company_name="Tech Mahindra",
+        company_name="Acme Corp",
         base_salary=300000.0,
         gross_pay=300000.0,
         net_pay=300000.0,
@@ -95,50 +95,50 @@ def test_extract_payslip_data_year_month_inference(mocker):
     result = extract_payslip_data(b"pdf_bytes")
     assert result['year'] == 2024
     assert result['month'] == 5
-    assert result['company_name'] == "Tech Mahindra"
+    assert result['company_name'] == "Acme Corp"
 
 def test_extract_payslip_data_handles_nontaxable_commutation(mocker):
     from finance.career.services.payslip_extraction_service import extract_payslip_data, PayslipSchema
 
     mock_client = mocker.patch('finance.career.services.payslip_extraction_service.genai.Client')
     mock_response = MagicMock()
-    # Real-world Japanese payslip (Astellas):
-    # base_salary=723700, housing=45000, discretionary=70000, remote=4250, commutation=1516
-    # Taxable 支給額合計 (gross_pay in pdf) = 842950
-    # Deductions = 236271
-    # Taxable 差引支給額計 (net_pay in pdf) = 606679
-    # Bank transfer 振込額 = 608195
+    # Sample Japanese payslip with non-taxable commutation allowance:
+    # base_salary=500000, housing=30000, discretionary=50000, remote=4000, commutation=1000
+    # Taxable 支給額合計 (gross_pay in pdf) = 584000
+    # Deductions = 130000
+    # Taxable 差引支給額計 (net_pay in pdf) = 454000
+    # Bank transfer 振込額 = 455000
     mock_response.parsed = PayslipSchema(
-        base_salary=723700.0,
-        housing_allowance=45000.0,
-        discretionary_allowance=70000.0,
-        remote_work_allowance=4250.0,
-        commutation_allowance=1516.0,
-        gross_pay=842950.0,  # 支給額合計（課税のみ）
-        pension=59475.0,
-        health_insurance=22534.0,
-        employment_insurance=4222.0,
-        social_insurance_total=86231.0,
-        income_tax=68630.0,
-        resident_tax=70300.0,
-        total_tax=138930.0,
-        mutual_aid_fee=1440.0,
-        meal_deduction=270.0,
-        union_fee=9400.0,
-        total_deductions=236271.0,
-        net_pay=606679.0,  # 差引支給額計
-        bank_transfer_amount=608195.0
+        base_salary=500000.0,
+        housing_allowance=30000.0,
+        discretionary_allowance=50000.0,
+        remote_work_allowance=4000.0,
+        commutation_allowance=1000.0,
+        gross_pay=584000.0,  # 支給額合計（課税のみ）
+        pension=45000.0,
+        health_insurance=20000.0,
+        employment_insurance=3000.0,
+        social_insurance_total=68000.0,
+        income_tax=30000.0,
+        resident_tax=25000.0,
+        total_tax=55000.0,
+        mutual_aid_fee=1000.0,
+        meal_deduction=1000.0,
+        union_fee=5000.0,
+        total_deductions=130000.0,
+        net_pay=454000.0,  # 差引支給額計
+        bank_transfer_amount=455000.0
     )
     mock_client.return_value.models.generate_content.return_value = mock_response
 
     result = extract_payslip_data(b"pdf_bytes")
     # Must balance perfectly to 0 yen mismatch:
-    assert result['commutation_allowance'] == 1516.0
-    assert result['taxable_amount'] == 842950.0
-    assert result['gross_pay'] == 844466.0
-    assert result['total_deductions'] == 236271.0
-    assert result['net_pay'] == 608195.0
-    assert result['bank_transfer_amount'] == 608195.0
+    assert result['commutation_allowance'] == 1000.0
+    assert result['taxable_amount'] == 584000.0
+    assert result['gross_pay'] == 585000.0
+    assert result['total_deductions'] == 130000.0
+    assert result['net_pay'] == 455000.0
+    assert result['bank_transfer_amount'] == 455000.0
 
 
 def test_extract_payslip_data_includes_other_descriptions_and_notes(mocker):

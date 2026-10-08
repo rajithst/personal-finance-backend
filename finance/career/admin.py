@@ -51,9 +51,9 @@ class CareerDocumentInline(admin.TabularInline):
 
 @admin.register(Employment)
 class EmploymentAdmin(admin.ModelAdmin):
-    list_display = ('job_title', 'company', 'employment_type', 'is_dispatched', 'start_date', 'end_date', 'is_current')
+    list_display = ('job_title', 'company', 'employee_id', 'work_email', 'employment_type', 'is_dispatched', 'start_date', 'end_date', 'is_current')
     list_filter = ('employment_type', 'is_dispatched', 'is_current')
-    search_fields = ('job_title', 'company__name', 'department')
+    search_fields = ('job_title', 'company__name', 'department', 'employee_id', 'work_email')
     inlines = [CompensationHistoryInline, DispatchAssignmentInline, MonthlyPayslipInline, TaxWithholdingSlipInline, CareerDocumentInline]
 
 

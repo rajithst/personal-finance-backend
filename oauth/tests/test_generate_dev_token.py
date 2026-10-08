@@ -7,7 +7,7 @@ from oauth.models import User
 @pytest.mark.django_db
 class TestGenerateDevTokenCommand:
     def test_generate_dev_token_success(self):
-        user, _ = User.objects.get_or_create(id=1, defaults={"username": "rajithst", "email": "rajithst@test.com"})
+        user, _ = User.objects.get_or_create(id=1, defaults={"username": "devuser", "email": "devuser@example.com"})
         out = io.StringIO()
         call_command("generate_dev_token", user_id=user.id, days=30, stdout=out)
         output = out.getvalue()
