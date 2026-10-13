@@ -74,7 +74,7 @@ class TransactionImportService:
         user = get_current_user()
         user_id = import_params.get('user_id') or getattr(user, 'id', None)
         new_payees = self.find_new_payees(payees, transactions, user_id=user_id)
-        expenses = self.assign_category_ids(payees, transactions)
+        expenses = self.assign_category_ids(payees, transactions, user_id=user_id)
 
         if expenses is not None and not expenses.empty:
             last_import_date = expenses['date'].max()
@@ -87,8 +87,30 @@ class TransactionImportService:
 
             user = get_current_user()
             user_id = import_params.get('user_id') or getattr(user, 'id', None)
+            
+            # Dynamically resolve counterparty account IDs
+            rak_sec_id = Account.objects.filter(account_name__icontains='Rakuten Securities').values_list('id', flat=True).first()
+            jp_post_id = Account.objects.filter(account_name__icontains='JP Post').values_list('id', flat=True).first()
+            wise_id = Account.objects.filter(account_name__icontains='Wise').values_list('id', flat=True).first()
+            rak_card_id = Account.objects.filter(account_name__icontains='Rakuten Card').values_list('id', flat=True).first()
+            epos_card_id = Account.objects.filter(account_name__icontains='EPOS').values_list('id', flat=True).first()
+            docomo_card_id = Account.objects.filter(account_name__icontains='Docomo').values_list('id', flat=True).first()
+
             for expense in expense_records:
                 expense['user_id'] = user_id
+                dest = str(expense.get('destination') or '') + ' ' + str(expense.get('destination_original') or '')
+                if ('Rakuten Securities' in dest or 'ラクテンシヨウケン' in dest or '楽天証券' in dest) and rak_sec_id:
+                    expense['counterparty_account_id'] = rak_sec_id
+                elif ('JP Post' in dest or 'ユウチヨ' in dest or 'ゆうちょ' in dest or 'テンナコン' in dest) and jp_post_id:
+                    expense['counterparty_account_id'] = jp_post_id
+                elif ('Wise' in dest or 'ワイズ' in dest or 'トランスファーワイズ' in dest or 'ヒチナイドウ' in dest) and wise_id:
+                    expense['counterparty_account_id'] = wise_id
+                elif ('Rakuten Card' in dest or 'ラクテンカード' in dest) and rak_card_id:
+                    expense['counterparty_account_id'] = rak_card_id
+                elif ('EPOS Card' in dest or 'エポス' in dest) and epos_card_id:
+                    expense['counterparty_account_id'] = epos_card_id
+                elif ('Docomo Card' in dest or 'ドコモ' in dest) and docomo_card_id:
+                    expense['counterparty_account_id'] = docomo_card_id
                 expense_objects.append(Transaction(**expense))
             try:
                 with transaction.atomic():
@@ -331,7 +353,7 @@ class TransactionImportService:
         new_payees = pd.concat([income_payees, expense_payees]).drop(columns=['is_income'])
         return new_payees
 
-    def assign_category_ids(self, payees, transactions):
+    def assign_category_ids(self, payees, transactions, user_id=None):
 
         """
         Assigns the category IDs to the transactions.
@@ -345,17 +367,20 @@ class TransactionImportService:
         """
 
         payee_maps = payees[['category_id', 'subcategory_id', 'destination', 'alias_map', 'category_type']]
-        income_category = TransactionCategory.objects.filter(category_type=INCOME_CATEGORY_TYPE).first()
+        try:
+            income_category = TransactionCategory.objects.filter(category_type=INCOME_CATEGORY_TYPE).first()
+        except Exception:
+            income_category = None
         transactions = pd.merge(transactions, payee_maps, on=['destination'], how='left')
         transactions['category_type'] = pd.to_numeric(transactions['category_type'], errors='coerce')
         is_payment_existing = transactions['is_payment'].fillna(False).astype(bool)
+        is_income_existing = transactions['is_income'].fillna(False).astype(bool)
         transactions.loc[
-            transactions['category_type'] == EXPENSE_CATEGORY_TYPE, ['is_expense', 'is_income',
-                                                                     'is_saving']] = [True,
-                                                                                      False,
-                                                                                      False]
+            (transactions['category_type'] == EXPENSE_CATEGORY_TYPE) & (~is_income_existing),
+            ['is_expense', 'is_income', 'is_saving']
+        ] = [True, False, False]
         transactions.loc[
-            (transactions['category_type'] == EXPENSE_CATEGORY_TYPE) & (~is_payment_existing),
+            (transactions['category_type'] == EXPENSE_CATEGORY_TYPE) & (~is_income_existing) & (~is_payment_existing),
             'is_payment'
         ] = False
         transactions.loc[
@@ -364,20 +389,44 @@ class TransactionImportService:
                                                                                      True,
                                                                                      False,
                                                                                      False]
+        # Savings category type:
+        # Outgoing investments/savings (is_income is False) -> is_saving=True, is_payment=True, is_expense=False
         transactions.loc[
-            transactions['category_type'] == SAVINGS_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
-                                                                     'is_saving']] = [False,
-                                                                                      False,
-                                                                                      False,
-                                                                                      True]
+            (transactions['category_type'] == SAVINGS_CATEGORY_TYPE) & (~is_income_existing),
+            ['is_expense', 'is_income', 'is_saving', 'is_payment']
+        ] = [False, False, True, True]
+        # Inbound returns/transfers from savings/brokerage to bank (is_income is True) -> is_income=True, is_saving=False, is_expense=False, is_payment=False
         transactions.loc[
-            transactions['category_type'] == PAYMENT_CATEGORY_TYPE, ['is_expense', 'is_income', 'is_payment',
-                                                                     'is_saving']] = [False,
-                                                                                      False,
-                                                                                      True,
-                                                                                      False]
+            (transactions['category_type'] == SAVINGS_CATEGORY_TYPE) & is_income_existing,
+            ['is_expense', 'is_income', 'is_saving', 'is_payment']
+        ] = [False, True, False, False]
 
-        # Knowledge Section Rule: ATM Cash Withdrawals are living expenses spent outside tracked card statements (Payment + Expense)
+        # Payment / Internal Transfers (Category Type 4):
+        # Outgoing payments/transfers (is_income is False) -> is_expense=False, is_income=False, is_payment=True, is_saving=False
+        transactions.loc[
+            (transactions['category_type'] == PAYMENT_CATEGORY_TYPE) & (~is_income_existing),
+            ['is_expense', 'is_income', 'is_payment', 'is_saving']
+        ] = [False, False, True, False]
+        # Inbound transfers/refunds received into bank (is_income is True) -> is_expense=False, is_income=True, is_payment=False, is_saving=False
+        transactions.loc[
+            (transactions['category_type'] == PAYMENT_CATEGORY_TYPE) & is_income_existing,
+            ['is_expense', 'is_income', 'is_payment', 'is_saving']
+        ] = [False, True, False, False]
+
+        # Knowledge Section Rule 1: Credit Card Bill Settlements (transfers paying credit card bills)
+        # Must have is_expense=False to prevent double-counting because individual purchases are on card statements.
+        cc_settlement_mask = (
+            transactions['destination'].astype(str).str.contains(
+                'Card Payment|クレジットカード|カード利用代金', case=False, na=False
+            ) |
+            transactions['destination'].isin([
+                'Rakuten Card Payment', 'EPOS Card Payment', 'Tokyu Card Payment', 'Docomo Card Payment'
+            ]) |
+            (transactions['subcategory_id'] == 60)
+        )
+        transactions.loc[cc_settlement_mask, ['is_expense', 'is_payment', 'is_saving', 'is_income']] = [False, True, False, False]
+
+        # Knowledge Section Rule 2: ATM Cash Withdrawals are living expenses spent outside tracked card statements (Payment + Expense)
         dest_orig_match = (
             transactions['destination_original'].astype(str).str.contains('ＡＴＭ|７ＢＫ|ATM', case=False, na=False)
             if 'destination_original' in transactions.columns
@@ -389,7 +438,164 @@ class TransactionImportService:
         ) & (
             ~transactions['destination'].astype(str).str.contains('手数料|Cash Advance', case=False, na=False)
         )
-        transactions.loc[atm_mask, ['is_expense', 'is_payment']] = [True, True]
+        transactions.loc[atm_mask, ['is_expense', 'is_payment', 'is_saving', 'is_income']] = [True, True, False, False]
+
+        # Knowledge Section Rule 3: Bank Direct Living Expenses (Rent, Car Loans, Housing, Fees, and bank debits with Expense categories)
+        # These are living expenses paid directly from the bank account, NOT via credit cards.
+        exp_cat_ids = []
+        try:
+            exp_cat_ids = list(TransactionCategory.objects.filter(category_type=EXPENSE_CATEGORY_TYPE).values_list('id', flat=True))
+        except Exception:
+            if 'category_type' in payees.columns and 'category_id' in payees.columns:
+                exp_cat_ids = list(payees[payees['category_type'] == EXPENSE_CATEGORY_TYPE]['category_id'].dropna().unique())
+        bank_living_dests = [
+            'Rent Payment', 'BMW Car Payment', 'SUV Land', 'Housing Center', 'Transfer Fee', '振込手数料', '手数料', 'Wise Remittance', 'Direct Debit'
+        ]
+        bank_living_mask = (
+            transactions['destination'].isin(bank_living_dests) |
+            transactions['category_id'].isin(exp_cat_ids)
+        ) & (~cc_settlement_mask) & (~transactions['is_saving']) & (~transactions['is_income'])
+        transactions.loc[bank_living_mask & is_payment_existing, ['is_expense', 'is_payment']] = [True, True]
+
+        # Knowledge Section Rule 4: Dynamic Employer Mapping from Career Timeline Data
+        # Queries Employment records dynamically to resolve payroll inflows (給与 / 賞与)
+        dest_orig_series = transactions['destination_original'] if 'destination_original' in transactions.columns else transactions['destination']
+        payroll_mask = transactions['is_income'] & (
+            dest_orig_series.astype(str).str.contains('給与|賞与', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('給与|賞与|Salary|Bonus', case=False, na=False)
+        )
+        if payroll_mask.any():
+            employments = []
+            try:
+                from finance.career.models import Employment
+                emp_qs = Employment.objects.select_related('company')
+                if user_id:
+                    emp_qs = emp_qs.filter(user_id=user_id)
+                employments = list(emp_qs.order_by('start_date'))
+            except Exception as e:
+                logger.warning(f"Could not load career employments for dynamic mapping: {e}")
+
+            def resolve_employer_payroll(row):
+                d = row['date']
+                if hasattr(d, 'date'):
+                    row_dt = d.date()
+                elif hasattr(d, 'strftime'):
+                    row_dt = d
+                else:
+                    try:
+                        row_dt = datetime.strptime(str(d)[:10], '%Y-%m-%d').date()
+                    except Exception:
+                        row_dt = None
+
+                is_bonus_kw = (
+                    '賞与' in str(row.get('destination_original') or '') or
+                    '賞与' in str(row.get('destination') or '') or
+                    'Bonus' in str(row.get('destination') or '')
+                )
+                subcat = 71 if is_bonus_kw else 65
+
+                matched_emp = None
+                if employments and row_dt:
+                    # 1. Exact tenure containment: start_date <= row_dt <= (end_date or today)
+                    for emp in employments:
+                        start = emp.start_date
+                        end = emp.end_date
+                        if start <= row_dt and (end is None or row_dt <= end):
+                            matched_emp = emp
+                            break
+
+                    # 2. Nearest tenure fallback if transaction date falls slightly outside start/end
+                    if not matched_emp:
+                        def dist_to_emp(emp):
+                            start = emp.start_date
+                            end = emp.end_date
+                            if row_dt < start:
+                                return (start - row_dt).days
+                            elif end and row_dt > end:
+                                return (row_dt - end).days
+                            return 0
+                        matched_emp = min(employments, key=dist_to_emp)
+
+                company_name = matched_emp.company.name if matched_emp else 'Salary Income'
+                dest = f"{company_name} (Bonus)" if is_bonus_kw else company_name
+                return pd.Series([dest, 17, subcat, True, False, False, False])
+
+            cols = ['destination', 'category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']
+            transactions.loc[payroll_mask, cols] = transactions[payroll_mask].apply(resolve_employer_payroll, axis=1).values
+
+        # Knowledge Section Rule 5: Internal Transfers between Accounts (Rakuten Securities, JP Post, Wise)
+        # Inbound transfers into bank accounts:
+        # Must be Category 19 (Internal Transfer), is_income=True, is_payment=False, is_expense=False, is_saving=False.
+        # This keeps the bank ledger balance 100% reconciled while completely isolating internal transfers from
+        # Net Take-Home (Income tab & Analytics) and Payments tabs.
+        try:
+            from finance.categories.models import TransactionCategory, TransactionSubCategory
+            int_cat = TransactionCategory.objects.filter(Q(category='Internal Transfer') | Q(id=19)).first()
+            int_cat_id = int_cat.id if int_cat else 19
+            sub_wise = TransactionSubCategory.objects.filter(category_id=int_cat_id, name__icontains='Wise').values_list('id', flat=True).first() or 80
+            sub_jp = TransactionSubCategory.objects.filter(category_id=int_cat_id, name__icontains='JP Post').values_list('id', flat=True).first() or 81
+            sub_gen = TransactionSubCategory.objects.filter(category_id=int_cat_id, name__icontains='General').values_list('id', flat=True).first() or 82
+        except Exception:
+            int_cat_id, sub_wise, sub_jp, sub_gen = 19, 80, 81, 82
+
+        # 5a. Inbound Rakuten Securities return into Bank
+        rak_inflow_mask = is_income_existing & (
+            dest_orig_series.astype(str).str.contains('ラクテンシヨウケン|Rakuten Securities|楽天証券', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('ラクテンシヨウケン|Rakuten Securities|楽天証券', case=False, na=False)
+        )
+        if rak_inflow_mask.any():
+            transactions.loc[rak_inflow_mask, ['destination', 'category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']] = [
+                'Rakuten Securities Transfer (Internal)', int_cat_id, sub_gen, True, False, False, True
+            ]
+
+        # 5b. Inbound JP Post transfer into Bank
+        jp_inflow_mask = is_income_existing & (
+            dest_orig_series.astype(str).str.contains('ユウチヨ|ゆうちょ|JP Post|テンナコン', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('ユウチヨ|ゆうちょ|JP Post|テンナコン', case=False, na=False)
+        )
+        if jp_inflow_mask.any():
+            transactions.loc[jp_inflow_mask, ['destination', 'category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']] = [
+                'JP Post Bank Transfer', int_cat_id, sub_jp, True, False, False, False
+            ]
+
+        # 5c. Inbound Wise funds returning to Bank
+        wise_inflow_mask = is_income_existing & (
+            dest_orig_series.astype(str).str.contains('ワイズ|Wise|トランスファーワイズ|ヒチナイドウ', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('ワイズ|Wise|トランスファーワイズ|ヒチナイドウ', case=False, na=False)
+        )
+        if wise_inflow_mask.any():
+            transactions.loc[wise_inflow_mask, ['destination', 'category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']] = [
+                'Wise Return (Internal)', int_cat_id, sub_wise, True, False, False, False
+            ]
+
+        # 5d. Outbound transfers leaving Bank to JP Post (debit from bank, Internal Transfer)
+        jp_outflow_mask = (~is_income_existing) & (
+            dest_orig_series.astype(str).str.contains('ユウチヨ|ゆうちょ|JP Post|テンナコン', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('ユウチヨ|ゆうちょ|JP Post|テンナコン', case=False, na=False)
+        )
+        if jp_outflow_mask.any():
+            transactions.loc[jp_outflow_mask, ['destination', 'category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']] = [
+                'JP Post Bank Transfer', int_cat_id, sub_jp, False, True, False, False
+            ]
+
+        # 5e. Outbound transfers leaving Bank to Wise wallet
+        wise_outflow_mask = (~is_income_existing) & (
+            transactions['destination'] == 'Wise Transfer (Internal)'
+        )
+        if wise_outflow_mask.any():
+            transactions.loc[wise_outflow_mask, ['category_id', 'subcategory_id', 'is_income', 'is_payment', 'is_expense', 'is_saving']] = [
+                int_cat_id, sub_wise, False, True, False, False
+            ]
+
+        # 5f. Outbound transfers leaving Bank to Rakuten Securities (genuine savings debit into investment account)
+        rak_outflow_mask = (~is_income_existing) & (
+            dest_orig_series.astype(str).str.contains('ラクテンシヨウケン|Rakuten Securities|楽天証券', case=False, na=False) |
+            transactions['destination'].astype(str).str.contains('ラクテンシヨウケン|Rakuten Securities|楽天証券', case=False, na=False)
+        )
+        if rak_outflow_mask.any():
+            transactions.loc[rak_outflow_mask, ['destination', 'is_saving', 'is_payment', 'is_expense', 'is_income']] = [
+                'Rakuten Securities', True, True, False, False
+            ]
 
         transactions.loc[transactions['alias_map'].isnull() & transactions['alias'].notnull(), 'alias_map'] = \
             transactions['alias']
@@ -398,7 +604,7 @@ class TransactionImportService:
         transactions = transactions.rename(columns={'alias_map': 'alias'})
         transactions['alias'] = transactions['alias'].replace({np.nan: None})
         if income_category:
-            transactions.loc[transactions['is_income'], 'category_id'] = income_category.id
+            transactions.loc[transactions['is_income'] & transactions['category_id'].isna(), 'category_id'] = income_category.id
         transactions['category_id'] = transactions['category_id'].replace({np.nan: None})
         transactions['subcategory_id'] = transactions['subcategory_id'].replace({np.nan: None})
         return transactions

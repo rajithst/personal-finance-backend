@@ -23,27 +23,32 @@ class DashboardService:
                     .annotate(month=TruncMonth('date'))
                     .values('month')
                     .annotate(
-                        income=Sum('amount', filter=Q(is_income=True)),
-                        expense=Sum('amount', filter=Q(is_expense=True, is_saving=False)),
-                        payment=Sum('amount', filter=Q(is_payment=True)),
-                        saving=Sum('amount', filter=Q(is_saving=True)),
+                        income=Sum('amount', filter=Q(is_income=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19) & ~Q(is_third_party=True)),
+                        expense=Sum('amount', filter=Q(is_expense=True, is_saving=False, is_third_party=False)),
+                        payment=Sum('amount', filter=Q(is_payment=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
+                        saving_out=Sum('amount', filter=Q(is_saving=True, is_payment=True)),
+                        saving_in=Sum('amount', filter=Q(is_saving=True, is_income=True)),
+                        transfer=Sum('amount', filter=Q(category__category='Internal Transfer') | Q(category_id=19)),
                     )
                     .order_by('month'))
 
-        incomes, expenses, payments, savings = [], [], [], []
+        incomes, expenses, payments, savings, transfers = [], [], [], [], []
         for item in queryset:
             date = item['month']
             year_num, month_num = date.year, date.month
             incomes.append({'year': year_num, 'month': month_num, 'amount': item['income'] or 0})
             expenses.append({'year': year_num, 'month': month_num, 'amount': item['expense'] or 0})
             payments.append({'year': year_num, 'month': month_num, 'amount': item['payment'] or 0})
-            savings.append({'year': year_num, 'month': month_num, 'amount': item['saving'] or 0})
+            net_saving = (item.get('saving_out') or item.get('saving') or 0) - (item.get('saving_in') or 0)
+            savings.append({'year': year_num, 'month': month_num, 'amount': net_saving})
+            transfers.append({'year': year_num, 'month': month_num, 'amount': item.get('transfer') or 0})
 
         return {
             'income': incomes,
             'expense': expenses,
             'payment': payments,
             'saving': savings,
+            'transfer': transfers,
         }
 
     def get_income(self, year):
@@ -87,6 +92,7 @@ class DashboardService:
 
         queryset = (self.get_queryset().filter(
             **{transaction_type: True, 'date__year': year})
+                    .exclude(Q(category__category='Internal Transfer') | Q(category_id=19))
                     .annotate(month=TruncMonth('date'))
                     .values('month', 'destination_original', 'destination')
                     .annotate(total_amount=Sum('amount'))
@@ -116,12 +122,31 @@ class DashboardService:
         if not year:
             raise ValueError('Required filter year')
 
+        if transaction_type == 'is_saving':
+            queryset = (self.get_queryset().filter(is_saving=True, date__year=year, is_deleted=False)
+                        .annotate(month=TruncMonth('date'))
+                        .values('month')
+                        .annotate(
+                            outflow=Sum('amount', filter=Q(is_payment=True)),
+                            inflow=Sum('amount', filter=Q(is_income=True)),
+                        )
+                        .order_by('month'))
+            results = []
+            for item in queryset:
+                date = item['month']
+                net_amount = (item['outflow'] or 0) - (item['inflow'] or 0)
+                results.append({'year': date.year, 'month': date.month, 'amount': net_amount})
+            return results
+
         filter_kwargs = {transaction_type: True, 'date__year': year, 'is_deleted': False}
         if transaction_type == 'is_expense':
             filter_kwargs['is_saving'] = False
 
-        queryset = (self.get_queryset().filter(**filter_kwargs)
-                    .annotate(month=TruncMonth('date'))
+        qs = self.get_queryset().filter(**filter_kwargs)
+        if transaction_type in ['is_income', 'is_payment']:
+            qs = qs.exclude(Q(category__category='Internal Transfer') | Q(category_id=19))
+
+        queryset = (qs.annotate(month=TruncMonth('date'))
                     .values('month')
                     .annotate(total_amount=Sum('amount'))
                     .order_by('month')

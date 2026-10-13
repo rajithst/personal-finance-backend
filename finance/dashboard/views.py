@@ -29,7 +29,8 @@ class DashboardView(APIView):
                                       "category_wise_expenses": category_wise_expenses, "expense": expenses,
                                       "top_ten_expenses": top_ten_expenses,
                                       "top_ten_expenses_monthly": top_ten_expenses_monthly,
-                                      "payment": payments, "saving": savings}, 'status': True, 'message': 'Success'},
+                                      "payment": payments, "saving": savings,
+                                      "year": int(year) if year and str(year).isdigit() else year}, 'status': True, 'message': 'Success'},
                             status=status.HTTP_200_OK)
         except ValidationError as e:
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)

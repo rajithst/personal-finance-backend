@@ -42,7 +42,17 @@ class ResponseDestinationMapSerializer(serializers.ModelSerializer):
         return None
 
     def get_is_expense(self, obj):
-        return self._resolve_type(obj) == EXPENSE_CATEGORY_TYPE
+        cat_type = self._resolve_type(obj)
+        if cat_type == EXPENSE_CATEGORY_TYPE:
+            return True
+        if obj.category and obj.category.category_type == EXPENSE_CATEGORY_TYPE:
+            return True
+        dest_str = (obj.destination or '').lower()
+        if any(w in dest_str for w in ['atm', '出金', '７ｂｋ', 'ゆうちょ']):
+            return True
+        if obj.destination in ['Rent Payment', 'BMW Car Payment', 'SUV Land', 'Housing Center', 'Transfer Fee', 'Wise Remittance', 'Direct Debit']:
+            return True
+        return False
 
     def get_is_income(self, obj):
         return self._resolve_type(obj) == INCOME_CATEGORY_TYPE
@@ -51,7 +61,13 @@ class ResponseDestinationMapSerializer(serializers.ModelSerializer):
         return self._resolve_type(obj) == SAVINGS_CATEGORY_TYPE
 
     def get_is_payment(self, obj):
-        return self._resolve_type(obj) == PAYMENT_CATEGORY_TYPE
+        cat_type = self._resolve_type(obj)
+        if cat_type == PAYMENT_CATEGORY_TYPE:
+            return True
+        dest_str = (obj.destination or '').lower()
+        if any(w in dest_str for w in ['atm', '出金', '７ｂｋ', 'ゆうちょ', 'card payment', 'rent', 'suv land', 'bmw', 'fee', 'debit']):
+            return True
+        return False
 
 
 class DestinationMapSerializer(serializers.ModelSerializer):

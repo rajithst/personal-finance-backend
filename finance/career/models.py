@@ -113,6 +113,7 @@ class Employment(models.Model):
     employment_metadata = models.JSONField(
         default=dict,
         blank=True,
+        null=True,
         help_text="Additional structured metadata (e.g. manager name, cost center, portal URL, etc.)"
     )
 
@@ -228,29 +229,29 @@ class CompensationHistory(models.Model):
 
     @property
     def total_monthly_guaranteed(self):
-        """Monthly guaranteed pay = base salary + fixed allowances (normalized to monthly)"""
+        """Monthly guaranteed pay = base salary (normalized to monthly) + fixed monthly allowances"""
         base = float(self.base_salary or 0)
         allow = float(self.allowances or 0)
         if self.salary_frequency == 'monthly':
             return base + allow
         elif self.salary_frequency == 'annual':
-            return (base + allow) / 12.0
+            return (base / 12.0) + allow
         return base + allow
 
     @property
     def annual_base_guaranteed(self):
-        """Annual guaranteed base (固定年俸 / Base + Allowances * 12)"""
+        """Annual guaranteed base (固定年俸) = base salary (normalized to annual) + (fixed monthly allowances * 12)"""
         base = float(self.base_salary or 0)
         allow = float(self.allowances or 0)
         if self.salary_frequency == 'monthly':
             return (base + allow) * 12.0
         elif self.salary_frequency == 'annual':
-            return base + allow
+            return base + (allow * 12.0)
         return (base + allow) * 12.0
 
     @property
     def total_annual_expected(self):
-        """Total expected annual package (総年収 / OTE) = (Base + Allowances) * 12 + Annual Bonus"""
+        """Total expected annual package (総年収 / OTE) = Annual Base Guaranteed + Annual Bonus"""
         bonus = float(self.bonus_expected or 0)
         return self.annual_base_guaranteed + bonus
 
@@ -349,6 +350,7 @@ class CareerDocument(models.Model):
         ('payslip_pdf', 'Monthly Payslip PDF (給与明細書)'),
         ('bonus_slip_pdf', 'Bonus Statement PDF (賞与明細書)'),
         ('tax_slip_pdf', 'Withholding Tax Slip PDF (源泉徴収票)'),
+        ('residence_tax_notice', 'Residence Tax Notice (住民税決定・変更通知書)'),
         ('other', 'Other Document (その他)'),
     )
 
@@ -663,3 +665,45 @@ class TaxWithholdingSlip(models.Model):
         if not self.user:
             self.user = get_current_user()
         super().save(*args, **kwargs)
+
+
+class NationalPensionPayment(models.Model):
+    """
+    Represents a direct National Pension (国民年金 第1号被保険者) premium payment
+    made directly to Japan Pension Service (日本年金機構) or local ward office,
+    such as during career gaps/transitions between corporate employment.
+    """
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    year = models.IntegerField(help_text="Calendar / Fiscal Year (e.g. 2021)")
+    month = models.IntegerField(help_text="Month of coverage (1-12)")
+    payment_date = models.DateField(blank=True, null=True, help_text="Date paid at bank, combini, or ward office")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Amount paid in JPY")
+    payment_category = models.CharField(
+        max_length=50,
+        default='category_1',
+        help_text="Category e.g. category_1 (第1号被保険者 納付済)"
+    )
+    receipt_number = models.CharField(max_length=100, blank=True, null=True, help_text="領収日付印 / 納付書番号")
+    notes = models.TextField(blank=True, null=True, help_text="e.g. Transition gap between Human Resocia and Cognizant")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = RequestManager()
+
+    class Meta:
+        db_table = 'career_national_pension_payment'
+        verbose_name = 'National Pension Payment (国民年金保険料納付)'
+        verbose_name_plural = 'National Pension Payments (国民年金保険料納付)'
+        ordering = ['year', 'month']
+        unique_together = ('user', 'year', 'month')
+
+    def __str__(self):
+        return f"国民年金 {self.year}/{self.month:02d} - ¥{self.amount:,.0f}"
+
+    def save(self, *args, **kwargs):
+        if not self.user:
+            self.user = get_current_user()
+        super().save(*args, **kwargs)
+

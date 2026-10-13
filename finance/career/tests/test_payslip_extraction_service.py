@@ -15,8 +15,9 @@ def test_extract_payslip_data_validates_math(mocker):
     )
     mock_client.return_value.models.generate_content.return_value = mock_response
     
-    with pytest.raises(ValidationError, match="Gross pay validation failed"):
-        extract_payslip_data(b"pdf_bytes")
+    result = extract_payslip_data(b"pdf_bytes")
+    assert len(result.get("warnings", [])) > 0
+    assert any("Gross Pay mismatch" in w for w in result["warnings"])
 
 def test_extract_payslip_data_fails_on_1_yen_mismatch(mocker):
     from finance.career.services.payslip_extraction_service import extract_payslip_data, PayslipSchema
@@ -31,8 +32,9 @@ def test_extract_payslip_data_fails_on_1_yen_mismatch(mocker):
     )
     mock_client.return_value.models.generate_content.return_value = mock_response
     
-    with pytest.raises(ValidationError, match="Gross pay validation failed"):
-        extract_payslip_data(b"pdf_bytes")
+    result = extract_payslip_data(b"pdf_bytes")
+    assert len(result.get("warnings", [])) > 0
+    assert any("Gross Pay mismatch" in w for w in result["warnings"])
 
 def test_extract_payslip_data_success(mocker):
     from finance.career.services.payslip_extraction_service import extract_payslip_data, PayslipSchema

@@ -9,6 +9,7 @@ from common.transaction_const import (
     EXPENSE_CATEGORY_TYPE,
     PAYMENT_CATEGORY_TYPE,
 )
+from finance.categories.models import TransactionCategory
 from finance.payees.models import DestinationMap
 from finance.payees.serializers import DestinationMapSerializer, ResponseDestinationMapSerializer
 from finance.transactions.models import Transaction
@@ -154,6 +155,8 @@ class PayeeService:
         is_payee_renamed = new_destination and (new_destination != exist_settings.destination)
         destination = new_destination if is_payee_renamed else exist_settings.destination
         target_destinations = [exist_settings.destination]
+        if exist_settings.destination_original and exist_settings.destination_original not in target_destinations:
+            target_destinations.append(exist_settings.destination_original)
 
         serializer = DestinationMapSerializer(exist_settings, data=request_data, partial=True)
         if not serializer.is_valid():

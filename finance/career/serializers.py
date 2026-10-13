@@ -7,6 +7,7 @@ from finance.career.models import (
     CompensationHistory,
     MonthlyPayslip,
     TaxWithholdingSlip,
+    NationalPensionPayment,
 )
 
 
@@ -328,7 +329,9 @@ class TaxWithholdingSlipSerializer(serializers.ModelSerializer):
 
 class EmploymentSerializer(serializers.ModelSerializer):
     employment_type_display = serializers.CharField(source='get_employment_type_display', read_only=True)
+    employment_metadata = serializers.JSONField(required=False, allow_null=True, default=dict)
     company_name = serializers.CharField(source='company.name', read_only=True)
+    company_name_local = serializers.CharField(source='company.name_local', read_only=True)
     company_short_name = serializers.CharField(source='company.short_name', read_only=True)
     company_logo = serializers.SerializerMethodField()
     dispatch_assignments = DispatchAssignmentSerializer(many=True, read_only=True)
@@ -344,6 +347,7 @@ class EmploymentSerializer(serializers.ModelSerializer):
             'id',
             'company',
             'company_name',
+            'company_name_local',
             'company_short_name',
             'company_logo',
             'job_title',
@@ -390,3 +394,22 @@ class EmploymentSerializer(serializers.ModelSerializer):
 
     def get_tax_slips_count(self, obj):
         return obj.tax_slips.count()
+
+
+class NationalPensionPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NationalPensionPayment
+        fields = [
+            'id',
+            'year',
+            'month',
+            'payment_date',
+            'amount',
+            'payment_category',
+            'receipt_number',
+            'notes',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+

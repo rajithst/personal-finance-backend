@@ -89,8 +89,11 @@ class GCSHandler(StorageBackendContract):
             encoding = read_config.get('encoding') if read_config else 'utf-8'
             file_content = blob.download_as_text(encoding=encoding)
             return io.StringIO(file_content)
+        except (UnicodeDecodeError, UnicodeError):
+            raise
         except Exception as e:
             logging.exception(f'Error downloading file from bucket {e}')
+            return None
 
     def read_all_files(self, prefix, read_config=None):
         """

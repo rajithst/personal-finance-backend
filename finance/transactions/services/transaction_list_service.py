@@ -21,7 +21,7 @@ class TransactionListService:
     def get_queryset(self):
         return Transaction.objects.select_related('category', 'subcategory', 'account', 'user')
 
-    def _group_by(self, data):
+    def _group_by(self, data, target=None):
         if hasattr(data, 'empty') and data.empty:
             return []
         if isinstance(data, pd.DataFrame):
@@ -45,7 +45,12 @@ class TransactionListService:
             key = (item_dict.get('year'), item_dict.get('month'))
             group = groups[key]
             group['month_text'] = item_dict.get('month_text', '')
-            group['total'] += amt
+            if target == 'saving' and item_dict.get('is_income'):
+                group['total'] -= amt
+            elif target == 'third_party' and item_dict.get('is_payment'):
+                group['total'] -= amt
+            else:
+                group['total'] += amt
             group['transactions'].append(item_dict)
 
         group_data = []
@@ -78,18 +83,34 @@ class TransactionListService:
         target = query_params.get('target', None)
         category_ids = query_params.get('cat', None)
         subcategory_ids = query_params.get('subcat', None)
+        account_id = query_params.get('account', None) or query_params.get('account_id', None)
         filter_params = {'is_deleted': False, 'date__year': year}
 
+        from django.db.models import Q
         if target == 'payment':
             filter_params['is_payment'] = True
+            queryset = self.get_queryset().filter(**filter_params).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).exclude(is_third_party=True).order_by('date')
         elif target == 'saving':
             filter_params['is_saving'] = True
+            queryset = self.get_queryset().filter(**filter_params).exclude(is_third_party=True).order_by('date')
         elif target == 'expense':
             filter_params['is_expense'] = True
+            queryset = self.get_queryset().filter(**filter_params).exclude(is_third_party=True).order_by('date')
         elif target == 'income':
             filter_params['is_income'] = True
+            queryset = self.get_queryset().filter(**filter_params).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).exclude(is_third_party=True).order_by('date')
+        elif target == 'third_party':
+            filter_params['is_third_party'] = True
+            queryset = self.get_queryset().filter(**filter_params).order_by('date')
+        elif target == 'transfer':
+            queryset = self.get_queryset().filter(is_deleted=False, date__year=year).filter(
+                Q(category__category='Internal Transfer') | Q(category_id=19)
+            ).exclude(is_third_party=True).order_by('date')
+        else:
+            queryset = self.get_queryset().filter(**filter_params).order_by('date')
 
-        queryset = self.get_queryset().filter(**filter_params).order_by('date')
+        if account_id:
+            queryset = queryset.filter(Q(account_id=account_id) | Q(counterparty_account_id=account_id))
         if category_ids:
             category_ids = category_ids.split(',')
             queryset = queryset.filter(category_id__in=category_ids)
@@ -98,7 +119,7 @@ class TransactionListService:
             queryset = queryset.filter(subcategory_id__in=subcategory_ids)
 
         serializer = ResponseTransactionSerializer(queryset, many=True)
-        return self._group_by(serializer.data)
+        return self._group_by(serializer.data, target=target)
 
     def create_transaction(self, data):
         if 'user' not in data:
@@ -116,7 +137,7 @@ class TransactionListService:
         pk = data.get('id')
         instance = self.get_queryset().get(pk=pk)
         old_instance = copy.copy(instance)
-        serializer = TransactionSerializer(instance, data=data)
+        serializer = TransactionSerializer(instance, data=data, partial=True)
         is_updated, data, saved_instance = self.handle_serializer(serializer)
         if is_updated:
             log_change_signal.send_robust(sender=self.__class__, instance=saved_instance, section=SectionEnum.TRANSACTION,
@@ -138,12 +159,29 @@ class TransactionListService:
         is_saving = request_data.get('is_saving')
         is_payment = request_data.get('is_payment')
         is_expense = request_data.get('is_expense')
+        is_income = request_data.get('is_income')
         alias = request_data.get('alias')
+        counterparty_account = request_data.get('counterparty_account')
+        is_third_party = request_data.get('is_third_party')
+        on_behalf_of = request_data.get('on_behalf_of')
+        update_dict = {
+            'category_id': category,
+            'alias': alias,
+            'subcategory_id': subcategory,
+            'is_saving': is_saving if not is_third_party else False,
+            'is_payment': is_payment,
+            'is_expense': is_expense if not is_third_party else False,
+        }
+        if is_income is not None:
+            update_dict['is_income'] = is_income if not is_third_party else False
+        if is_third_party is not None:
+            update_dict['is_third_party'] = is_third_party
+        if on_behalf_of is not None:
+            update_dict['on_behalf_of'] = on_behalf_of
+        if counterparty_account is not None:
+            update_dict['counterparty_account_id'] = counterparty_account
         try:
-            Transaction.objects.filter(destination=destination).update(
-                category_id=category, alias=alias,
-                subcategory_id=subcategory, is_saving=is_saving,
-                is_payment=is_payment, is_expense=is_expense)
+            Transaction.objects.filter(destination=destination).update(**update_dict)
         except ValidationError as e:
             logging.exception("Validation error: %s", e)
         except IntegrityError as e:
@@ -212,6 +250,7 @@ class TransactionBulkService:
                         transaction_split['category_id'] = payee.category_id if payee else None
                         transaction_split['subcategory_id'] = None
                         transaction_split['account_id'] = transaction_data.get('account')
+                        transaction_split['counterparty_account_id'] = transaction_data.get('counterparty_account')
                         transaction_split['destination'] = payee.destination if payee else split.get('destination')
                         transaction_split['destination_original'] = payee.destination_original if payee else split.get('destination')
                         transaction_split['alias'] = None
@@ -237,7 +276,12 @@ class TransactionBulkService:
 
     def extract_valid_fields(self, transaction_data):
         valid_fields = [field.name for field in Transaction._meta.get_fields() if not field.is_relation or field.concrete]
-        override_fields = {'category': 'category_id', 'subcategory': 'subcategory_id', 'account': 'account_id'}
+        override_fields = {
+            'category': 'category_id',
+            'subcategory': 'subcategory_id',
+            'account': 'account_id',
+            'counterparty_account': 'counterparty_account_id'
+        }
         for override_field, mapped_col in override_fields.items():
             if override_field in valid_fields:
                 valid_fields.remove(override_field)

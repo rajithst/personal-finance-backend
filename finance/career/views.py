@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from pydantic import ValidationError as PydanticValidationError
 from django.db import transaction
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ from finance.career.models import (
     CompensationHistory,
     MonthlyPayslip,
     TaxWithholdingSlip,
+    NationalPensionPayment,
 )
 from finance.career.serializers import (
     CompanyProfileSerializer,
@@ -40,6 +42,7 @@ from finance.career.serializers import (
     CompensationHistorySerializer,
     MonthlyPayslipSerializer,
     TaxWithholdingSlipSerializer,
+    NationalPensionPaymentSerializer,
 )
 
 
@@ -946,7 +949,10 @@ class PayslipAnalyticsView(APIView):
             year = request.query_params.get('year')
             if year:
                 try:
-                    queryset = queryset.filter(year=int(year))
+                    target_yr = int(year)
+                    queryset = queryset.filter(
+                        Q(payment_date__year=target_yr) | (Q(payment_date__isnull=True) & Q(year=target_yr))
+                    )
                 except (ValueError, TypeError):
                     pass
 
@@ -955,6 +961,12 @@ class PayslipAnalyticsView(APIView):
                 queryset = queryset.filter(is_bonus=False)
 
             payslips = list(queryset.order_by('year', 'month', 'is_bonus', 'id'))
+
+            # Fetch direct National Pension (国民年金 第1号被保険者) gap payments
+            national_pension_payments = list(NationalPensionPayment.objects.filter(user=user).order_by('year', 'month'))
+            national_pension_count = len(national_pension_payments)
+            national_pension_total = sum(float(np.amount or 0) for np in national_pension_payments)
+            np_map = {(np.year, np.month): float(np.amount or 0) for np in national_pension_payments}
 
             total_gross = sum(float(p.gross_pay or 0) for p in payslips)
             total_net = sum(float(p.net_pay or 0) for p in payslips)
@@ -979,9 +991,26 @@ class PayslipAnalyticsView(APIView):
             summary = {
                 'total_gross_pay': total_gross,
                 'total_net_pay': total_net,
-                'total_social_insurance': total_social,
-                'total_pension_employee': total_pension_employee,
-                'total_pension_system_contribution': total_pension_system,
+                'total_social_insurance': total_social + national_pension_total,
+                'total_pension_employee': total_pension_employee + national_pension_total,
+                'total_pension_welfare': total_pension_employee,
+                'total_pension_national': national_pension_total,
+                'total_pension_all_in': total_pension_employee + national_pension_total,
+                'national_pension_months': national_pension_count,
+                'national_pension_total': national_pension_total,
+                'national_pension_records': [
+                    {
+                        'id': np.id,
+                        'year': np.year,
+                        'month': np.month,
+                        'amount': float(np.amount),
+                        'payment_category': np.payment_category,
+                        'payment_date': str(np.payment_date) if np.payment_date else None,
+                        'notes': np.notes,
+                    }
+                    for np in national_pension_payments
+                ],
+                'total_pension_system_contribution': total_pension_system + national_pension_total,
                 'total_health_insurance': total_health,
                 'total_employment_insurance': total_emp_ins,
                 'total_income_tax': total_income_tax,
@@ -989,47 +1018,159 @@ class PayslipAnalyticsView(APIView):
                 'total_taxes': total_tax,
                 'total_year_end_adjustment': total_year_end_adj,
                 'total_other_deductions': total_other_ded,
-                'total_deductions': total_deductions,
+                'total_deductions': total_deductions + national_pension_total,
                 'overall_take_home_ratio': take_home_ratio,
                 'overall_tax_ratio': tax_ratio,
                 'overall_social_ratio': social_ratio,
                 'overall_deduction_ratio': deduction_ratio,
                 'payslips_count': count,
+                'total_coverage_months': count + national_pension_count,
             }
 
-            # Monthly timeline
-            monthly_timeline = []
+            # Monthly timeline - grouped by (year, month, is_bonus) to prevent duplicate Recharts categories
+            # and accurately reflect total monthly earnings and deductions across multi-employer months.
+            monthly_groups = {}
             for p in payslips:
-                gross = float(p.gross_pay or 0)
-                net = float(p.net_pay or 0)
-                co_id = p.employment.company_id if p.employment else None
-                co_name = p.employment.company.name if (p.employment and p.employment.company) else "Unknown"
+                key = (p.year, p.month, bool(p.is_bonus))
+                if key not in monthly_groups:
+                    monthly_groups[key] = []
+                monthly_groups[key].append(p)
+
+            monthly_timeline = []
+            for (yr, mo, is_bonus), group in monthly_groups.items():
+                gross = sum(float(p.gross_pay or 0) for p in group)
+                net = sum(float(p.net_pay or 0) for p in group)
+                pension = sum(float(p.pension or 0) for p in group)
+                health_ins = sum(float(p.health_insurance or 0) for p in group)
+                emp_ins = sum(float(p.employment_insurance or 0) for p in group)
+                social_total = sum(float(p.social_insurance_total or 0) for p in group)
+                income_tax = sum(float(p.income_tax or 0) for p in group)
+                resident_tax = sum(float(p.resident_tax or 0) for p in group)
+                total_tax = sum(float(p.total_tax or 0) for p in group)
+                total_deductions = sum(float(p.total_deductions or 0) for p in group)
+                take_home_ratio = round((net / gross * 100), 1) if gross > 0 else 0.0
+
+                std_pensions = [float(p.std_remuneration_pension) for p in group if p.std_remuneration_pension is not None]
+                std_healths = [float(p.std_remuneration_health) for p in group if p.std_remuneration_health is not None]
+
+                employer_breakdowns = []
+                co_names = []
+                co_ids = []
+                for p in group:
+                    c_id = p.employment.company_id if p.employment else None
+                    c_name = p.employment.company.name if (p.employment and p.employment.company) else "Unknown"
+                    if c_name not in co_names:
+                        co_names.append(c_name)
+                    if c_id and c_id not in co_ids:
+                        co_ids.append(c_id)
+
+                    employer_breakdowns.append({
+                        'company_id': c_id,
+                        'company_name': c_name,
+                        'gross_pay': float(p.gross_pay or 0),
+                        'net_pay': float(p.net_pay or 0),
+                        'pension': float(p.pension or 0),
+                        'health_insurance': float(p.health_insurance or 0),
+                        'employment_insurance': float(p.employment_insurance or 0),
+                        'income_tax': float(p.income_tax or 0),
+                        'resident_tax': float(p.resident_tax or 0),
+                        'total_tax': float(p.total_tax or 0),
+                        'total_deductions': float(p.total_deductions or 0),
+                    })
+
+                company_name_str = " + ".join(co_names) if co_names else "Unknown"
+                primary_company_id = co_ids[0] if len(co_ids) == 1 else None
+
+                np_amt = np_map.get((yr, mo), 0.0) if not is_bonus else 0.0
+                if np_amt > 0:
+                    employer_breakdowns.append({
+                        'company_id': None,
+                        'company_name': 'National Pension (国民年金)',
+                        'gross_pay': 0.0,
+                        'net_pay': 0.0,
+                        'pension': np_amt,
+                        'health_insurance': 0.0,
+                        'employment_insurance': 0.0,
+                        'social_insurance_total': np_amt,
+                        'income_tax': 0.0,
+                        'resident_tax': 0.0,
+                        'total_tax': 0.0,
+                        'total_deductions': np_amt,
+                        'is_national_pension': True,
+                    })
+
                 monthly_timeline.append({
-                    'year_month': f"{p.year}-{p.month:02d}" + (" (Bonus)" if p.is_bonus else ""),
-                    'year': p.year,
-                    'month': p.month,
-                    'is_bonus': p.is_bonus,
-                    'company_id': co_id,
-                    'company_name': co_name,
+                    'year_month': f"{yr}-{mo:02d}" + (" (Bonus)" if is_bonus else ""),
+                    'year': yr,
+                    'month': mo,
+                    'is_bonus': is_bonus,
+                    'company_id': primary_company_id,
+                    'company_name': company_name_str,
                     'gross_pay': gross,
                     'net_pay': net,
-                    'pension': float(p.pension or 0),
-                    'health_insurance': float(p.health_insurance or 0),
-                    'employment_insurance': float(p.employment_insurance or 0),
-                    'social_insurance_total': float(p.social_insurance_total or 0),
-                    'income_tax': float(p.income_tax or 0),
-                    'resident_tax': float(p.resident_tax or 0),
-                    'total_tax': float(p.total_tax or 0),
-                    'total_deductions': float(p.total_deductions or 0),
-                    'take_home_ratio': round((net / gross * 100), 1) if gross > 0 else 0.0,
-                    'std_remuneration_pension': float(p.std_remuneration_pension) if p.std_remuneration_pension is not None else None,
-                    'std_remuneration_health': float(p.std_remuneration_health) if p.std_remuneration_health is not None else None,
+                    'pension': pension + np_amt,
+                    'national_pension': np_amt,
+                    'health_insurance': health_ins,
+                    'employment_insurance': emp_ins,
+                    'social_insurance_total': social_total + np_amt,
+                    'income_tax': income_tax,
+                    'resident_tax': resident_tax,
+                    'total_tax': total_tax,
+                    'total_deductions': total_deductions + np_amt,
+                    'take_home_ratio': take_home_ratio,
+                    'std_remuneration_pension': max(std_pensions) if std_pensions else None,
+                    'std_remuneration_health': max(std_healths) if std_healths else None,
+                    'employer_breakdowns': employer_breakdowns,
                 })
+
+            # Check if any national pension payment occurred in a month without payslips
+            for np in national_pension_payments:
+                if (np.year, np.month, False) not in monthly_groups:
+                    np_val = float(np.amount or 0)
+                    monthly_timeline.append({
+                        'year_month': f"{np.year}-{np.month:02d}",
+                        'year': np.year,
+                        'month': np.month,
+                        'is_bonus': False,
+                        'company_id': None,
+                        'company_name': 'National Pension (国民年金)',
+                        'gross_pay': 0.0,
+                        'net_pay': 0.0,
+                        'pension': np_val,
+                        'national_pension': np_val,
+                        'health_insurance': 0.0,
+                        'employment_insurance': 0.0,
+                        'social_insurance_total': np_val,
+                        'income_tax': 0.0,
+                        'resident_tax': 0.0,
+                        'total_tax': 0.0,
+                        'total_deductions': np_val,
+                        'take_home_ratio': 0.0,
+                        'std_remuneration_pension': None,
+                        'std_remuneration_health': None,
+                        'employer_breakdowns': [{
+                            'company_id': None,
+                            'company_name': 'National Pension (国民年金)',
+                            'gross_pay': 0.0,
+                            'net_pay': 0.0,
+                            'pension': np_val,
+                            'health_insurance': 0.0,
+                            'employment_insurance': 0.0,
+                            'social_insurance_total': np_val,
+                            'income_tax': 0.0,
+                            'resident_tax': 0.0,
+                            'total_tax': 0.0,
+                            'total_deductions': np_val,
+                            'is_national_pension': True,
+                        }],
+                    })
+
+            monthly_timeline.sort(key=lambda x: (x['year'], x['month'], x['is_bonus']))
 
             # Yearly comparisons
             years_dict = {}
             for p in payslips:
-                yr = p.year
+                yr = p.payment_date.year if p.payment_date else p.year
                 if yr not in years_dict:
                     years_dict[yr] = []
                 years_dict[yr].append(p)
@@ -1116,4 +1257,38 @@ class PayslipAnalyticsView(APIView):
         except Exception as e:
             logger.exception("Failed to compute payslip analytics")
             return Response({'data': None, 'status': False, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class NationalPensionPaymentView(APIView):
+    """
+    CRUD API for direct National Pension payments (国民年金 第1号被保険者納付).
+    """
+    def get(self, request, pk=None):
+        if pk:
+            payment = NationalPensionPayment.objects.filter(pk=pk, user=request.user).first()
+            if not payment:
+                return Response({'data': None, 'status': False, 'message': 'Payment record not found'}, status=status.HTTP_404_NOT_FOUND)
+            serializer = NationalPensionPaymentSerializer(payment)
+            return Response({'data': serializer.data, 'status': True}, status=status.HTTP_200_OK)
+
+        payments = NationalPensionPayment.objects.filter(user=request.user).order_by('year', 'month')
+        serializer = NationalPensionPaymentSerializer(payments, many=True)
+        return Response({'data': serializer.data, 'status': True}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = NationalPensionPaymentSerializer(data=request.data)
+        if serializer.is_valid():
+            payment = serializer.save(user=request.user)
+            return Response({'data': NationalPensionPaymentSerializer(payment).data, 'status': True, 'message': 'National Pension payment saved'}, status=status.HTTP_201_CREATED)
+        return Response({'data': None, 'status': False, 'message': 'Validation failed', 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk=None):
+        if pk:
+            payment = NationalPensionPayment.objects.filter(pk=pk, user=request.user).first()
+            if payment:
+                payment.delete()
+                return Response({'status': True, 'message': 'National Pension payment deleted successfully'}, status=status.HTTP_200_OK)
+            return Response({'status': False, 'message': 'Payment record not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'status': False, 'message': 'Primary key required'}, status=status.HTTP_400_BAD_REQUEST)
+
 

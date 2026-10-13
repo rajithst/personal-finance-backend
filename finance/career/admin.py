@@ -7,6 +7,7 @@ from finance.career.models import (
     CompensationHistory,
     MonthlyPayslip,
     TaxWithholdingSlip,
+    NationalPensionPayment,
 )
 
 
@@ -90,3 +91,11 @@ class CareerDocumentAdmin(admin.ModelAdmin):
     list_display = ('title', 'document_type', 'company', 'employment', 'issue_date', 'file_size', 'created_at')
     list_filter = ('document_type',)
     search_fields = ('title', 'company__name', 'notes')
+
+
+@admin.register(NationalPensionPayment)
+class NationalPensionPaymentAdmin(admin.ModelAdmin):
+    list_display = ('year', 'month', 'amount', 'payment_category', 'payment_date', 'receipt_number')
+    list_filter = ('year', 'payment_category')
+    search_fields = ('notes', 'receipt_number')
+

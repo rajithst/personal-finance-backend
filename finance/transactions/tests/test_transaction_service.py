@@ -73,7 +73,6 @@ class TestTransactionServices:
         assert len(new_payees) == 2
         assert set(new_payees['destination']) == {'New Merchant', 'Another Merchant'}
 
-    @pytest.mark.django_db
     def test_assign_category_ids_preserves_bank_payment_flags(self):
         import pandas as pd
         from finance.transactions.services.transaction_import_service import TransactionImportService
@@ -144,4 +143,143 @@ class TestTransactionServices:
         # Card expense has is_payment=False, is_expense=True
         assert card_row['is_payment'] == False
         assert card_row['is_expense'] == True
+
+    def test_full_rewrite_and_category_pipeline_for_future_imports(self):
+        import pandas as pd
+        from finance.transactions.services.transaction_import_service import TransactionImportService
+        from common.transaction_const import EXPENSE_CATEGORY_TYPE, PAYMENT_CATEGORY_TYPE, SAVINGS_CATEGORY_TYPE
+
+        service = TransactionImportService()
+
+        # Payee rules matching the updated production DestinationMap
+        payees_df = pd.DataFrame([
+            {
+                'category_id': 1,
+                'subcategory_id': 1,
+                'destination': 'Rent Payment',
+                'destination_original': 'ＳＭＢＣ（ヤチン（セ−フテイ',
+                'alias_map': 'Rent Payment',
+                'keywords': 'ヤチン, SMBC',
+                'category_type': EXPENSE_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 14,
+                'subcategory_id': 58,
+                'destination': 'ATM Withdrawal',
+                'destination_original': 'ＡＴＭ（５９９）',
+                'alias_map': 'ATM Withdrawal',
+                'keywords': 'ＡＴＭ, ７ＢＫ, ATM, 7BK',
+                'category_type': PAYMENT_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 14,
+                'subcategory_id': 60,
+                'destination': 'Tokyu Card Payment',
+                'destination_original': 'トウキユウ　カ−ド',
+                'alias_map': 'Tokyu Card Payment',
+                'keywords': 'トウキユウ　カ−ド, トウキユウ　カ－ド, トウキユウ カード',
+                'category_type': PAYMENT_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 14,
+                'subcategory_id': 60,
+                'destination': 'Rakuten Card Payment',
+                'destination_original': 'ラクテンカ−ドサ−ビス',
+                'alias_map': 'Rakuten Card Payment',
+                'keywords': 'ラクテンカ−ド, ラクテンカード',
+                'category_type': PAYMENT_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 15,
+                'subcategory_id': 65,
+                'destination': 'Rakuten Securities',
+                'destination_original': 'ラクテンシヨウケン（カ',
+                'alias_map': 'Rakuten Securities',
+                'keywords': 'ネツト　ラクテンシヨウケン（カ,ラクテンシヨウケ（カ,ラクテンシヨウケン（カ',
+                'category_type': SAVINGS_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 19,
+                'subcategory_id': 82,
+                'destination': 'Rakuten Securities Transfer (Internal)',
+                'destination_original': '振込　ラクテンシヨウケン',
+                'alias_map': 'Rakuten Securities Transfer (Internal)',
+                'keywords': '振込　ラクテンシヨウケン,振込 ラクテンシヨウケン',
+                'category_type': PAYMENT_CATEGORY_TYPE,
+            },
+            {
+                'category_id': 3,
+                'subcategory_id': 13,
+                'destination': 'Starbucks Coffee',
+                'destination_original': 'スターバックス',
+                'alias_map': 'Starbucks Coffee',
+                'keywords': 'スターバックス, STARBUCKS',
+                'category_type': EXPENSE_CATEGORY_TYPE,
+            },
+        ])
+
+        # Incoming CSV rows
+        # Bank rows (MizuhoBankLoader sets is_payment=True, is_expense=True for debits; is_income=True for deposits)
+        # Card rows (Card loaders set is_payment=False, is_expense=True)
+        incoming_csv_rows = pd.DataFrame([
+            {'destination': 'ＳＭＢＣ（ヤチン（セ−フテイ', 'destination_original': 'ＳＭＢＣ（ヤチン（セ−フテイ', 'is_payment': True, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+            {'destination': '７ＢＫ００ＩＨＢ−２４２８', 'destination_original': '７ＢＫ００ＩＨＢ−２４２８', 'is_payment': True, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+            {'destination': 'トウキユウ　カ−ド', 'destination_original': 'トウキユウ　カ−ド', 'is_payment': True, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+            {'destination': 'ラクテンカ−ドサ−ビス', 'destination_original': 'ラクテンカ−ドサ−ビス', 'is_payment': True, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+            {'destination': 'ラクテンシヨウケン（カ', 'destination_original': 'ラクテンシヨウケン（カ', 'is_payment': True, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+            {'destination': '振込　ラクテンシヨウケン', 'destination_original': '振込　ラクテンシヨウケン', 'is_payment': False, 'is_expense': False, 'is_income': True, 'is_saving': False, 'alias': ''},
+            {'destination': 'スターバックス　タマプラーザ店', 'destination_original': 'スターバックス　タマプラーザ店', 'is_payment': False, 'is_expense': True, 'is_income': False, 'is_saving': False, 'alias': ''},
+        ])
+
+        # Pipeline Step 1: Rewrite rules
+        rewrite_rules = service.get_rewrite_rules(payees_df)
+        rewritten = service.apply_rewrite_rules(incoming_csv_rows, rewrite_rules)
+
+        # Pipeline Step 2: Assign categories and accounting flags
+        result = service.assign_category_ids(payees_df, rewritten)
+
+        # 1. Rent: Living Expense + Bank Payment
+        rent = result[result['destination'] == 'Rent Payment'].iloc[0]
+        assert rent['is_payment'] == True
+        assert rent['is_expense'] == True
+        assert rent['is_saving'] == False
+
+        # 2. ATM Cash: Living Expense + Bank Payment
+        atm = result[result['destination'] == 'ATM Withdrawal'].iloc[0]
+        assert atm['is_payment'] == True
+        assert atm['is_expense'] == True
+        assert atm['is_saving'] == False
+
+        # 3. Tokyu Card Repayment: Bank Payment ONLY (NOT Living Expense, prevents double-counting)
+        tokyu = result[result['destination'] == 'Tokyu Card Payment'].iloc[0]
+        assert tokyu['is_payment'] == True
+        assert tokyu['is_expense'] == False
+        assert tokyu['is_saving'] == False
+
+        # 4. Rakuten Card Repayment: Bank Payment ONLY (NOT Living Expense, prevents double-counting)
+        rakuten = result[result['destination'] == 'Rakuten Card Payment'].iloc[0]
+        assert rakuten['is_payment'] == True
+        assert rakuten['is_expense'] == False
+        assert rakuten['is_saving'] == False
+
+        # 5. Rakuten Securities (Outbound): Bank Payment + Savings (NOT Living Expense)
+        securities = result[result['destination'] == 'Rakuten Securities'].iloc[0]
+        assert securities['is_payment'] == True
+        assert securities['is_saving'] == True
+        assert securities['is_expense'] == False
+        assert securities['is_income'] == False
+
+        # 6. Rakuten Securities Transfer (Inbound): Bank Inflow / Savings Return (Internal Transfer)
+        sec_inflow = result[result['destination'] == 'Rakuten Securities Transfer (Internal)'].iloc[0]
+        assert sec_inflow['is_income'] == True
+        assert sec_inflow['is_saving'] == True
+        assert sec_inflow['is_payment'] == False
+        assert sec_inflow['is_expense'] == False
+
+        # 7. Credit Card Purchase: Card Expense ONLY (NOT Bank Payment)
+        starbucks = result[result['destination'] == 'Starbucks Coffee'].iloc[0]
+        assert starbucks['is_payment'] == False
+        assert starbucks['is_expense'] == True
+        assert starbucks['is_saving'] == False
+
 

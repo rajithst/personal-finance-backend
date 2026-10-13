@@ -3,6 +3,7 @@ from django.urls import path
 from finance.transactions.views import TransactionView, TransactionBulkView, TransactionImportView
 
 urlpatterns = [
+    path('', TransactionView.as_view()),
     path('item/', TransactionView.as_view()),
     path('item/<int:id>/', TransactionView.as_view()),
     path('list/', TransactionView.as_view()),

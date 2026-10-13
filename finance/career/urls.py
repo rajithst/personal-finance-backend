@@ -14,6 +14,7 @@ from finance.career.views import (
     PayslipAnalyticsView,
     TaxSlipExtractView,
     TaxSlipSaveView,
+    NationalPensionPaymentView,
 )
 
 urlpatterns = [
@@ -54,4 +55,9 @@ urlpatterns = [
     path('payslips/save/', PayslipSaveView.as_view(), name='career-payslip-save'),
     path('tax-slips/extract/', TaxSlipExtractView.as_view(), name='career-tax-slip-extract'),
     path('tax-slips/save/', TaxSlipSaveView.as_view(), name='career-tax-slip-save'),
+
+    # National Pension Payments (国民年金 第1号)
+    path('national-pension/', NationalPensionPaymentView.as_view(), name='career-national-pension-list'),
+    path('national-pension/<int:pk>/', NationalPensionPaymentView.as_view(), name='career-national-pension-detail'),
 ]
+

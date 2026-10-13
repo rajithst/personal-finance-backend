@@ -43,3 +43,52 @@ class TestPayeeService:
 
         assert success is False
         assert "not found" in response['id']
+
+    def test_response_destination_map_serializer_accounting_flags(self):
+        from finance.payees.serializers import ResponseDestinationMapSerializer
+        from common.transaction_const import PAYMENT_CATEGORY_TYPE, EXPENSE_CATEGORY_TYPE
+
+        # Case 1: ATM withdrawal should be both payment and expense
+        atm_obj = MagicMock(spec=DestinationMap)
+        atm_obj.destination = "ATM Withdrawal"
+        atm_obj.destination_original = "ＡＴＭ（５９９）"
+        atm_obj.destination_eng = "ATM Withdrawal"
+        atm_obj.keywords = "ATM, 7BK"
+        atm_obj.category = None
+        atm_obj.category_type = PAYMENT_CATEGORY_TYPE
+        atm_obj.subcategory = None
+
+        atm_data = ResponseDestinationMapSerializer(atm_obj).data
+        assert atm_data['is_payment'] is True
+        assert atm_data['is_expense'] is True
+        assert atm_data['is_income'] is False
+        assert atm_data['is_saving'] is False
+
+        # Case 2: Direct bank living expenses (Rent Payment) should be both payment and expense
+        rent_obj = MagicMock(spec=DestinationMap)
+        rent_obj.destination = "Rent Payment"
+        rent_obj.destination_original = "ＳＭＢＣ（ヤチン）"
+        rent_obj.destination_eng = "Rent"
+        rent_obj.keywords = "ヤチン"
+        rent_obj.category = None
+        rent_obj.category_type = EXPENSE_CATEGORY_TYPE
+        rent_obj.subcategory = None
+
+        rent_data = ResponseDestinationMapSerializer(rent_obj).data
+        assert rent_data['is_payment'] is True
+        assert rent_data['is_expense'] is True
+
+        # Case 3: Credit Card bill settlements should be payment ONLY, NOT expense
+        card_obj = MagicMock(spec=DestinationMap)
+        card_obj.destination = "Rakuten Card Payment"
+        card_obj.destination_original = "ラクテンカ−ドサ−ビス"
+        card_obj.destination_eng = "Rakuten Card Payment"
+        card_obj.keywords = "ラクテンカ−ド"
+        card_obj.category = None
+        card_obj.category_type = PAYMENT_CATEGORY_TYPE
+        card_obj.subcategory = None
+
+        card_data = ResponseDestinationMapSerializer(card_obj).data
+        assert card_data['is_payment'] is True
+        assert card_data['is_expense'] is False
+

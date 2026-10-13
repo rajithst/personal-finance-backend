@@ -133,6 +133,9 @@ class PayslipSchema(BaseModel):
     paid_leave_days_used: float = 0.0
     remaining_paid_leave_days: float = 0.0
 
+    # Warnings / Mismatches
+    warnings: list[str] = []
+
     # Standard Monthly Remuneration & YTD Totals
     std_remuneration_health: float = 0.0
     std_remuneration_pension: float = 0.0
@@ -272,7 +275,7 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
             data.taxable_amount = data.gross_pay
         data.gross_pay = calculated_gross
 
-    # Strict Gross Pay Check (0 yen mismatch tolerance!)
+    # Gross Pay Check
     if abs(data.gross_pay - calculated_gross) > 0.01:
         if data.gross_pay == 0.0 and calculated_gross > 0:
             data.gross_pay = calculated_gross
@@ -280,9 +283,13 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
             data.base_salary = data.gross_pay
             calculated_gross = data.gross_pay
         else:
-            raise ValidationError(f"Gross pay validation failed: {data.gross_pay} != {calculated_gross}")
+            msg = f"Gross Pay mismatch: extracted ¥{data.gross_pay:,.0f} != calculated sum ¥{calculated_gross:,.0f}"
+            logger.warning(msg)
+            data.warnings.append(msg)
+            if data.gross_pay == 0.0:
+                data.gross_pay = calculated_gross
 
-    # 2. Strict Social Insurance Validation
+    # 2. Social Insurance Validation
     calculated_social = sum([data.health_insurance, data.nursing_insurance, data.pension, data.employment_insurance])
     if abs(data.social_insurance_total - calculated_social) > 0.01:
         if data.social_insurance_total == 0.0 and calculated_social > 0.0:
@@ -291,9 +298,13 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
             data.health_insurance = data.social_insurance_total
             calculated_social = data.social_insurance_total
         else:
-            raise ValidationError(f"Social insurance validation failed: {data.social_insurance_total} != {calculated_social}")
+            msg = f"Social Insurance mismatch: extracted ¥{data.social_insurance_total:,.0f} != calculated sum ¥{calculated_social:,.0f}"
+            logger.warning(msg)
+            data.warnings.append(msg)
+            if data.social_insurance_total == 0.0:
+                data.social_insurance_total = calculated_social
 
-    # 3. Strict Taxes Validation
+    # 3. Taxes Validation
     calculated_tax = sum([data.income_tax, data.resident_tax, data.year_end_tax_adjustment])
     if abs(data.total_tax - calculated_tax) > 0.01:
         if data.total_tax == 0.0 and calculated_tax > 0.0:
@@ -302,9 +313,13 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
             data.income_tax = data.total_tax
             calculated_tax = data.total_tax
         else:
-            raise ValidationError(f"Total tax validation failed: {data.total_tax} != {calculated_tax}")
+            msg = f"Total Tax mismatch: extracted ¥{data.total_tax:,.0f} != calculated sum ¥{calculated_tax:,.0f}"
+            logger.warning(msg)
+            data.warnings.append(msg)
+            if data.total_tax == 0.0:
+                data.total_tax = calculated_tax
 
-    # 4. Strict Deductions Validation
+    # 4. Deductions Validation
     calculated_deductions = sum([
         data.social_insurance_total, data.total_tax,
         data.union_fee, data.mutual_aid_fee, data.meal_deduction, data.other_deductions
@@ -313,7 +328,11 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
         if data.total_deductions == 0.0 and calculated_deductions > 0.0:
             data.total_deductions = calculated_deductions
         else:
-            raise ValidationError(f"Total deductions validation failed: {data.total_deductions} != {calculated_deductions}")
+            msg = f"Total Deductions mismatch: extracted ¥{data.total_deductions:,.0f} != calculated sum ¥{calculated_deductions:,.0f}"
+            logger.warning(msg)
+            data.warnings.append(msg)
+            if data.total_deductions == 0.0:
+                data.total_deductions = calculated_deductions
 
     # 5. Handle Non-taxable Commuting Allowance on Net Pay:
     # If net_pay was extracted as taxable net (差引支給額計) excluding commutation allowance, adjust it to match bank transfer!
@@ -321,12 +340,16 @@ def extract_payslip_data(pdf_bytes: bytes) -> dict:
     if data.commutation_allowance > 0 and abs((data.net_pay + data.commutation_allowance) - calculated_net) <= 0.01:
         data.net_pay = calculated_net
 
-    # Strict Net Pay Check (0 yen mismatch tolerance!)
+    # Net Pay Check
     if abs(data.net_pay - calculated_net) > 0.01:
         if data.net_pay == 0.0 and calculated_net > 0.0:
             data.net_pay = calculated_net
         else:
-            raise ValidationError(f"Net pay validation failed: {data.net_pay} != {calculated_net}")
+            msg = f"Net Pay mismatch: extracted ¥{data.net_pay:,.0f} != calculated net ¥{calculated_net:,.0f}"
+            logger.warning(msg)
+            data.warnings.append(msg)
+            if data.net_pay == 0.0:
+                data.net_pay = calculated_net
 
     # If bank_transfer_amount is 0 or omitted, set to net_pay
     if not data.bank_transfer_amount or data.bank_transfer_amount == 0.0:

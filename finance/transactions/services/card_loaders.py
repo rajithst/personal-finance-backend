@@ -172,9 +172,16 @@ class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
         return ['日付', 'お引出金額', 'お取引内容']
 
     def get_expected_columns(self):
-        return list(set(self._get_income_columns() + self._get_expense_columns()))
+        return ['日付']
 
     def process_data(self, df, account):
+        # Support both internet banking export formats
+        rename_map = {
+            'お引出し金額': 'お引出金額',
+            'お預入れ金額': 'お預入金額',
+            'お取扱内容': 'お取引内容',
+        }
+        df = df.rename(columns=rename_map)
         df_income = df[self._get_income_columns()].copy()
         df_expense = df[self._get_expense_columns()].copy()
         df_income.columns = ['date', 'amount', 'destination']

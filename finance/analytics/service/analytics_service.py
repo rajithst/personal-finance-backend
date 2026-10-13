@@ -71,7 +71,7 @@ class AnalyticsService:
         if subcategories:
             qs = qs.filter(subcategory_id__in=subcategories)
         if accounts:
-            qs = qs.filter(account_id__in=accounts)
+            qs = qs.filter(Q(account_id__in=accounts) | Q(counterparty_account_id__in=accounts))
         if min_amount is not None and str(min_amount).strip() != '':
             try:
                 qs = qs.filter(amount__gte=float(min_amount))
@@ -94,20 +94,24 @@ class AnalyticsService:
         if flow_type == 'expense':
             flow_qs = qs.filter(is_expense=True, is_saving=False)
         elif flow_type == 'income':
-            flow_qs = qs.filter(is_income=True)
+            flow_qs = qs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19))
         elif flow_type == 'saving':
             flow_qs = qs.filter(is_saving=True)
         elif flow_type == 'payment':
-            flow_qs = qs.filter(is_payment=True)
+            flow_qs = qs.filter(is_payment=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19))
+        elif flow_type == 'transfer':
+            flow_qs = qs.filter(Q(category__category='Internal Transfer') | Q(category_id=19))
         else:
             flow_qs = qs.filter(is_expense=True, is_saving=False)
 
         # 1. Summary KPIs
         kpi_agg = qs.aggregate(
-            total_income=Sum('amount', filter=Q(is_income=True)),
+            total_income=Sum('amount', filter=Q(is_income=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
             total_expense=Sum('amount', filter=Q(is_expense=True, is_saving=False)),
-            total_saving=Sum('amount', filter=Q(is_saving=True)),
-            total_payment=Sum('amount', filter=Q(is_payment=True)),
+            total_saving_out=Sum('amount', filter=Q(is_saving=True, is_payment=True)),
+            total_saving_in=Sum('amount', filter=Q(is_saving=True, is_income=True)),
+            total_payment=Sum('amount', filter=Q(is_payment=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
+            total_transfer=Sum('amount', filter=Q(category__category='Internal Transfer') | Q(category_id=19)),
             total_count=Count('id'),
             avg_amount=Avg('amount'),
             min_date=Min('date'),
@@ -116,8 +120,9 @@ class AnalyticsService:
 
         total_income = float(kpi_agg['total_income'] or 0)
         total_expense = float(kpi_agg['total_expense'] or 0)
-        total_saving = float(kpi_agg['total_saving'] or 0)
+        total_saving = float((kpi_agg['total_saving_out'] or 0) - (kpi_agg['total_saving_in'] or 0))
         total_payment = float(kpi_agg['total_payment'] or 0)
+        total_transfer = float(kpi_agg['total_transfer'] or 0)
         total_count = kpi_agg['total_count'] or 0
         avg_amount = round(float(kpi_agg['avg_amount'] or 0), 2)
         net_savings = round(total_income - total_expense, 2)
@@ -151,6 +156,7 @@ class AnalyticsService:
             'total_expense': total_expense,
             'total_saving': total_saving,
             'total_payment': total_payment,
+            'total_transfer': total_transfer,
             'net_savings': net_savings,
             'savings_rate': savings_rate,
             'total_count': total_count,
@@ -175,10 +181,12 @@ class AnalyticsService:
             qs.annotate(period=trunc_func)
             .values('period')
             .annotate(
-                income=Sum('amount', filter=Q(is_income=True)),
+                income=Sum('amount', filter=Q(is_income=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
                 expense=Sum('amount', filter=Q(is_expense=True, is_saving=False)),
-                saving=Sum('amount', filter=Q(is_saving=True)),
-                payment=Sum('amount', filter=Q(is_payment=True)),
+                saving_out=Sum('amount', filter=Q(is_saving=True, is_payment=True)),
+                saving_in=Sum('amount', filter=Q(is_saving=True, is_income=True)),
+                payment=Sum('amount', filter=Q(is_payment=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
+                transfer=Sum('amount', filter=Q(category__category='Internal Transfer') | Q(category_id=19)),
                 count=Count('id'),
             )
             .order_by('period')
@@ -195,8 +203,9 @@ class AnalyticsService:
 
             p_inc = float(item['income'] or 0)
             p_exp = float(item['expense'] or 0)
-            p_sav = float(item['saving'] or 0)
+            p_sav = float((item.get('saving_out') or item.get('saving') or 0) - (item.get('saving_in') or 0))
             p_pay = float(item['payment'] or 0)
+            p_trans = float(item.get('transfer') or 0)
             p_net = round(p_inc - p_exp, 2)
             cumulative_savings = round(cumulative_savings + p_net, 2)
 
@@ -206,6 +215,7 @@ class AnalyticsService:
                 'expense': p_exp,
                 'saving': p_sav,
                 'payment': p_pay,
+                'transfer': p_trans,
                 'net': p_net,
                 'cumulative_net': cumulative_savings,
                 'count': item['count'],
@@ -509,16 +519,17 @@ class AnalyticsService:
             needs_cnt=Count('id', filter=Q(is_expense=True, is_saving=False) & needs_q),
             wants_sum=Sum('amount', filter=Q(is_expense=True, is_saving=False) & wants_q),
             wants_cnt=Count('id', filter=Q(is_expense=True, is_saving=False) & wants_q),
-            savings_sum=Sum('amount', filter=Q(is_saving=True)),
+            savings_out=Sum('amount', filter=Q(is_saving=True, is_payment=True)),
+            savings_in=Sum('amount', filter=Q(is_saving=True, is_income=True)),
             savings_cnt=Count('id', filter=Q(is_saving=True)),
             other_exp_sum=Sum('amount', filter=Q(is_expense=True, is_saving=False) & ~needs_q & ~wants_q),
             other_exp_cnt=Count('id', filter=Q(is_expense=True, is_saving=False) & ~needs_q & ~wants_q),
-            income_sum=Sum('amount', filter=Q(is_income=True)),
+            income_sum=Sum('amount', filter=Q(is_income=True) & ~Q(category__category='Internal Transfer') & ~Q(category_id=19)),
         )
 
         n_sum = float(alloc_agg['needs_sum'] or 0)
         w_sum = float(alloc_agg['wants_sum'] or 0)
-        s_sum = float(alloc_agg['savings_sum'] or 0)
+        s_sum = float((alloc_agg.get('savings_out') or alloc_agg.get('savings_sum') or 0) - (alloc_agg.get('savings_in') or 0))
         o_sum = float(alloc_agg['other_exp_sum'] or 0)
         inc_sum = float(alloc_agg['income_sum'] or 0)
 
@@ -715,12 +726,14 @@ class AnalyticsService:
         )
 
         def _calc_macro(qs):
-            inc = float(qs.filter(is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            inc = float(qs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).aggregate(s=Sum('amount'))['s'] or 0)
             exp = float(qs.filter(is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
             sur = round(inc - exp, 2)
-            bank_deb = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
-            sec = float(qs.filter(is_saving=True).aggregate(s=Sum('amount'))['s'] or 0)
-            tot_outflow = round(bank_deb + sec, 2)
+            bank_deb = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
+            sec_out = float(qs.filter(is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            sec_in = float(qs.filter(is_saving=True, is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            sec = round(sec_out - sec_in, 2)
+            tot_outflow = round(bank_deb + sec_out, 2)
             sav_rate = round((sur / inc * 100), 1) if inc > 0 else 0.0
             miz_in = float(qs.filter(account__account_type='BANK_ACCOUNT', is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
             net_bank = round(miz_in - tot_outflow, 2)
@@ -785,12 +798,14 @@ class AnalyticsService:
         monthly_breakdown = []
         for m in active_months:
             mqs = qs_year.filter(date__month=m)
-            m_inc = float(mqs.filter(is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_inc = float(mqs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).aggregate(s=Sum('amount'))['s'] or 0)
             m_exp = float(mqs.filter(is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
             m_sur = round(m_inc - m_exp, 2)
-            m_bank_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_sec = float(mqs.filter(is_saving=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_tot_outflow = round(m_bank_deb + m_sec, 2)
+            m_bank_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec_out = float(mqs.filter(is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec_in = float(mqs.filter(is_saving=True, is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec = round(m_sec_out - m_sec_in, 2)
+            m_tot_outflow = round(m_bank_deb + m_sec_out, 2)
             m_miz_in = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
             m_net_bank = round(m_miz_in - m_tot_outflow, 2)
             m_cc_spend = float(mqs.filter(account__account_type='CREDIT_CARD', is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
@@ -844,7 +859,7 @@ class AnalyticsService:
         }
 
         # 3. Bank Debit Payments
-        bank_qs = qs_year.filter(account__account_type='BANK_ACCOUNT', is_payment=True)
+        bank_qs = qs_year.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False)
         tot_bank_debits = y_macro['bank_deb']
         payee_agg = (
             bank_qs.values('destination', 'category__category', 'subcategory__name')
@@ -914,7 +929,8 @@ class AnalyticsService:
         bank_non_exp_qs = qs_year.filter(
             account__account_type='BANK_ACCOUNT',
             is_payment=True,
-            is_expense=False
+            is_expense=False,
+            is_saving=False
         ).exclude(destination__in=tracked_cards)
 
         atm_q = Q(destination__icontains='ATM') | Q(destination_original__icontains='ATM') | Q(destination_original__startswith='７ＢＫ')
@@ -1083,9 +1099,11 @@ class AnalyticsService:
         for m in active_months:
             mqs = qs_year.filter(date__month=m)
             m_inc = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_sec = float(mqs.filter(is_saving=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_out = round(m_deb + m_sec, 2)
+            m_sec_out = float(mqs.filter(is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec_in = float(mqs.filter(is_saving=True, is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec = round(m_sec_out - m_sec_in, 2)
+            m_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
+            m_out = round(m_deb + m_sec_out, 2)
             m_actual_delta = round(m_inc - m_out, 2)
 
             m_exp = float(mqs.filter(is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
@@ -1096,7 +1114,8 @@ class AnalyticsService:
             m_bank_non_exp = mqs.filter(
                 account__account_type='BANK_ACCOUNT',
                 is_payment=True,
-                is_expense=False
+                is_expense=False,
+                is_saving=False
             ).exclude(destination__in=tracked_cards)
             m_atm = float(m_bank_non_exp.filter(atm_q).aggregate(s=Sum('amount'))['s'] or 0)
             m_cards = float(m_bank_non_exp.filter(card_debit_q).aggregate(s=Sum('amount'))['s'] or 0)

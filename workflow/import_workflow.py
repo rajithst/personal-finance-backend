@@ -41,6 +41,8 @@ class ImportCsvWorkflow:
             raise ValueError(f"Error processing files: {str(e)}") from e
 
     def _skip_rows(self, file_object, keywords: List[str]) -> int:
+        if file_object is None:
+            return 0
         skip_count = 0
         for line in file_object:
             row = [item.strip('\'"').lstrip('\ufeff') for item in line.strip().split(",")]

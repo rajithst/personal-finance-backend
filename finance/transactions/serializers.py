@@ -27,8 +27,8 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
     class Meta:
         model = Transaction
         fields = ['id', 'category', 'category_text', 'subcategory', 'subcategory_text', 'is_payment', 'is_deleted',
-                  'is_merge', 'is_saving', 'is_expense', 'is_income', 'merge_id', 'account', 'account_name',
-                  'account_type', 'amount', 'source',
+                  'is_merge', 'is_saving', 'is_expense', 'is_income', 'is_third_party', 'on_behalf_of', 'merge_id', 'account', 'account_name',
+                  'account_type', 'counterparty_account', 'counterparty_account_name', 'counterparty_account_type', 'amount', 'source',
                   'date', 'destination_original', 'destination', 'alias', 'year', 'month', 'month_text', 'notes',
                   'delete_reason']
 
@@ -39,6 +39,8 @@ class ResponseTransactionSerializer(serializers.ModelSerializer, DateSerializeHe
     subcategory_text = serializers.SerializerMethodField()
     account_name = serializers.ReadOnlyField(source='account.account_name')
     account_type = serializers.ReadOnlyField(source='account.account_type')
+    counterparty_account_name = serializers.ReadOnlyField(source='counterparty_account.account_name')
+    counterparty_account_type = serializers.ReadOnlyField(source='counterparty_account.account_type')
 
     def get_category_text(self, obj):
         return obj.category.category if obj.category else None

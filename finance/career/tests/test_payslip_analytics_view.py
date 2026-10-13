@@ -126,3 +126,40 @@ class TestPayslipAnalyticsView:
         resp = client_authenticated.get(url)
         assert resp.status_code == 200
         assert resp.json()['data']['summary']['total_gross_pay'] == 0.0
+
+    def test_analytics_multi_employer_same_month_aggregation(self, client_authenticated, auth_user):
+        c1 = CompanyProfile.objects.create(user=auth_user, name="Employer A")
+        c2 = CompanyProfile.objects.create(user=auth_user, name="Employer B")
+        e1 = Employment.objects.create(user=auth_user, company=c1, job_title="Engineer", start_date="2022-01-01")
+        e2 = Employment.objects.create(user=auth_user, company=c2, job_title="Consultant", start_date="2022-07-01")
+
+        # Two payslips in the same month (2022-07)
+        MonthlyPayslip.objects.create(
+            user=auth_user, employment=e1, year=2022, month=7,
+            gross_pay=500000, net_pay=400000, pension=45000, health_insurance=25000,
+            employment_insurance=1500, income_tax=20000, resident_tax=20000, total_tax=40000,
+            social_insurance_total=71500, total_deductions=100000, is_bonus=False
+        )
+        MonthlyPayslip.objects.create(
+            user=auth_user, employment=e2, year=2022, month=7,
+            gross_pay=100000, net_pay=95000, pension=0, health_insurance=0,
+            employment_insurance=0, income_tax=5000, resident_tax=0, total_tax=5000,
+            social_insurance_total=0, total_deductions=5000, is_bonus=False
+        )
+
+        url = reverse('career-payslips-analytics')
+        resp = client_authenticated.get(url)
+        assert resp.status_code == 200
+        timeline = resp.json()['data']['monthly_timeline']
+        # Must be exactly 1 point on the timeline, not duplicate 2022-07
+        assert len(timeline) == 1
+        point = timeline[0]
+        assert point['year_month'] == "2022-07"
+        assert point['gross_pay'] == 600000.0
+        assert point['net_pay'] == 495000.0
+        assert point['total_deductions'] == 105000.0
+        assert point['total_tax'] == 45000.0
+        assert "Employer A" in point['company_name']
+        assert "Employer B" in point['company_name']
+        assert len(point['employer_breakdowns']) == 2
+
