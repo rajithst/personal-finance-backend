@@ -66,7 +66,7 @@ class ImportCsvWorkflow:
             cfg = base_read_config.copy()
             cfg['encoding'] = enc
             try:
-                if not cfg.get('skiprows'):
+                if cfg.get('skiprows') is None:
                     expected_columns = self.account_processor.get_expected_columns()
                     if not expected_columns:
                         raise ValueError('Expected columns should be defined or skiprows should be set in read_config')
@@ -98,6 +98,7 @@ class ImportCsvWorkflow:
             init_read_config = dict(self.account_processor.get_read_config())
             df = self._read_with_encoding_fallback(storage, file_name, init_read_config)
             df = df.reset_index(drop=True)
+            df.attrs['file_name'] = file_name
             df = self.account_processor.process_data(df, self.account)
             return self.account_processor.validate_dataframe(df)
         except Exception as e:

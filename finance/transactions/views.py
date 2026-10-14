@@ -138,13 +138,17 @@ class TransactionImportView(APIView):
             'user_id': user_id,
         }
 
-        is_imported = import_service.import_transactions(import_parameters)
-        if is_imported is not False and is_imported is not None:
-            res_data = {'uploaded_files': uploaded_files}
-            if isinstance(is_imported, dict):
-                res_data.update(is_imported)
-            elif isinstance(is_imported, list):
-                res_data['imported_count'] = len(is_imported)
-            return Response({'data': res_data, 'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
-        return Response({'data': None, 'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        try:
+            is_imported = import_service.import_transactions(import_parameters)
+            if is_imported is not False and is_imported is not None:
+                res_data = {'uploaded_files': uploaded_files}
+                if isinstance(is_imported, dict):
+                    res_data.update(is_imported)
+                elif isinstance(is_imported, list):
+                    res_data['imported_count'] = len(is_imported)
+                return Response({'data': res_data, 'message': 'Imported Successfully', 'status': True}, status=status.HTTP_200_OK)
+            return Response({'data': None, 'message': 'Failed to import', 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.exception("Error importing transactions: %s", e)
+            return Response({'data': None, 'message': f"Failed to import: {str(e)}", 'status': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

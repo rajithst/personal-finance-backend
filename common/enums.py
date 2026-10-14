@@ -6,6 +6,7 @@ class AccountTypes(Enum):
     EPOS_CARD = 2
     DOCOMO_CARD = 3
     MIZUHO = 4
+    TOKYU_CARD = 5
 
 
 class AccountProviders(Enum):
@@ -13,6 +14,7 @@ class AccountProviders(Enum):
     EPOS = 'EPOS'
     DOCOMO = 'Docomo'
     MIZUHO = 'Mizuho'
+    TOKYU = 'Tokyu'
 
 
 class DataSource(Enum):

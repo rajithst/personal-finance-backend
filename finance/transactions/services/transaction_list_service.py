@@ -182,6 +182,23 @@ class TransactionListService:
             update_dict['counterparty_account_id'] = counterparty_account
         try:
             Transaction.objects.filter(destination=destination).update(**update_dict)
+            if destination:
+                dm_update = {}
+                if category is not None:
+                    dm_update['category_id'] = category
+                    try:
+                        from finance.categories.models import TransactionCategory
+                        cat_type = TransactionCategory.objects.filter(id=category).values_list('category_type', flat=True).first()
+                        if cat_type:
+                            dm_update['category_type'] = cat_type
+                    except Exception:
+                        pass
+                if subcategory is not None:
+                    dm_update['subcategory_id'] = subcategory
+                if alias:
+                    dm_update['destination_eng'] = alias
+                if dm_update:
+                    DestinationMap.objects.filter(destination=destination).update(**dm_update)
         except ValidationError as e:
             logging.exception("Validation error: %s", e)
         except IntegrityError as e:

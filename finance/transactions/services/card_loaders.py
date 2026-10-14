@@ -60,8 +60,9 @@ class BaseLoader:
             if 'destination' in df.columns:
                 df['destination'] = df['destination'].apply(
                     lambda x: self.clean_electronic_signatures(x, cleanable_signatures))
-                df['destination_original'] = df['destination'].apply(
-                    lambda x: x.strip() if isinstance(x, str) else x)
+                if 'destination_original' not in df.columns:
+                    df['destination_original'] = df['destination'].apply(
+                        lambda x: x.strip() if isinstance(x, str) else x)
             return df
         except Exception as e:
             logging.exception("Error cleaning destinations: %s", e)
@@ -200,6 +201,71 @@ class MizuhoBankLoader(BaseLoader, ImportWorkflowContract):
         return super().validate_dataframe(transactions)
 
 
+class TokyuCardLoader(BaseLoader, ImportWorkflowContract):
+    def __init__(self):
+        super().__init__()
+        self.cleanable_signatures = []
+
+    def get_read_config(self):
+        return {
+            'encoding': 'cp932',
+            'engine': 'python',
+            'skiprows': 0,
+            'header': None,
+            'names': list(range(20)),
+            'on_bad_lines': 'skip'
+        }
+
+    def get_expected_columns(self):
+        return []
+
+    def process_data(self, df, account):
+        import io
+        from finance.transactions.services.tokyu_card_service import extract_tokyu_statement
+
+        # Reconstruct CSV string representation from the loaded raw dataframe
+        buffer = io.StringIO()
+        df.to_csv(buffer, index=False, header=False)
+        csv_text = buffer.getvalue()
+
+        file_name = df.attrs.get('file_name', '')
+        parsed = extract_tokyu_statement(csv_text, file_name=file_name)
+
+        records = []
+        for item in parsed.transactions:
+            records.append({
+                'date': item.date,
+                'destination': item.destination,
+                'destination_original': getattr(item, 'destination_original', None) or item.destination,
+                'amount': item.amount,
+            })
+
+        # Fallback for date-less installment-only files (e.g. 202608.csv)
+        if not records and (parsed.total_payment_due > 0 or parsed.cashing_interest > 0 or parsed.cashing_principal > 0):
+            pay_date = parsed.payment_date or (f"{parsed.statement_year_month}-10" if parsed.statement_year_month else None)
+            fee_amount = parsed.cashing_interest if parsed.cashing_interest > 0 else parsed.total_payment_due
+            if pay_date and fee_amount > 0:
+                records.append({
+                    'date': pay_date,
+                    'destination': 'Tokyu Card Cashing Installment Fee',
+                    'destination_original': '※キャッシングリボ返済金※',
+                    'amount': fee_amount,
+                })
+
+        if not records:
+            empty_df = pd.DataFrame(columns=['date', 'destination', 'amount'])
+            return self.set_default_props(empty_df, account)
+
+        result_df = pd.DataFrame(records)
+        result_df['date'] = pd.to_datetime(result_df['date'], errors='coerce').dt.date
+        result_df = self.set_default_props(result_df, account)
+        result_df = self.clean_destinations(result_df, self.cleanable_signatures)
+        return result_df
+
+    def validate_dataframe(self, transactions):
+        return super().validate_dataframe(transactions)
+
+
 class TransactionProcessFactory:
     @staticmethod
     def get_processor(provider):
@@ -211,5 +277,7 @@ class TransactionProcessFactory:
             return DocomoCardLoader()
         elif provider == AccountProviders.MIZUHO.value:
             return MizuhoBankLoader()
+        elif provider == AccountProviders.TOKYU.value:
+            return TokyuCardLoader()
         else:
             raise ValueError('Unknown source')

@@ -95,22 +95,25 @@ class TransactionImportService:
             rak_card_id = Account.objects.filter(account_name__icontains='Rakuten Card').values_list('id', flat=True).first()
             epos_card_id = Account.objects.filter(account_name__icontains='EPOS').values_list('id', flat=True).first()
             docomo_card_id = Account.objects.filter(account_name__icontains='Docomo').values_list('id', flat=True).first()
+            tokyu_card_id = Account.objects.filter(account_name__icontains='Tokyu').values_list('id', flat=True).first()
 
             for expense in expense_records:
                 expense['user_id'] = user_id
                 dest = str(expense.get('destination') or '') + ' ' + str(expense.get('destination_original') or '')
-                if ('Rakuten Securities' in dest or 'ラクテンシヨウケン' in dest or '楽天証券' in dest) and rak_sec_id:
+                if ('Rakuten Securities' in dest or 'ラクテンシヨウケン' in dest or '楽天証券' in dest) and rak_sec_id and rak_sec_id != account.id:
                     expense['counterparty_account_id'] = rak_sec_id
-                elif ('JP Post' in dest or 'ユウチヨ' in dest or 'ゆうちょ' in dest or 'テンナコン' in dest) and jp_post_id:
+                elif ('JP Post' in dest or 'ユウチヨ' in dest or 'ゆうちょ' in dest or 'テンナコン' in dest) and jp_post_id and jp_post_id != account.id:
                     expense['counterparty_account_id'] = jp_post_id
-                elif ('Wise' in dest or 'ワイズ' in dest or 'トランスファーワイズ' in dest or 'ヒチナイドウ' in dest) and wise_id:
+                elif ('Wise' in dest or 'ワイズ' in dest or 'トランスファーワイズ' in dest or 'ヒチナイドウ' in dest) and wise_id and wise_id != account.id:
                     expense['counterparty_account_id'] = wise_id
-                elif ('Rakuten Card' in dest or 'ラクテンカード' in dest) and rak_card_id:
+                elif ('Rakuten Card' in dest or 'ラクテンカード' in dest) and rak_card_id and rak_card_id != account.id:
                     expense['counterparty_account_id'] = rak_card_id
-                elif ('EPOS Card' in dest or 'エポス' in dest) and epos_card_id:
+                elif ('EPOS Card' in dest or 'エポス' in dest) and epos_card_id and epos_card_id != account.id:
                     expense['counterparty_account_id'] = epos_card_id
-                elif ('Docomo Card' in dest or 'ドコモ' in dest) and docomo_card_id:
+                elif ('Docomo Card' in dest or 'ドコモ' in dest) and docomo_card_id and docomo_card_id != account.id:
                     expense['counterparty_account_id'] = docomo_card_id
+                elif ('Tokyu Card' in dest or 'トウキユウ' in dest or '東急' in dest) and tokyu_card_id and tokyu_card_id != account.id:
+                    expense['counterparty_account_id'] = tokyu_card_id
                 expense_objects.append(Transaction(**expense))
             try:
                 with transaction.atomic():
@@ -311,6 +314,8 @@ class TransactionImportService:
     def apply_rewrite_rules(self, transactions, rewrite_rules):
         for field in rewrite_rules:
             mask = transactions['destination'].astype(str).str.contains(field, regex=False, na=False)
+            if 'destination_original' in transactions.columns:
+                mask = mask | transactions['destination_original'].astype(str).str.contains(field, regex=False, na=False)
             transactions.loc[mask, 'alias'] = rewrite_rules[field]
             transactions.loc[mask, 'destination'] = rewrite_rules[field]
         return transactions
@@ -425,6 +430,14 @@ class TransactionImportService:
             (transactions['subcategory_id'] == 60)
         )
         transactions.loc[cc_settlement_mask, ['is_expense', 'is_payment', 'is_saving', 'is_income']] = [False, True, False, False]
+
+        # Loan & Cashing Repayments (Personal Loan Payments, Tokyu Card Cashing Installment Fee)
+        # These are living expense obligations that must be marked as is_expense=True and is_payment=True
+        loan_mask = (
+            (transactions['subcategory_id'] == 56) |
+            transactions['destination'].astype(str).str.contains('Cashing Installment|Personal Loan|キャッシングリボ', case=False, na=False)
+        ) & (~transactions['is_income'])
+        transactions.loc[loan_mask, ['is_expense', 'is_payment', 'is_saving', 'is_income']] = [True, True, False, False]
 
         # Knowledge Section Rule 2: ATM Cash Withdrawals are living expenses spent outside tracked card statements (Payment + Expense)
         dest_orig_match = (
