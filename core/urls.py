@@ -49,6 +49,8 @@ urlpatterns = [
     path('finance/analytics/', include('finance.analytics.urls')),
     path('finance/settings/', include('finance.settings.urls')),
     path('finance/career/', include('finance.career.urls')),
+    path('api/v1/personal-vault/', include('finance.personal_vault.urls')),
+    path('finance/personal-vault/', include('finance.personal_vault.urls')),
     path('logs/', include('changelog.urls')),
     path('oauth/', include('oauth.urls')),
     path('auth/', include('djoser.urls')),
