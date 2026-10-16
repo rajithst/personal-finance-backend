@@ -726,16 +726,16 @@ class AnalyticsService:
         )
 
         def _calc_macro(qs):
-            inc = float(qs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).aggregate(s=Sum('amount'))['s'] or 0)
-            exp = float(qs.filter(is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
+            inc = float(qs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
+            exp = float(qs.filter(is_expense=True, is_saving=False).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
             sur = round(inc - exp, 2)
-            bank_deb = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
-            sec_out = float(qs.filter(is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
-            sec_in = float(qs.filter(is_saving=True, is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            bank_deb = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
+            sec_out = float(qs.filter(account__account_type='BANK_ACCOUNT', is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            sec_in = float(qs.filter(account__account_type='BANK_ACCOUNT', is_saving=True, is_payment=False).aggregate(s=Sum('amount'))['s'] or 0)
             sec = round(sec_out - sec_in, 2)
-            tot_outflow = round(bank_deb + sec_out, 2)
+            tot_outflow = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
             sav_rate = round((sur / inc * 100), 1) if inc > 0 else 0.0
-            miz_in = float(qs.filter(account__account_type='BANK_ACCOUNT', is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            miz_in = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=False).aggregate(s=Sum('amount'))['s'] or 0)
             net_bank = round(miz_in - tot_outflow, 2)
             cc_spend = float(qs.filter(account__account_type='CREDIT_CARD', is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
             cc_bills = float(qs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).filter(cc_card_debit_q).aggregate(s=Sum('amount'))['s'] or 0)
@@ -754,19 +754,46 @@ class AnalyticsService:
                 'atm': atm,
             }
 
-        # 1. Macro Comparison: 2025 vs 2026
-        m25 = _calc_macro(qs_base.filter(date__year=2025))
-        m26 = _calc_macro(qs_base.filter(date__year=2026))
+        # 1. Macro Comparison: (selected_year - 1) vs selected_year
+        MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        prev_year = selected_year - 1
+        curr_year = selected_year
+        m_prev = _calc_macro(qs_base.filter(date__year=prev_year))
+        m_curr = _calc_macro(qs_base.filter(date__year=curr_year))
+
+        prev_active_months = sorted(list(qs_base.filter(date__year=prev_year).annotate(m=ExtractMonth('date')).values_list('m', flat=True).distinct()))
+        curr_active_months = sorted(list(qs_base.filter(date__year=curr_year).annotate(m=ExtractMonth('date')).values_list('m', flat=True).distinct()))
+
+        if len(prev_active_months) == 12:
+            prev_label = f"{prev_year} (Full Year)"
+        elif prev_active_months:
+            prev_label = f"{prev_year} ({MONTH_NAMES[prev_active_months[0]-1]}–{MONTH_NAMES[prev_active_months[-1]-1]})"
+        else:
+            prev_label = f"{prev_year}"
+
+        if len(curr_active_months) == 12:
+            curr_label = f"{curr_year} (Full Year)"
+        elif curr_active_months:
+            curr_label = f"{curr_year} ({MONTH_NAMES[curr_active_months[0]-1]}–{MONTH_NAMES[curr_active_months[-1]-1]})"
+        else:
+            curr_label = f"{curr_year} (YTD)"
+
+        macro_comparison_meta = {
+            'prev_year': prev_year,
+            'curr_year': curr_year,
+            'prev_label': prev_label,
+            'curr_label': curr_label,
+        }
 
         metric_defs = [
-            ('Gross Income', 'income', 'Salary, bonuses, and deposits into Mizuho Bank', False),
+            ('Net Cash Inflow', 'income', 'Post-tax salary, bonuses, reimbursements, and deposits into Mizuho Bank', False),
             ('Living Expenses', 'exp', 'True living cost (CC purchases + Rent, Car Loan, etc.)', False),
-            ('Operational Surplus', 'sur', 'Gross Income − Living Expenses (Net Savings)', False),
-            ('Bank Debit Payments', 'bank_deb', 'Total cash and debits exiting Mizuho', False),
-            ('Securities / Savings', 'sec', 'Transfers to SBI / Rakuten Securities', False),
-            ('Total Bank Outflow', 'tot_outflow', 'Total cash exiting Mizuho (Debits + Securities)', False),
-            ('Savings Rate (%)', 'sav_rate', 'Operational Surplus ÷ Gross Income', True),
-            ('Net Bank Movement', 'net_bank', 'Mizuho Inflow − Total Bank Outflow', False),
+            ('Operational Surplus', 'sur', 'Net Cash Inflow − Living Expenses (Net Savings)', False),
+            ('Bank Debit Payments', 'bank_deb', 'Operational debits exiting Mizuho (Rent, Card settlements, Utilities)', False),
+            ('Invested Savings', 'sec', 'Net capital transferred to SBI / Rakuten Securities (investments minus returns)', False),
+            ('Total Bank Outflow', 'tot_outflow', 'Total cash exiting Mizuho (Debits + Securities + Capital Outflows)', False),
+            ('Savings Rate (%)', 'sav_rate', 'Operational Surplus ÷ Net Cash Inflow', True),
+            ('Net Bank Movement', 'net_bank', 'Total Mizuho Deposits − Total Mizuho Outflows', False),
             ('Credit Card Spending', 'cc_spend', 'Total purchases charged to credit cards', False),
             ('Credit Card Bills Paid', 'cc_bills', 'Total Mizuho debits paying card statements', False),
             ('ATM Cash Withdrawals', 'atm', 'Physical cash withdrawn from Mizuho ATM', False),
@@ -774,23 +801,26 @@ class AnalyticsService:
 
         macro_comparison = []
         for label, key, desc, is_rate in metric_defs:
-            v25 = m25[key]
-            v26 = m26[key]
-            diff = round(v26 - v25, 2)
-            pct = round((diff / v25 * 100), 1) if v25 != 0 else None
+            v_prev = m_prev[key]
+            v_curr = m_curr[key]
+            diff = round(v_curr - v_prev, 2)
+            pct = round((diff / v_prev * 100), 1) if v_prev != 0 else None
             macro_comparison.append({
                 'label': label,
                 'key': key,
                 'description': desc,
                 'is_rate': is_rate,
-                'year_2025': v25,
-                'year_2026': v26,
+                'prev_year': prev_year,
+                'curr_year': curr_year,
+                'prev_value': v_prev,
+                'curr_value': v_curr,
+                'year_2025': v_prev,
+                'year_2026': v_curr,
                 'diff': diff,
                 'diff_pct': pct,
             })
 
         # 2. Monthly Breakdown for selected_year
-        MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         qs_year = qs_base.filter(date__year=selected_year)
         active_months = sorted(list(qs_year.annotate(m=ExtractMonth('date')).values_list('m', flat=True).distinct()))
         active_months_count = max(len(active_months), 1)
@@ -798,15 +828,15 @@ class AnalyticsService:
         monthly_breakdown = []
         for m in active_months:
             mqs = qs_year.filter(date__month=m)
-            m_inc = float(mqs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).aggregate(s=Sum('amount'))['s'] or 0)
-            m_exp = float(mqs.filter(is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
+            m_inc = float(mqs.filter(is_income=True).exclude(Q(category__category='Internal Transfer') | Q(category_id=19)).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_exp = float(mqs.filter(is_expense=True, is_saving=False).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
             m_sur = round(m_inc - m_exp, 2)
-            m_bank_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
-            m_sec_out = float(mqs.filter(is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
-            m_sec_in = float(mqs.filter(is_saving=True, is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_bank_deb = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True, is_saving=False).exclude(is_third_party=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec_out = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_saving=True, is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_sec_in = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_saving=True, is_payment=False).aggregate(s=Sum('amount'))['s'] or 0)
             m_sec = round(m_sec_out - m_sec_in, 2)
-            m_tot_outflow = round(m_bank_deb + m_sec_out, 2)
-            m_miz_in = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_income=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_tot_outflow = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).aggregate(s=Sum('amount'))['s'] or 0)
+            m_miz_in = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=False).aggregate(s=Sum('amount'))['s'] or 0)
             m_net_bank = round(m_miz_in - m_tot_outflow, 2)
             m_cc_spend = float(mqs.filter(account__account_type='CREDIT_CARD', is_expense=True, is_saving=False).aggregate(s=Sum('amount'))['s'] or 0)
             m_cc_bills = float(mqs.filter(account__account_type='BANK_ACCOUNT', is_payment=True).filter(cc_card_debit_q).aggregate(s=Sum('amount'))['s'] or 0)
@@ -827,6 +857,17 @@ class AnalyticsService:
                 'cc_bills_paid': m_cc_bills,
                 'atm_withdrawals': m_atm,
             })
+
+        # Anchored opening balances carried from prior year (Jan 1)
+        OPENING_BALANCES = {
+            2026: 8755.0,
+        }
+        opening_balance = OPENING_BALANCES.get(selected_year, 0.0)
+        running_passbook = opening_balance
+        for m_item in monthly_breakdown:
+            running_passbook = round(running_passbook + m_item['net_bank_movement'], 2)
+            m_item['running_bank_movement'] = round(running_passbook - opening_balance, 2)
+            m_item['passbook_balance'] = running_passbook
 
         # Summary total & avg
         y_macro = _calc_macro(qs_year)
@@ -1150,7 +1191,10 @@ class AnalyticsService:
         return {
             'available_years': available_years,
             'selected_year': selected_year,
+            'opening_balance': opening_balance,
+            'closing_balance': running_passbook,
             'macro_comparison': macro_comparison,
+            'macro_comparison_meta': macro_comparison_meta,
             'monthly_breakdown': monthly_breakdown,
             'monthly_summary': monthly_summary,
             'bank_debit_payments': bank_debit_payments,
