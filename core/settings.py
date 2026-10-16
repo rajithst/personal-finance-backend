@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "finance.payees",
     "finance.settings",
     "finance.career",
+    "finance.personal_vault",
 ]
 
 MIDDLEWARE = [
