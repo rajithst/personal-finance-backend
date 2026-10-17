@@ -427,3 +427,8 @@ finance/transactions/sql/*
 
 # Git worktrees
 .worktrees/
+
+# Database dumps & local backups
+*.sql
+backup_*.json
+.superpowers/
