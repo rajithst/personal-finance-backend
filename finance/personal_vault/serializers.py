@@ -72,7 +72,7 @@ class VehicleRecordSerializer(serializers.ModelSerializer):
             'id', 'make', 'model', 'model_year', 'license_plate',
             'vin_or_chassis', 'color', 'purchase_date', 'sale_date',
             'status', 'shaken_expiry_date', 'insurance_expiry_date',
-            'notes', 'documents', 'days_until_shaken', 'days_until_insurance',
+            'notes', 'image_url', 'documents', 'days_until_shaken', 'days_until_insurance',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -97,7 +97,7 @@ class ResidenceRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResidenceRecord
         fields = [
-            'id', 'property_name', 'address_full', 'postal_code',
+            'id', 'property_name', 'address_full', 'postal_code', 'map_link',
             'residence_type', 'status', 'move_in_date', 'move_out_date',
             'lease_start_date', 'lease_end_date', 'monthly_rent_amount',
             'deposit_amount', 'key_money_amount', 'landlord_or_agency',

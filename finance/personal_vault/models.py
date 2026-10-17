@@ -111,6 +111,7 @@ class VehicleRecord(models.Model):
     shaken_expiry_date = models.DateField(null=True, blank=True, db_index=True)
     insurance_expiry_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    image_url = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -138,6 +139,7 @@ class ResidenceRecord(models.Model):
     property_name = models.CharField(max_length=255)
     address_full = models.TextField()
     postal_code = models.CharField(max_length=32, blank=True)
+    map_link = models.TextField(blank=True, default='')
     residence_type = models.CharField(max_length=32, choices=RESIDENCE_TYPE_CHOICES, default='rented_apartment')
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='current')
     move_in_date = models.DateField()

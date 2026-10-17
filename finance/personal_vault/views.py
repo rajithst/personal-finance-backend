@@ -117,6 +117,11 @@ class EducationRecordViewSet(viewsets.ModelViewSet):
             return Response({'status': True, 'data': serializer.data}, status=status.HTTP_201_CREATED)
         return Response({'status': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({'status': True, 'message': 'Education record deleted successfully'}, status=status.HTTP_200_OK)
+
 
 class VehicleRecordViewSet(viewsets.ModelViewSet):
     serializer_class = VehicleRecordSerializer
@@ -144,6 +149,11 @@ class VehicleRecordViewSet(viewsets.ModelViewSet):
             self.perform_create(serializer)
             return Response({'status': True, 'data': serializer.data}, status=status.HTTP_201_CREATED)
         return Response({'status': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({'status': True, 'message': 'Vehicle record deleted successfully'}, status=status.HTTP_200_OK)
 
 
 class ResidenceRecordViewSet(viewsets.ModelViewSet):
@@ -173,6 +183,11 @@ class ResidenceRecordViewSet(viewsets.ModelViewSet):
             return Response({'status': True, 'data': serializer.data}, status=status.HTTP_201_CREATED)
         return Response({'status': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({'status': True, 'message': 'Residence record deleted successfully'}, status=status.HTTP_200_OK)
+
 
 class PersonalDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = PersonalDocumentSerializer
@@ -201,6 +216,11 @@ class PersonalDocumentViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         return Response({'status': True, 'data': serializer.data})
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({'status': True, 'message': 'Document deleted successfully'}, status=status.HTTP_200_OK)
 
 
 class PersonalDocumentUploadView(APIView):
