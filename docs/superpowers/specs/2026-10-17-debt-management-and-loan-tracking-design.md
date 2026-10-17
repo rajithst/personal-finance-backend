@@ -8,12 +8,12 @@
 
 ## 1. Overview & Problem Statement
 
-Users currently manage vehicle purchases, loan repayments, and monthly debt services as generic, undifferentiated expense transactions (e.g. payments to `SUV LAND` or loan servicers). While this records cash outflows, it provides no visibility into:
+Users currently manage vehicle purchases, loan repayments, and monthly debt services as generic, undifferentiated expense transactions (e.g. debit entries for car financing or installment credit). While this records cash outflows, it provides no visibility into:
 1. **Outstanding Principal & Amortization:** How much principal remains vs. total original borrowing.
-2. **True Cost of Borrowing:** Breakdown of actual monthly installments into interest (finance charges / 分割払手数料) vs. principal reduction.
-3. **Japanese Auto Loan Realities:**
-   - **Balloon / Residual Value Loans (据置型ローン / バリューローン / 残クレ):** Fixed low monthly payments paired with a large deferred balloon payment at the end (e.g. BMW Japan Finance contract).
-   - **Trade-In Loan Rollovers (下取り残債処理):** When an existing financed vehicle is traded in, the dealer pays off the remaining loan balance directly on behalf of the customer, and the new contract offsets or rolls that payoff into the new purchase (e.g. BMW loan payoff of ¥1,746,336 absorbed during Nissan X-Trail purchase at SUV LAND).
+2. **True Cost of Borrowing:** Breakdown of monthly installments into finance interest charges (分割払手数料) vs. principal reduction.
+3. **Japanese Auto Loan Financing Realities:**
+   - **Balloon / Residual Value Loans (据置型ローン / バリューローン / 残価設定型クレジット):** Fixed lower monthly payments paired with a large deferred residual balloon payment at the end of the term.
+   - **Trade-In Loan Rollovers (下取り残債処理):** When an existing financed vehicle is traded in, the dealership pays off the remaining loan balance directly on behalf of the customer, and the new contract offsets or rolls that payoff amount into the new purchase.
 4. **Automated Linking to Imported Bank Transactions:** Eliminating manual double-entry by automatically detecting, scoring, and suggesting matching bank outflows for each scheduled installment.
 
 ---
@@ -27,7 +27,7 @@ Users currently manage vehicle purchases, loan repayments, and monthly debt serv
 
 ### B. Materialized Schedule Architecture (Approach A)
 - Upon creation or modification of a debt contract, an exact payment schedule is generated as individual `DebtInstallment` records.
-- Accommodates irregular first payments (e.g. ¥51,173 vs ¥48,500), balloon maturities, fee adjustments, and dealer trade-in early settlements.
+- Accommodates irregular first payments, balloon maturities, fee adjustments, and dealer trade-in early settlements.
 - Links between installments and transactions are strictly 1-to-1 (`SET_NULL` on transaction deletion).
 
 ---
@@ -41,36 +41,36 @@ Represents a loan, financing agreement, or liability.
 |---|---|---|
 | `id` | `BigAutoField` | Primary key |
 | `user` | `ForeignKey(User)` | Owner of the debt record |
-| `name` | `CharField(128)` | Name (e.g. `"Nissan X-Trail Auto Loan"`, `"BMW 118i Balloon Loan"`) |
+| `name` | `CharField(128)` | User label (e.g. `"Primary Vehicle Auto Loan"`, `"Previous Vehicle Balloon Loan"`) |
 | `debt_type` | `CharField(32)` | Choices: `auto_loan`, `home_loan`, `education_loan`, `personal_loan`, `other` |
-| `lender` | `CharField(128)` | Creditor / financier (e.g. `"三井住友カード株式会社"`, `"BMW Japan Finance"`) |
-| `vendor` | `CharField(128)` | Selling dealership / store (e.g. `"株式会社ネクステージ SUV LAND横浜町田"`) |
+| `lender` | `CharField(128)` | Creditor / financier institution (e.g. `"Auto Finance Co."`, `"Credit Corporation"`) |
+| `vendor` | `CharField(128)` | Selling dealership / merchant (e.g. `"Dealership A"`) |
 | `status` | `CharField(32)` | Choices: `active`, `paid_off`, `closed_early` (default: `active`) |
 | **Contract Terms** | | |
-| `contract_date` | `DateField` | Official execution date (e.g. `2025-01-13`) |
-| `principal_amount` | `DecimalField(12,2)` | Financed amount (e.g. `¥3,035,338` for X-Trail, `¥2,083,365` for BMW) |
-| `finance_charge` | `DecimalField(12,2)` | Total installment interest fee (e.g. `¥750,335` for X-Trail, `¥141,978` for BMW) |
-| `term_months` | `PositiveSmallIntegerField` | Total number of payment terms (e.g. `78`, `24`) |
+| `contract_date` | `DateField` | Official execution date (e.g. `2025-01-01`) |
+| `principal_amount` | `DecimalField(12,2)` | Financed principal amount (e.g. `¥3,000,000`) |
+| `finance_charge` | `DecimalField(12,2)` | Total installment interest fee (e.g. `¥750,000`) |
+| `term_months` | `PositiveSmallIntegerField` | Total number of payment terms (e.g. `60`, `78`, `24`) |
 | `payment_day` | `PositiveSmallIntegerField` | Day of month installments are debited (e.g. `26` or `27`) |
 | `first_payment_date` | `DateField` | Date of 1st installment (e.g. `2025-02-26`) |
-| `first_payment_amount` | `DecimalField(12,2)` | Special 1st payment if irregular (e.g. `¥51,173` or `¥34,680`) |
-| `regular_payment_amount` | `DecimalField(12,2)` | Standard monthly payment (e.g. `¥48,500` or `¥32,900`) |
-| `annual_rate` | `DecimalField(5,3)` | APR percentage (e.g. `6.970%`, `3.990%`) |
+| `first_payment_amount` | `DecimalField(12,2)` | Special 1st payment if irregular (e.g. `¥52,000`) |
+| `regular_payment_amount` | `DecimalField(12,2)` | Standard monthly payment (e.g. `¥48,000`) |
+| `annual_rate` | `DecimalField(5,3)` | APR percentage (e.g. `6.900%`, `3.990%`) |
 | `rate_is_manual` | `BooleanField` | True if explicitly overridden, False if derived |
 | **Balloon / Residual Value Terms** | | |
-| `balloon_amount` | `DecimalField(12,2)` | Deferred residual payment (e.g. `¥1,467,273` for BMW, `0` for standard) |
+| `balloon_amount` | `DecimalField(12,2)` | Deferred residual payment (e.g. `¥1,500,000`, `0` for standard loans) |
 | `balloon_due_date` | `DateField(null=True)` | Due date of residual balloon payment |
 | **Upfront Economics (Non-Financed)** | | |
-| `cash_price` | `DecimalField(12,2)` | Total sales invoice before deductions (e.g. `¥5,581,674` or `¥2,949,365`) |
-| `down_payment_cash` | `DecimalField(12,2)` | Cash paid upfront (e.g. `¥800,000` or `¥866,000`) |
-| `trade_in_amount` | `DecimalField(12,2)` | Trade-in appraisal credit (e.g. `¥1,746,336`) |
-| `rolled_over_amount` | `DecimalField(12,2)` | Prior loan debt absorbed by contract (e.g. `¥1,746,336`) |
+| `cash_price` | `DecimalField(12,2)` | Total sales invoice before deductions (e.g. `¥5,500,000`) |
+| `down_payment_cash` | `DecimalField(12,2)` | Cash paid upfront (e.g. `¥800,000`) |
+| `trade_in_amount` | `DecimalField(12,2)` | Trade-in appraisal credit (e.g. `¥1,700,000`) |
+| `rolled_over_amount` | `DecimalField(12,2)` | Prior loan debt absorbed by contract (e.g. `¥1,700,000`) |
 | **Early Closure / Settlement** | | |
 | `closed_date` | `DateField(null=True)` | Date loan was closed/settled |
 | `closure_type` | `CharField(32)` | Choices: `natural_maturity`, `trade_in_payoff`, `refinanced`, `lump_sum` |
 | `payoff_amount` | `DecimalField(12,2)` | Final settlement amount paid |
 | **Auto-Matching Configuration** | | |
-| `match_payee` | `CharField(128)` | Pattern to detect in transaction payee/alias (e.g. `"SUV LAND"`, `"BMW"`) |
+| `match_payee` | `CharField(128)` | Pattern to detect in transaction payee/alias (e.g. `"AUTO LOAN"`, `"FINANCE CO"`) |
 | `match_amount_tolerance` | `DecimalField(8,2)` | Permitted amount deviation in JPY (default `0`) |
 | `match_day_window` | `PositiveSmallIntegerField` | Day tolerance around due date (default `5` to allow weekend shifts) |
 | **Relationships** | | |
@@ -108,7 +108,7 @@ Given principal $P$, term $N$, regular payment $M$, irregular first payment $M_1
 1. Solve for monthly periodic interest rate $r$ using Newton-Raphson:
    $$P = \frac{M_1}{(1+r)} + \sum_{k=2}^{N-1} \frac{M}{(1+r)^k} + \frac{M + B}{(1+r)^N}$$
 2. Real Annual Rate (実質年率): $\text{APR} = r \times 12$.
-3. If total finance charge $F$ is explicitly provided from contract (e.g. 分割払手数料 ¥750,335), amortization adjustments align each installment's interest:
+3. If total finance charge $F$ is explicitly provided from contract (分割払手数料), amortization adjustments align each installment's interest:
    $$I_k = \text{round}(B_{k-1} \times r)$$
    $$P_k = M_k - I_k$$
    $$B_k = B_{k-1} - P_k$$
@@ -127,12 +127,12 @@ When a loan is terminated early via trade-in:
 
 For any active debt and each unlinked installment, candidate bank transactions are scored dynamically upon request:
 1. **Payee & Destination Matching:**
-   - Normalize string using Unicode NFKC (handles full-width Japanese text like `ＳＵＶ　ＬＡＮＤ` and half-width `SUV LAND`).
+   - Normalize string using Unicode NFKC (handles full-width Japanese text like `ＡＵＴＯ　ＬＯＡＮ` and half-width `AUTO LOAN`).
    - Match if `debt.match_payee.lower()` is in `destination.lower()` or `alias.lower()`.
 2. **Amount Alignment:**
    - Evaluates `abs(transaction.amount) == installment.amount` (within `match_amount_tolerance`).
 3. **Date Proximity:**
-   - `due_date - match_day_window <= transaction.date <= due_date + match_day_window + 3` (accommodating Japan banking holiday shifts where the 26th/27th moves to the next business day).
+   - `due_date - match_day_window <= transaction.date <= due_date + match_day_window + 3` (accommodating banking holiday shifts where the debit date moves to the next business day).
 4. **Exclusions:**
    - Ignores transactions already linked to any other installment, deleted transactions, or transfers between user's own accounts.
 
@@ -164,8 +164,8 @@ For any active debt and each unlinked installment, candidate bank transactions a
   - Overall Debt Free Date
 - **Personal Vault Cross-Links:**
   - Vehicle cards in `VehiclesSection.tsx` display an interactive financing chip:
-    - Active: `Financed via X-Trail Auto Loan (¥48,500/mo) →`
-    - Sold/Trade-In: `Settled via Trade-In on 2025-01-13 →`
+    - Active: `Financed via Auto Loan (¥48,000/mo) →`
+    - Sold/Trade-In: `Settled via Trade-In on 2025-01-01 →`
 
 ### 7.2 Main Debts View (`src/components/debts/DebtsView.tsx`)
 - **Metric Cards:**
@@ -192,8 +192,8 @@ For any active debt and each unlinked installment, candidate bank transactions a
 ## 8. Verification & Test Plan
 
 1. **Unit Testing (`finance/debts/tests/`):**
-   - Test regular loan amortization schedule generation (Nissan X-Trail: 78 months, ¥3,035,338 principal, ¥750,335 fee).
-   - Test balloon loan schedule generation (BMW: 24 months, ¥1,467,273 final balloon, 3.99% APR).
+   - Test regular loan amortization schedule generation (Standard auto loan: 78 months, ¥3,000,000 principal, ¥750,000 fee).
+   - Test balloon loan schedule generation (Residual value loan: 24 months, ¥1,500,000 balloon, 3.99% APR).
    - Test trade-in early settlement calculation and installment status updates.
    - Test transaction suggestion scoring with Japanese full-width/half-width payee text.
 2. **Integration Testing:**
