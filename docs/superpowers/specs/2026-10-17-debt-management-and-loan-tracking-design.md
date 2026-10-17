@@ -41,43 +41,43 @@ Represents a loan, financing agreement, or liability.
 |---|---|---|
 | `id` | `BigAutoField` | Primary key |
 | `user` | `ForeignKey(User)` | Owner of the debt record |
-| `name` | `CharField(128)` | User label (e.g. `"Primary Vehicle Auto Loan"`, `"Previous Vehicle Balloon Loan"`) |
+| `name` | `CharField(128)` | User-defined label for the debt |
 | `debt_type` | `CharField(32)` | Choices: `auto_loan`, `home_loan`, `education_loan`, `personal_loan`, `other` |
-| `lender` | `CharField(128)` | Creditor / financier institution (e.g. `"Auto Finance Co."`, `"Credit Corporation"`) |
-| `vendor` | `CharField(128)` | Selling dealership / merchant (e.g. `"Dealership A"`) |
+| `lender` | `CharField(128)` | Creditor / financing institution name |
+| `vendor` | `CharField(128)` | Selling dealership or merchant name |
 | `status` | `CharField(32)` | Choices: `active`, `paid_off`, `closed_early` (default: `active`) |
 | **Contract Terms** | | |
-| `contract_date` | `DateField` | Official execution date (e.g. `2025-01-01`) |
-| `principal_amount` | `DecimalField(12,2)` | Financed principal amount (e.g. `¥3,000,000`) |
-| `finance_charge` | `DecimalField(12,2)` | Total installment interest fee (e.g. `¥750,000`) |
-| `term_months` | `PositiveSmallIntegerField` | Total number of payment terms (e.g. `60`, `78`, `24`) |
-| `payment_day` | `PositiveSmallIntegerField` | Day of month installments are debited (e.g. `26` or `27`) |
-| `first_payment_date` | `DateField` | Date of 1st installment (e.g. `2025-02-26`) |
-| `first_payment_amount` | `DecimalField(12,2)` | Special 1st payment if irregular (e.g. `¥52,000`) |
-| `regular_payment_amount` | `DecimalField(12,2)` | Standard monthly payment (e.g. `¥48,000`) |
-| `annual_rate` | `DecimalField(5,3)` | APR percentage (e.g. `6.900%`, `3.990%`) |
+| `contract_date` | `DateField` | Execution date of financing agreement |
+| `principal_amount` | `DecimalField(12,2)` | Total principal amount financed under the contract |
+| `finance_charge` | `DecimalField(12,2)` | Total installment finance interest charges |
+| `term_months` | `PositiveSmallIntegerField` | Total number of monthly payment terms |
+| `payment_day` | `PositiveSmallIntegerField` | Calendar day of month installments are debited |
+| `first_payment_date` | `DateField` | Due date of the initial payment |
+| `first_payment_amount` | `DecimalField(12,2)` | Amount of initial payment if irregular |
+| `regular_payment_amount` | `DecimalField(12,2)` | Standard recurring monthly installment amount |
+| `annual_rate` | `DecimalField(5,3)` | Annual percentage rate (APR) |
 | `rate_is_manual` | `BooleanField` | True if explicitly overridden, False if derived |
 | **Balloon / Residual Value Terms** | | |
-| `balloon_amount` | `DecimalField(12,2)` | Deferred residual payment (e.g. `¥1,500,000`, `0` for standard loans) |
-| `balloon_due_date` | `DateField(null=True)` | Due date of residual balloon payment |
+| `balloon_amount` | `DecimalField(12,2)` | Deferred residual balance payable at final maturity (0 if standard loan) |
+| `balloon_due_date` | `DateField(null=True)` | Due date of final residual balloon payment |
 | **Upfront Economics (Non-Financed)** | | |
-| `cash_price` | `DecimalField(12,2)` | Total sales invoice before deductions (e.g. `¥5,500,000`) |
-| `down_payment_cash` | `DecimalField(12,2)` | Cash paid upfront (e.g. `¥800,000`) |
-| `trade_in_amount` | `DecimalField(12,2)` | Trade-in appraisal credit (e.g. `¥1,700,000`) |
-| `rolled_over_amount` | `DecimalField(12,2)` | Prior loan debt absorbed by contract (e.g. `¥1,700,000`) |
+| `cash_price` | `DecimalField(12,2)` | Total purchase price before deductions or credits |
+| `down_payment_cash` | `DecimalField(12,2)` | Cash amount paid upfront |
+| `trade_in_amount` | `DecimalField(12,2)` | Appraised trade-in allowance credited by dealership |
+| `rolled_over_amount` | `DecimalField(12,2)` | Prior loan balance assumed and settled under contract |
 | **Early Closure / Settlement** | | |
-| `closed_date` | `DateField(null=True)` | Date loan was closed/settled |
+| `closed_date` | `DateField(null=True)` | Date debt was formally closed or settled |
 | `closure_type` | `CharField(32)` | Choices: `natural_maturity`, `trade_in_payoff`, `refinanced`, `lump_sum` |
 | `payoff_amount` | `DecimalField(12,2)` | Final settlement amount paid |
 | **Auto-Matching Configuration** | | |
-| `match_payee` | `CharField(128)` | Pattern to detect in transaction payee/alias (e.g. `"AUTO LOAN"`, `"FINANCE CO"`) |
-| `match_amount_tolerance` | `DecimalField(8,2)` | Permitted amount deviation in JPY (default `0`) |
-| `match_day_window` | `PositiveSmallIntegerField` | Day tolerance around due date (default `5` to allow weekend shifts) |
+| `match_payee` | `CharField(128)` | Keyword pattern to match against transaction payee or alias |
+| `match_amount_tolerance` | `DecimalField(8,2)` | Permitted amount deviation in currency units (default: 0) |
+| `match_day_window` | `PositiveSmallIntegerField` | Permitted day deviation around scheduled date (default: 5) |
 | **Relationships** | | |
 | `rolled_over_from` | `ForeignKey(Debt)` | Prior debt settled by this transaction (self-referential FK) |
 | `vehicle` | `ForeignKey(VehicleRecord)` | Nullable link to vehicle in Personal Vault |
 | `residence` | `ForeignKey(ResidenceRecord)` | Nullable link to property in Personal Vault |
-| `contract_document` | `ForeignKey(PersonalDocument)` | Nullable link to uploaded contract PDF in Document Vault |
+| `contract_document` | `ForeignKey(PersonalDocument)` | Nullable link to uploaded contract document in Document Vault |
 | `notes` | `TextField` | Context notes and remarks |
 
 ### 3.2 `DebtInstallment`
@@ -112,7 +112,7 @@ Given principal $P$, term $N$, regular payment $M$, irregular first payment $M_1
    $$I_k = \text{round}(B_{k-1} \times r)$$
    $$P_k = M_k - I_k$$
    $$B_k = B_{k-1} - P_k$$
-4. Final installment absorbs exact rounding variance to guarantee ending balance equals exactly ¥0.00.
+4. Final installment absorbs exact rounding variance to guarantee ending balance equals 0.00.
 
 ### 4.2 Early Payoff & Trade-In Settlement Logic
 When a loan is terminated early via trade-in:
@@ -127,7 +127,7 @@ When a loan is terminated early via trade-in:
 
 For any active debt and each unlinked installment, candidate bank transactions are scored dynamically upon request:
 1. **Payee & Destination Matching:**
-   - Normalize string using Unicode NFKC (handles full-width Japanese text like `ＡＵＴＯ　ＬＯＡＮ` and half-width `AUTO LOAN`).
+   - Normalize string using Unicode NFKC (handling both full-width and half-width character encodings).
    - Match if `debt.match_payee.lower()` is in `destination.lower()` or `alias.lower()`.
 2. **Amount Alignment:**
    - Evaluates `abs(transaction.amount) == installment.amount` (within `match_amount_tolerance`).
@@ -164,8 +164,8 @@ For any active debt and each unlinked installment, candidate bank transactions a
   - Overall Debt Free Date
 - **Personal Vault Cross-Links:**
   - Vehicle cards in `VehiclesSection.tsx` display an interactive financing chip:
-    - Active: `Financed via Auto Loan (¥48,000/mo) →`
-    - Sold/Trade-In: `Settled via Trade-In on 2025-01-01 →`
+    - Active: `Financed via Auto Loan →`
+    - Sold/Trade-In: `Settled via Trade-In →`
 
 ### 7.2 Main Debts View (`src/components/debts/DebtsView.tsx`)
 - **Metric Cards:**
@@ -192,10 +192,10 @@ For any active debt and each unlinked installment, candidate bank transactions a
 ## 8. Verification & Test Plan
 
 1. **Unit Testing (`finance/debts/tests/`):**
-   - Test regular loan amortization schedule generation (Standard auto loan: 78 months, ¥3,000,000 principal, ¥750,000 fee).
-   - Test balloon loan schedule generation (Residual value loan: 24 months, ¥1,500,000 balloon, 3.99% APR).
+   - Test regular loan amortization schedule generation for standard term contracts.
+   - Test balloon loan schedule generation for contracts with residual balloon payment at maturity.
    - Test trade-in early settlement calculation and installment status updates.
-   - Test transaction suggestion scoring with Japanese full-width/half-width payee text.
+   - Test transaction suggestion scoring with Japanese full-width and half-width payee text.
 2. **Integration Testing:**
    - Link transaction to installment and verify debt balance and paid percentage updates.
    - Delete linked transaction and verify installment safely transitions to unlinked without error.
