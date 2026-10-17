@@ -1,12 +1,12 @@
 import os
 from datetime import date
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from .models import (
@@ -260,10 +260,46 @@ class PersonalDocumentUploadView(APIView):
 
 class PersonalDocumentDownloadView(APIView):
     """Handles preview or download of vault files with security verification."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, pk, action='view'):
-        doc = get_object_or_404(PersonalDocument, pk=pk, user=request.user)
+        user = request.user
+
+        # 1. Try JWT from query param if not authenticated by header
+        if not user or not user.is_authenticated:
+            token = request.query_params.get('token')
+            if token:
+                from rest_framework_simplejwt.tokens import AccessToken
+                from django.contrib.auth import get_user_model
+                try:
+                    access_token = AccessToken(token)
+                    user_id = access_token.get('user_id')
+                    User = get_user_model()
+                    user = User.objects.get(pk=user_id)
+                except Exception:
+                    user = None
+
+        # 2. Try signature if present
+        sig = request.query_params.get('sig')
+        sig_doc_id = None
+        sig_user_id = None
+        if sig:
+            try:
+                sig_doc_id, sig_user_id = verify_vault_signature(sig)
+            except Exception:
+                pass
+
+        doc = get_object_or_404(PersonalDocument, pk=pk)
+
+        # Verify access authorization
+        is_authorized = False
+        if user and user.is_authenticated and doc.user_id == user.id:
+            is_authorized = True
+        elif sig_doc_id == doc.id and (sig_user_id == doc.user_id or (user and user.id == sig_user_id)):
+            is_authorized = True
+
+        if not is_authorized:
+            return Response({'status': False, 'message': 'Authentication required or permission denied.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if doc.file_uri.startswith('local://'):
             rel_path = doc.file_uri.replace('local://', '')
@@ -282,13 +318,18 @@ class PersonalDocumentDownloadView(APIView):
         bucket_name = getattr(settings, 'GCP_STORAGE_BUCKET', None) or 'personal-finance-dev'
         from google.cloud import storage
         import datetime
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob_path = doc.file_uri.replace(f"gs://{bucket_name}/", "")
-        blob = bucket.blob(blob_path)
-        signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(minutes=15),
-            method="GET"
-        )
-        return Response({'status': True, 'url': signed_url})
+        try:
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob_path = doc.file_uri.replace(f"gs://{bucket_name}/", "")
+            blob = bucket.blob(blob_path)
+            signed_url = blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(minutes=15),
+                method="GET"
+            )
+            if request.query_params.get('json') == 'true':
+                return Response({'status': True, 'url': signed_url})
+            return HttpResponseRedirect(signed_url)
+        except Exception as e:
+            return Response({'status': False, 'message': f'Storage access failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

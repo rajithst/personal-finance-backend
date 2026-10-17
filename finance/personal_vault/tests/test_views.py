@@ -95,3 +95,39 @@ def test_document_upload_and_list():
     assert filter_resp.status_code == 200
     assert len(filter_resp.json()["data"]) == 1
     assert filter_resp.json()["data"][0]["id"] == doc_id
+
+
+@pytest.mark.django_db
+def test_document_preview_with_query_param_token(tmp_path, settings):
+    settings.MEDIA_ROOT = str(tmp_path)
+    user = User.objects.create_user(username="preview_user", email="prev@example.com", password="password")
+    from rest_framework_simplejwt.tokens import AccessToken
+    token = str(AccessToken.for_user(user))
+
+    # Create dummy local file
+    test_file = tmp_path / "test_doc.jpg"
+    test_file.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF sample image bytes")
+
+    doc = PersonalDocument.objects.create(
+        user=user,
+        title="Passport Copy",
+        category="identity",
+        doc_type="passport",
+        file_uri=f"local://test_doc.jpg",
+        original_filename="passport.jpg",
+        file_size=32,
+        mime_type="image/jpeg",
+    )
+
+    client = APIClient()
+
+    # 1. Access with query param ?token= (how browser <img> loads)
+    resp = client.get(f"/api/v1/personal-vault/documents/{doc.id}/view/?token={token}")
+    assert resp.status_code == 200
+    assert resp["Content-Type"] == "image/jpeg"
+    assert "inline" in resp["Content-Disposition"]
+
+    # 2. Access with invalid token should be 401
+    resp_invalid = client.get(f"/api/v1/personal-vault/documents/{doc.id}/view/?token=invalid_token")
+    assert resp_invalid.status_code == 401
+
