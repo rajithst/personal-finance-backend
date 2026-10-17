@@ -3,6 +3,8 @@ from datetime import date
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -258,6 +260,7 @@ class PersonalDocumentUploadView(APIView):
         return Response({'status': True, 'data': serializer.data}, status=status.HTTP_201_CREATED)
 
 
+@method_decorator(xframe_options_exempt, name='dispatch')
 class PersonalDocumentDownloadView(APIView):
     """Handles preview or download of vault files with security verification."""
     permission_classes = [AllowAny]
